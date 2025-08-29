@@ -333,7 +333,7 @@ jobs:
           name: macos-aarch64
           path: dist/*
   create-update-manifest:
-    needs: [build-linux, build-windows, build-macos-x64, build-macos-arm64]
+    needs: [build-windows, build-macos-x64, build-macos-arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
