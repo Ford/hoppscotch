@@ -459,6 +459,10 @@ interface ChaiExpectation {
   toBeType(type: string): void
   toHaveLength(length: number): void
   toInclude(value: any): void
+  toBeGreaterThan(value: number): void
+  toBeLessThan(value: number): void
+  toBeGreaterThanOrEqual(value: number): void
+  toBeLessThanOrEqual(value: number): void
 }
 
 // Legacy expectation interface for pw namespace (backward compatibility only)
@@ -489,6 +493,7 @@ declare namespace pw {
   function expect(value: any): LegacyExpectation
   const response: Readonly<{
     status: number
+    duration: number
     body: any
     headers: HoppRESTResponseHeader[]
   }>

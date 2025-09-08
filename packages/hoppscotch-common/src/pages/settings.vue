@@ -272,7 +272,10 @@
             v-for="[id, settings] in kernelInterceptorsWithSettings"
             :key="id"
           >
-            <h4 class="font-semibold text-secondaryDark">
+            <h4
+              v-if="settings.title(t) !== 'Proxy'"
+              class="font-semibold text-secondaryDark"
+            >
               {{ settings.title(t) }}
             </h4>
             <component :is="settings.component" />
@@ -364,6 +367,7 @@ const kernelInterceptorsWithSettings = computed(() =>
 
 const ACCENT_COLOR = useSetting("THEME_COLOR")
 const TELEMETRY_ENABLED = useSetting("TELEMETRY_ENABLED")
+const _FOLLOW_REDIRECTS = useSetting("FOLLOW_REDIRECTS")
 const EXPAND_NAVIGATION = useSetting("EXPAND_NAVIGATION")
 const SIDEBAR_ON_LEFT = useSetting("SIDEBAR_ON_LEFT")
 const ENABLE_AI_EXPERIMENTS = useSetting("ENABLE_AI_EXPERIMENTS")

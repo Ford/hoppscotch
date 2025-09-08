@@ -125,13 +125,14 @@
             class="inline-flex items-center space-x-2"
           >
             <HoppButtonSecondary
-              v-if="!workspaceSelectorFlagEnabled"
+              v-if="false"
               :icon="IconUploadCloud"
               :label="t('header.save_workspace')"
               class="!focus-visible:text-emerald-600 !hover:text-emerald-600 hidden h-8 border border-emerald-600/25 bg-emerald-500/10 !text-emerald-500 hover:border-emerald-600/20 hover:bg-emerald-600/20 focus-visible:border-emerald-600/20 focus-visible:bg-emerald-600/20 md:flex"
               @click="invokeAction('modals.login.toggle')"
             />
             <HoppButtonPrimary
+              v-if="!isLoginDisabled"
               :label="t('header.login')"
               class="h-8"
               @click="invokeAction('modals.login.toggle')"
@@ -414,7 +415,7 @@ onMounted(async () => {
 })
 
 const showTeamsModal = ref(false)
-
+const isLoginDisabled = ref(true)
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const mdAndLarger = breakpoints.greater("md")
 

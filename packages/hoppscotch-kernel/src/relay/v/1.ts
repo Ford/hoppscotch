@@ -338,6 +338,18 @@ export interface RelayRequest {
     content?: ContentType
     auth?: AuthType
 
+    // Add options at the top level for easier access
+    options?: {
+        timeout?: number
+        followRedirects?: boolean
+        maxRedirects?: number
+        decompress?: boolean
+        cookies?: boolean
+        keepAlive?: boolean
+        tcpNoDelay?: boolean
+        ipVersion?: "v4" | "v6" | "any"
+    }
+
     security?: {
         certificates?: {
             client?: CertificateType
@@ -349,6 +361,7 @@ export interface RelayRequest {
 
     proxy?: {
         url: string
+        no_proxy: string
         auth?: {
             username: string
             password: string
@@ -369,6 +382,7 @@ export interface RelayRequest {
             count: number
             delay: number
         }
+        // Keep the nested options for backward compatibility
         options?: {
             timeout?: number
             followRedirects?: boolean

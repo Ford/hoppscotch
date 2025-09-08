@@ -103,7 +103,7 @@ export class RequestSpotlightSearcherService extends StaticSpotlightSearcherServ
       text: this.t("shortcut.request.share_request"),
       alternates: ["share", "request", "copy"],
       icon: markRaw(IconShare2),
-      excludeFromSearch: computed(() => !this.isRESTPage.value),
+      excludeFromSearch: true,
     },
     reset_request: {
       text: this.t("shortcut.request.reset_request"),

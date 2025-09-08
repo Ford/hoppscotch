@@ -65,7 +65,7 @@
             "
           />
           <HoppSmartItem
-            v-if="!isResponseExample"
+            v-if="!isResponseExample && showShareRequestAction"
             ref="shareRequestAction"
             :icon="IconShare2"
             :label="t('tab.share_tab_request')"
@@ -132,6 +132,7 @@ const props = defineProps<{
   isRemovable: boolean
 }>()
 
+const showShareRequestAction = ref(false)
 const tabState = computed(() => {
   if (props.tab.document.type === "request") {
     return {
