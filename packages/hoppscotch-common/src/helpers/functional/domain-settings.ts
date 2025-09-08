@@ -25,6 +25,7 @@ export type InputDomainSetting = {
   }
   proxy?: {
     url: string
+    no_proxy: string
     auth?: {
       username?: string
       password?: string
@@ -221,6 +222,5 @@ export const convertDomainSetting = (
     proxy: O.isSome(proxy) ? proxy.value : undefined,
     security: O.isSome(security) ? security.value : undefined,
   }
-
   return E.right(result)
 }

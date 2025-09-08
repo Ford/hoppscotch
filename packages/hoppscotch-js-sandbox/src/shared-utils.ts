@@ -83,7 +83,7 @@ const unsetEnv = (
   }
 }
 
-// Compiles shared scripting API methods for use in both pre and post request scripts
+// Shared scripting API methods
 export const getSharedMethods = (envs: TestResult["envs"]) => {
   let updatedEnvs = envs
 
@@ -92,15 +92,13 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
       throw new Error("Expected key to be a string")
     }
 
-    const result = pipe(
+    return pipe(
       getEnv(key, updatedEnvs),
       O.fold(
         () => undefined,
         (env) => String(env.currentValue)
       )
     )
-
-    return result
   }
 
   const envGetResolveFn = (key: any) => {
@@ -108,25 +106,21 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
       throw new Error("Expected key to be a string")
     }
 
-    const result = pipe(
+    return pipe(
       getEnv(key, updatedEnvs),
       E.fromOption(() => "INVALID_KEY" as const),
-
       E.map((e) =>
         pipe(
           parseTemplateStringE(e.currentValue, [
             ...updatedEnvs.selected,
             ...updatedEnvs.global,
-          ]), // If the recursive resolution failed, return the unresolved value
+          ]),
           E.getOrElse(() => e.currentValue)
         )
       ),
       E.map((x) => String(x)),
-
       E.getOrElseW(() => undefined)
     )
-
-    return result
   }
 
   const envSetFn = (key: any, value: any) => {
@@ -139,7 +133,6 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
     }
 
     updatedEnvs = setEnv(key, value, updatedEnvs)
-
     return undefined
   }
 
@@ -149,7 +142,6 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
     }
 
     updatedEnvs = unsetEnv(key, updatedEnvs)
-
     return undefined
   }
 
@@ -158,15 +150,15 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
       throw new Error("Expected value to be a string")
     }
 
-    const result = pipe(
-      parseTemplateStringE(value, [
-        ...updatedEnvs.selected,
-        ...updatedEnvs.global,
-      ]),
-      E.getOrElse(() => value)
+    return String(
+      pipe(
+        parseTemplateStringE(value, [
+          ...updatedEnvs.selected,
+          ...updatedEnvs.global,
+        ]),
+        E.getOrElse(() => value)
+      )
     )
-
-    return String(result)
   }
 
   return {
@@ -184,29 +176,18 @@ export const getSharedMethods = (envs: TestResult["envs"]) => {
 }
 
 const getResolvedExpectValue = (expectVal: any) => {
-  if (typeof expectVal !== "string") {
-    return expectVal
-  }
+  if (typeof expectVal !== "string") return expectVal
 
   try {
     const parsedExpectVal = JSON.parse(expectVal)
-
-    // Supplying non-primitive values is not permitted in the `isStringifiedWithinIsolate` property indicates that the object was stringified before executing the script from the isolate context
-    // This is done to ensure a JSON string supplied as the "expectVal" is not parsed and preserved as is
     if (typeof parsedExpectVal === "object") {
-      if (parsedExpectVal.isStringifiedWithinIsolate !== true) {
-        return expectVal
-      }
+      if (parsedExpectVal.isStringifiedWithinIsolate !== true) return expectVal
 
-      // For an array, the contents are stored in the `arr` property
-      if (Array.isArray(parsedExpectVal.arr)) {
-        return parsedExpectVal.arr
-      }
+      if (Array.isArray(parsedExpectVal.arr)) return parsedExpectVal.arr
 
       delete parsedExpectVal.isStringifiedWithinIsolate
       return parsedExpectVal
     }
-
     return expectVal
   } catch (_) {
     return expectVal
@@ -216,89 +197,53 @@ const getResolvedExpectValue = (expectVal: any) => {
 export function preventCyclicObjects<T extends object = Record<string, any>>(
   obj: T
 ): E.Left<string> | E.Right<T> {
-  let jsonString
-
   try {
-    jsonString = JSON.stringify(obj)
-  } catch (_) {
-    return E.left("Stringification failed")
-  }
-
-  try {
+    const jsonString = JSON.stringify(obj)
     const parsedJson = JSON.parse(jsonString)
     return E.right(parsedJson)
   } catch (_) {
-    return E.left("Parsing failed")
+    return E.left("Stringification failed")
   }
 }
 
-/**
- * Creates an Expectation object for use inside the sandbox
- * @param expectVal The expecting value of the expectation
- * @param negated Whether the expectation is negated (negative)
- * @param currTestStack The current state of the test execution stack
- * @returns Object with the expectation methods
- */
+// Expectation implementation
 export const createExpectation = (
   expectVal: any,
   negated: boolean,
   currTestStack: TestDescriptor[]
 ): Expectation => {
-  // Non-primitive values supplied are stringified in the isolate context
   const resolvedExpectVal = getResolvedExpectValue(expectVal)
 
+  const pushResult = (status: "pass" | "fail" | "error", message: string) => {
+    currTestStack[currTestStack.length - 1].expectResults.push({ status, message })
+  }
+
+  const baseAssert = (assertion: boolean, message: string) => {
+    if (negated) assertion = !assertion
+    pushResult(assertion ? "pass" : "fail", message)
+  }
+
   const toBeFn = (expectedVal: any) => {
-    let assertion = resolvedExpectVal === expectedVal
-
-    if (negated) {
-      assertion = !assertion
-    }
-
-    const status = assertion ? "pass" : "fail"
-    const message = `Expected '${resolvedExpectVal}' to${
-      negated ? " not" : ""
-    } be '${expectedVal}'`
-
-    currTestStack[currTestStack.length - 1].expectResults.push({
-      status,
-      message,
-    })
-
+    baseAssert(
+      resolvedExpectVal === expectedVal,
+      `Expected '${resolvedExpectVal}' to${negated ? " not" : ""} be '${expectedVal}'`
+    )
     return undefined
   }
 
-  const toBeLevelXxx = (
-    level: string,
-    rangeStart: number,
-    rangeEnd: number
-  ) => {
+  const toBeLevelXxx = (level: string, rangeStart: number, rangeEnd: number) => {
     const parsedExpectVal = parseInt(resolvedExpectVal)
-
     if (!Number.isNaN(parsedExpectVal)) {
-      let assertion =
-        parsedExpectVal >= rangeStart && parsedExpectVal <= rangeEnd
-
-      if (negated) {
-        assertion = !assertion
-      }
-
-      const status = assertion ? "pass" : "fail"
-      const message = `Expected '${parsedExpectVal}' to${
-        negated ? " not" : ""
-      } be ${level}-level status`
-
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status,
-        message,
-      })
+      baseAssert(
+        parsedExpectVal >= rangeStart && parsedExpectVal <= rangeEnd,
+        `Expected '${parsedExpectVal}' to${negated ? " not" : ""} be ${level}-level status`
+      )
     } else {
-      const message = `Expected ${level}-level status but could not parse value '${resolvedExpectVal}'`
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+      pushResult(
+        "error",
+        `Expected ${level}-level status but could not parse value '${resolvedExpectVal}'`
+      )
     }
-
     return undefined
   }
 
@@ -308,139 +253,140 @@ export const createExpectation = (
   const toBeLevel5xxFn = () => toBeLevelXxx("500", 500, 599)
 
   const toBeTypeFn = (expectedType: any) => {
-    if (
-      [
-        "string",
-        "boolean",
-        "number",
-        "object",
-        "undefined",
-        "bigint",
-        "symbol",
-        "function",
-      ].includes(expectedType)
-    ) {
-      let assertion = typeof resolvedExpectVal === expectedType
-
-      if (negated) {
-        assertion = !assertion
-      }
-
-      const status = assertion ? "pass" : "fail"
-      const message = `Expected '${resolvedExpectVal}' to${
-        negated ? " not" : ""
-      } be type '${expectedType}'`
-
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status,
-        message,
-      })
-    } else {
-      const message =
+    const allowed = [
+      "string",
+      "boolean",
+      "number",
+      "object",
+      "undefined",
+      "bigint",
+      "symbol",
+      "function",
+    ]
+    if (!allowed.includes(expectedType)) {
+      pushResult(
+        "error",
         'Argument for toBeType should be "string", "boolean", "number", "object", "undefined", "bigint", "symbol" or "function"'
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+      )
+      return undefined
     }
-
+    baseAssert(
+      typeof resolvedExpectVal === expectedType,
+      `Expected '${resolvedExpectVal}' to${negated ? " not" : ""} be type '${expectedType}'`
+    )
     return undefined
   }
 
   const toHaveLengthFn = (expectedLength: any) => {
-    if (
-      !(
-        Array.isArray(resolvedExpectVal) ||
-        typeof resolvedExpectVal === "string"
-      )
-    ) {
-      const message =
-        "Expected toHaveLength to be called for an array or string"
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
-
+    if (!(Array.isArray(resolvedExpectVal) || typeof resolvedExpectVal === "string")) {
+      pushResult("error", "Expected toHaveLength to be called for an array or string")
       return undefined
     }
-
-    if (typeof expectedLength === "number" && !Number.isNaN(expectedLength)) {
-      let assertion = resolvedExpectVal.length === expectedLength
-
-      if (negated) {
-        assertion = !assertion
-      }
-
-      const status = assertion ? "pass" : "fail"
-      const message = `Expected the array to${
-        negated ? " not" : ""
-      } be of length '${expectedLength}'`
-
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status,
-        message,
-      })
-    } else {
-      const message = "Argument for toHaveLength should be a number"
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+    if (!(typeof expectedLength === "number" && !Number.isNaN(expectedLength))) {
+      pushResult("error", "Argument for toHaveLength should be a number")
+      return undefined
     }
-
+    baseAssert(
+      (resolvedExpectVal as any).length === expectedLength,
+      `Expected the array to${negated ? " not" : ""} be of length '${expectedLength}'`
+    )
     return undefined
   }
 
   const toIncludeFn = (needle: any) => {
-    if (
-      !(
-        Array.isArray(resolvedExpectVal) ||
-        typeof resolvedExpectVal === "string"
-      )
-    ) {
-      const message = "Expected toInclude to be called for an array or string"
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+    if (!(Array.isArray(resolvedExpectVal) || typeof resolvedExpectVal === "string")) {
+      pushResult("error", "Expected toInclude to be called for an array or string")
       return undefined
     }
-
     if (needle === null) {
-      const message = "Argument for toInclude should not be null"
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+      pushResult("error", "Argument for toInclude should not be null")
       return undefined
     }
-
     if (needle === undefined) {
-      const message = "Argument for toInclude should not be undefined"
-      currTestStack[currTestStack.length - 1].expectResults.push({
-        status: "error",
-        message,
-      })
+      pushResult("error", "Argument for toInclude should not be undefined")
       return undefined
     }
-
-    let assertion = resolvedExpectVal.includes(needle)
-
-    if (negated) {
-      assertion = !assertion
-    }
-
     const expectValPretty = JSON.stringify(resolvedExpectVal)
     const needlePretty = JSON.stringify(needle)
-    const status = assertion ? "pass" : "fail"
-    const message = `Expected ${expectValPretty} to${
-      negated ? " not" : ""
-    } include ${needlePretty}`
+    baseAssert(
+      (resolvedExpectVal as any).includes(needle),
+      `Expected ${expectValPretty} to${negated ? " not" : ""} include ${needlePretty}`
+    )
+    return undefined
+  }
 
-    currTestStack[currTestStack.length - 1].expectResults.push({
-      status,
-      message,
-    })
+  // Numeric comparisons
+  const getNumeric = (val: any) => {
+    if (typeof val === "number") return val
+    if (typeof val === "string" && val.trim() !== "") {
+      const n = Number(val)
+      if (!Number.isNaN(n)) return n
+    }
+    return undefined
+  }
+
+  const comparison = (
+    comparator: "gt" | "lt" | "gte" | "lte",
+    expected: any
+  ) => {
+    const actualNum = getNumeric(resolvedExpectVal)
+    if (actualNum === undefined) {
+      pushResult(
+        "error",
+        `Expected numeric comparison but could not parse value '${resolvedExpectVal}'`
+      )
+      return
+    }
+    if (typeof expected !== "number" || Number.isNaN(expected)) {
+      const map: Record<string, string> = {
+        gt: "Argument for toBeGreaterThan should be a number",
+        lt: "Argument for toBeLessThan should be a number",
+        gte: "Argument for toBeGreaterThanOrEqual should be a number",
+        lte: "Argument for toBeLessThanOrEqual should be a number",
+      }
+      pushResult("error", map[comparator])
+      return
+    }
+    let ok = false
+    let verb = ""
+    switch (comparator) {
+      case "gt":
+        ok = actualNum > expected
+        verb = "greater than"
+        break
+      case "lt":
+        ok = actualNum < expected
+        verb = "less than"
+        break
+      case "gte":
+        ok = actualNum >= expected
+        verb = "greater than or equal to"
+        break
+      case "lte":
+        ok = actualNum <= expected
+        verb = "less than or equal to"
+        break
+    }
+    baseAssert(
+      ok,
+      `Expected '${actualNum}' to${negated ? " not" : ""} be ${verb} '${expected}'`
+    )
+  }
+
+  const toBeGreaterThanFn = (expected: any) => {
+    comparison("gt", expected)
+    return undefined
+  }
+  const toBeLessThanFn = (expected: any) => {
+    comparison("lt", expected)
+    return undefined
+  }
+  const toBeGreaterThanOrEqualFn = (expected: any) => {
+    comparison("gte", expected)
+    return undefined
+  }
+  const toBeLessThanOrEqualFn = (expected: any) => {
+    comparison("lte", expected)
     return undefined
   }
 
@@ -453,6 +399,10 @@ export const createExpectation = (
     toBeType: toBeTypeFn,
     toHaveLength: toHaveLengthFn,
     toInclude: toIncludeFn,
+    toBeGreaterThan: toBeGreaterThanFn,
+    toBeLessThan: toBeLessThanFn,
+    toBeGreaterThanOrEqual: toBeGreaterThanOrEqualFn,
+    toBeLessThanOrEqual: toBeLessThanOrEqualFn,
   } as Expectation
 
   Object.defineProperties(result, {
@@ -464,35 +414,21 @@ export const createExpectation = (
   return result
 }
 
-/**
- * Compiles methods for use under the `pw` namespace for pre request scripts
- * @param envs The current state of the environment variables
- * @returns Object with methods in the `pw` namespace
- */
+// Pre-request methods (no tests stack returned)
 export const getPreRequestScriptMethods = (envs: TestResult["envs"]) => {
   const { methods, updatedEnvs } = getSharedMethods(cloneDeep(envs))
   return { pw: methods, updatedEnvs }
 }
 
-/**
- * Compiles methods for use under the `pw` namespace for post request scripts
- * @param envs The current state of the environment variables
- * @returns Object with methods in the `pw` namespace and test run stack
- */
+// Post-request/test runner methods
 export const getTestRunnerScriptMethods = (envs: TestResult["envs"]) => {
   const testRunStack: TestDescriptor[] = [
     { descriptor: "root", expectResults: [], children: [] },
   ]
 
   const testFn = (descriptor: string, testFunc: () => void) => {
-    testRunStack.push({
-      descriptor,
-      expectResults: [],
-      children: [],
-    })
-
+    testRunStack.push({ descriptor, expectResults: [], children: [] })
     testFunc()
-
     const child = testRunStack.pop() as TestDescriptor
     testRunStack[testRunStack.length - 1].children.push(child)
   }
@@ -501,12 +437,6 @@ export const getTestRunnerScriptMethods = (envs: TestResult["envs"]) => {
     createExpectation(expectVal, false, testRunStack)
 
   const { methods, updatedEnvs } = getSharedMethods(cloneDeep(envs))
-
-  const pw = {
-    ...methods,
-    expect: expectFn,
-    test: testFn,
-  }
-
+  const pw = { ...methods, expect: expectFn, test: testFn }
   return { pw, testRunStack, updatedEnvs }
 }

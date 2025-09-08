@@ -80,15 +80,28 @@ const updateUrl = (
   )
 
 export const preProcessRelayRequest = (req: RelayRequest): RelayRequest =>
-  pipe(cloneDeep(req), (req) =>
-    req.params
+  pipe(cloneDeep(req), (req) => {
+    // Ensure options are preserved during URL processing
+    const processedReq = req.params
       ? pipe(
           updateUrl(req.url, req.params),
-          E.map((url) => ({ ...req, url, params: {} })),
+          E.map((url) => ({
+            ...req,
+            url,
+            params: {},
+            // CRITICAL: Preserve options including followRedirects
+            options: req.options,
+            meta: req.meta
+          })),
           E.getOrElse(() => req)
         )
       : req
-  )
 
-export const postProcessRelayRequest = (req: RelayRequest): RelayRequest =>
-  pipe(cloneDeep(req), (req) => superjson.serialize(req).json)
+
+    return processedReq
+  })
+
+export const postProcessRelayRequest = (req: RelayRequest): RelayRequest => {
+  const result = pipe(cloneDeep(req), (req) => superjson.serialize(req).json)
+  return result
+}

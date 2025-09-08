@@ -56,3 +56,7 @@ winver = "1"
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release.package.wry]
+debug = true
+debug-assertions = true

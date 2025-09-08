@@ -11,7 +11,7 @@
           @click="EXPAND_NAVIGATION = !EXPAND_NAVIGATION"
         />
         <tippy interactive trigger="click" theme="popover">
-          <HoppButtonSecondary
+          <HoppButtonSecondary v-if="false"
             v-tippy="{ theme: 'tooltip' }"
             :title="t('settings.interceptor')"
             :icon="IconShieldCheck"
@@ -228,7 +228,7 @@ const SIDEBAR = useSetting("SIDEBAR")
 const COLUMN_LAYOUT = useSetting("COLUMN_LAYOUT")
 const SIDEBAR_ON_LEFT = useSetting("SIDEBAR_ON_LEFT")
 
-const navigatorShare = !!navigator.share
+const navigatorShare = ref(false)
 
 const currentUser = useReadonlyStream(
   platform.auth.getCurrentUserStream(),

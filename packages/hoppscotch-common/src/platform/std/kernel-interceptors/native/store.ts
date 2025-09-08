@@ -140,13 +140,44 @@ export class KernelInterceptorNativeStore extends Service {
   ): RelayRequest {
     const host = new URL(request.url).host
     const settings = this.getMergedSettings(host)
+
+    this.bypassProxyForDomains(host, settings.proxy?.no_proxy, settings)
     const effective = convertDomainSetting(settings)
 
     if (E.isLeft(effective)) {
       throw effective.left
     }
 
-    return { ...request, ...effective.right }
+    // CRITICAL FIX: Preserve the original request options (including followRedirects)
+    return {
+      ...request,
+      ...effective.right,
+      // Ensure options are preserved from the original request
+      options: (request as any).options,
+    }
+  }
+
+  private bypassProxyForDomains(
+    host: string,
+    domainsString: string | null | undefined,
+    settings: InputDomainSetting
+  ): void {
+    if (!domainsString || !settings.proxy) {
+      return
+    }
+
+    const domainsToBypass: string[] = domainsString.split(",").map((domain) =>
+      domain.trim()
+    )
+
+    const shouldBypass = domainsToBypass.some((domain) =>
+      host.toLowerCase().endsWith(domain.toLowerCase())
+    )
+
+    if (shouldBypass && settings.proxy) {
+      // Set url to empty string to disable proxy for this domain
+      settings.proxy.url = ""
+    }
   }
 
   public getDomainSettings(domain: string): InputDomainSetting {

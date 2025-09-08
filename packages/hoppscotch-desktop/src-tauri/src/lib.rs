@@ -5,7 +5,6 @@ pub mod error;
 pub mod logger;
 pub mod path;
 pub mod server;
-pub mod updater;
 pub mod util;
 pub mod webview;
 
@@ -198,7 +197,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -211,7 +209,6 @@ pub fn run() {
             hopp_auth_port,
             quit_app,
             backup::check_and_backup_on_version_change,
-            updater::check_for_updates,
             path::get_config_dir,
             path::get_latest_dir,
             path::get_instance_dir,

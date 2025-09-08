@@ -26,7 +26,7 @@
     >
       <History :page="'rest'" :selected-tab="selectedNavigationTab" />
     </HoppSmartTab>
-    <HoppSmartTab
+    <HoppSmartTab v-if="false"
       :id="'share-request'"
       :icon="IconShare2"
       :label="`${t('tab.shared_requests')}`"

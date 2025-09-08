@@ -16,6 +16,7 @@
         class="flex flex-col"
       >
         <HoppSmartRadio
+          v-if="kernelInterceptor.id !== 'proxy'"
           :value="kernelInterceptor.id"
           :label="kernelInterceptor.name(t)"
           :selected="kernelInterceptorSelection === kernelInterceptor.id"

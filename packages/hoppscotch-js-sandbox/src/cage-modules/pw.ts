@@ -120,6 +120,43 @@ const createPwInputsObj = (
           needle
         )
       ),
+      // New numeric comparison matchers
+      expectToBeGreaterThan: defineSandboxFn(
+        ctx,
+        "toBeGreaterThan",
+        (expectVal, expected) =>
+          createExpectation(expectVal, false, postConfig.testRunStack).toBeGreaterThan(
+            expected
+          )
+      ),
+      expectToBeLessThan: defineSandboxFn(
+        ctx,
+        "toBeLessThan",
+        (expectVal, expected) =>
+          createExpectation(expectVal, false, postConfig.testRunStack).toBeLessThan(
+            expected
+          )
+      ),
+      expectToBeGreaterThanOrEqual: defineSandboxFn(
+        ctx,
+        "toBeGreaterThanOrEqual",
+        (expectVal, expected) =>
+          createExpectation(
+            expectVal,
+            false,
+            postConfig.testRunStack
+          ).toBeGreaterThanOrEqual(expected)
+      ),
+      expectToBeLessThanOrEqual: defineSandboxFn(
+        ctx,
+        "toBeLessThanOrEqual",
+        (expectVal, expected) =>
+          createExpectation(
+            expectVal,
+            false,
+            postConfig.testRunStack
+          ).toBeLessThanOrEqual(expected)
+      ),
       expectNotToBe: defineSandboxFn(ctx, "notToBe", (expectVal, expectedVal) =>
         createExpectation(expectVal, false, postConfig.testRunStack).not.toBe(
           expectedVal
@@ -202,6 +239,45 @@ const createPwInputsObj = (
             false,
             postConfig.testRunStack
           ).not.toInclude(needle)
+      ),
+      // Negated numeric comparison matchers
+      expectNotToBeGreaterThan: defineSandboxFn(
+        ctx,
+        "notToBeGreaterThan",
+        (expectVal, expected) =>
+          createExpectation(
+            expectVal,
+            false,
+            postConfig.testRunStack
+          ).not.toBeGreaterThan(expected)
+      ),
+      expectNotToBeLessThan: defineSandboxFn(
+        ctx,
+        "notToBeLessThan",
+        (expectVal, expected) =>
+          createExpectation(expectVal, false, postConfig.testRunStack).not.toBeLessThan(
+            expected
+          )
+      ),
+      expectNotToBeGreaterThanOrEqual: defineSandboxFn(
+        ctx,
+        "notToBeGreaterThanOrEqual",
+        (expectVal, expected) =>
+          createExpectation(
+            expectVal,
+            false,
+            postConfig.testRunStack
+          ).not.toBeGreaterThanOrEqual(expected)
+      ),
+      expectNotToBeLessThanOrEqual: defineSandboxFn(
+        ctx,
+        "notToBeLessThanOrEqual",
+        (expectVal, expected) =>
+          createExpectation(
+            expectVal,
+            false,
+            postConfig.testRunStack
+          ).not.toBeLessThanOrEqual(expected)
       ),
       preTest: defineSandboxFn(ctx, "preTest", (descriptor: any) => {
         postConfig.testRunStack.push({

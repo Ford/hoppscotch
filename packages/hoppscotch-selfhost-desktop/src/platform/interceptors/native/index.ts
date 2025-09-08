@@ -5,10 +5,11 @@ import { cloneDeep } from "lodash-es"
 import { invoke } from "@tauri-apps/api/tauri"
 import * as E from "fp-ts/Either"
 import SettingsNativeInterceptor from "../../../components/settings/NativeInterceptor.vue"
-import { ref, watch } from "vue"
-import { z } from "zod"
-import { PersistenceService } from "@hoppscotch/common/services/persistence"
-import { CACertStore, ClientCertsStore, ClientCertStore, StoredClientCert } from "./persisted-data"
+import {ref, watch} from "vue"
+import {z} from "zod"
+import {PersistenceService} from "@hoppscotch/common/services/persistence"
+import {CACertStore, ClientCertsStore, ClientCertStore, StoredClientCert} from "./persisted-data"
+import { settingsStore } from "@hoppscotch/common/newstore/settings"
 
 
 type KeyValuePair = {
@@ -19,12 +20,12 @@ type KeyValuePair = {
 type FormDataValue =
   | { Text: string }
   | {
-      File: {
-        filename: string,
-        data: number[],
-        mime: string
-      }
-    }
+  File: {
+    filename: string,
+    data: number[],
+    mime: string
+  }
+}
 
 type FormDataEntry = {
   key: string,
@@ -38,17 +39,17 @@ type BodyDef =
 
 type ClientCertDef =
   | {
-      PEMCert: {
-        certificate_pem: number[],
-        key_pem: number[]
-      },
-    }
+  PEMCert: {
+    certificate_pem: number[],
+    key_pem: number[]
+  },
+}
   | {
-      PFXCert: {
-        certificate_pfx: number[],
-        password: string
-      }
-    }
+  PFXCert: {
+    certificate_pfx: number[],
+    password: string
+  }
+}
 
 // TODO: Figure out a way to autogen this from the interceptor definition on the Rust side
 export type RequestDef = {
@@ -65,8 +66,10 @@ export type RequestDef = {
   validate_certs: boolean,
   root_cert_bundle_files: number[],
   client_cert: ClientCertDef | null
+  follow_redirects: boolean
 
   proxy?: {
+    no_proxy: string[];
     url: string
   }
 }
@@ -89,6 +92,18 @@ export const preProcessRequest = (
   req: AxiosRequestConfig
 ): AxiosRequestConfig => {
   const reqClone = cloneDeep(req)
+
+  // Configure axios to NOT interfere with redirect handling
+  // The Rust backend will handle all redirect logic properly
+
+  // Always set maxRedirects to 0 for axios to prevent interference
+  // Our Rust backend will handle redirects based on the follow_redirects flag
+  reqClone.maxRedirects = 0
+
+  // Accept all status codes so redirects reach our Rust backend
+  reqClone.validateStatus = (status: number) => {
+    return status >= 200 && status < 600
+  }
 
   // If the parameters are URLSearchParams, inject them to URL instead
   // This prevents issues of marshalling the URLSearchParams to the proxy
@@ -177,38 +192,96 @@ function convertClientCertToDefCert(cert: ClientCertificateEntry): ClientCertDef
 }
 
 async function convertToRequestDef(
-  axiosReq: AxiosRequestConfig,
+  relayReq: any, // This should be RelayRequest but using any to avoid import issues
   reqID: number,
   caCertificates: CACertificateEntry[],
   clientCertificates: Map<string, ClientCertificateEntry>,
   validateCerts: boolean,
   proxyInfo: RequestDef["proxy"]
 ): Promise<RequestDef> {
-  const clientCertDomain = getURLDomain(axiosReq.url!)
 
-  const clientCert = clientCertDomain ? clientCertificates.get(clientCertDomain) : null
+  const clientCertDomain = getURLDomain(relayReq.url!);
+  const clientCert = clientCertDomain ? clientCertificates.get(clientCertDomain) : null;
+  const useProxy = proxyInfo && (!proxyInfo.no_proxy || (proxyInfo.no_proxy.filter(domain => domain.trim().length > 0).length === 0 || shouldUseProxy(relayReq.url!, proxyInfo.no_proxy.map(domain => domain.trim()))));
 
-  return {
+  // Extract followRedirects from RelayRequest options
+  const followRedirects = relayReq.options?.followRedirects ?? settingsStore.value.FOLLOW_REDIRECTS;
+
+  // Convert headers from RelayRequest format
+  const headers = Object.entries(relayReq.headers ?? {})
+    .filter(([key, value]) =>
+      !(key.toLowerCase() === "content-type" &&
+        typeof value === "string" &&
+        value.toLowerCase().includes("multipart/form-data"))
+    )
+    .map(([key, value]): KeyValuePair => ({key, value: String(value)}));
+
+  // Convert params from RelayRequest format
+  const parameters = Object.entries(relayReq.params ?? {})
+    .map(([key, value]): KeyValuePair => ({key, value: String(value)}));
+
+  // Process body from RelayRequest content
+  let body: BodyDef | null = null;
+  if (relayReq.content) {
+    switch (relayReq.content.kind) {
+      case "text":
+        body = { Text: relayReq.content.content };
+        break;
+      case "json":
+        body = { Text: typeof relayReq.content.content === "string"
+            ? relayReq.content.content
+            : JSON.stringify(relayReq.content.content) };
+        break;
+      case "urlencoded":
+        body = { Text: relayReq.content.content };
+        break;
+      case "multipart":
+        if (relayReq.content.content instanceof FormData) {
+          const entries: FormDataEntry[] = [];
+          // @ts-expect-error FormData entries iteration
+          for (const [key, value] of relayReq.content.content.entries()) {
+            if (typeof value === "string") {
+              entries.push({ key, value: { Text: value } });
+            } else if (value instanceof File || value instanceof Blob) {
+              const buffer = await value.arrayBuffer();
+              entries.push({
+                key,
+                value: {
+                  File: {
+                    filename: value instanceof File ? value.name : "unknown",
+                    data: Array.from(new Uint8Array(buffer)),
+                    mime: value.type || "application/octet-stream",
+                  }
+                }
+              });
+            }
+          }
+          body = { FormData: entries };
+        }
+        break;
+    }
+  }
+
+  const requestDef = {
     req_id: reqID,
-    method: axiosReq.method ?? "GET",
-    endpoint: axiosReq.url ?? "",
-    headers: Object.entries(axiosReq.headers ?? {})
-      .filter(
-        ([key, value]) =>
-          !(
-            key.toLowerCase() === "content-type" &&
-            value.toLowerCase() === "multipart/form-data"
-          )
-      ) // Removing header, because this header will be set by relay.
-      .map(([key, value]): KeyValuePair => ({ key, value })),
-    parameters: Object.entries(axiosReq.params as Record<string, string> ?? {})
-      .map(([key, value]): KeyValuePair => ({ key, value })),
-    body: await processBody(axiosReq),
+    method: relayReq.method ?? "GET",
+    endpoint: relayReq.url ?? "",
+    headers,
+    parameters,
+    body,
     root_cert_bundle_files: caCertificates.map((cert) => Array.from(cert.certificate)),
     validate_certs: validateCerts,
     client_cert: clientCert ? convertClientCertToDefCert(clientCert) : null,
-    proxy: proxyInfo
-  }
+    proxy: useProxy ? proxyInfo : undefined,
+    follow_redirects: followRedirects
+  };
+
+  return requestDef;
+}
+
+function shouldUseProxy(url: string, noProxyList: string[]): boolean {
+  const hostname = new URL(url).hostname.toLowerCase();
+  return !noProxyList.some(domain => hostname.endsWith(domain.toLowerCase().trim()));
 }
 
 export const CACertificateEntry = z.object({
@@ -339,38 +412,38 @@ export class NativeInterceptorService extends Service implements Interceptor {
         Object.entries(
           clientCertStoreDataParseResult.value.clientCerts
         )
-        .map(([domain, cert]) => {
-          if ("PFXCert" in cert.cert) {
-            const newCert = <ClientCertificateEntry>{
-              ...cert,
-              cert: {
-                PFXCert: {
-                  certificate_pfx: new Uint8Array(cert.cert.PFXCert.certificate_pfx),
-                  certificate_filename: cert.cert.PFXCert.certificate_filename,
+          .map(([domain, cert]) => {
+            if ("PFXCert" in cert.cert) {
+              const newCert = <ClientCertificateEntry>{
+                ...cert,
+                cert: {
+                  PFXCert: {
+                    certificate_pfx: new Uint8Array(cert.cert.PFXCert.certificate_pfx),
+                    certificate_filename: cert.cert.PFXCert.certificate_filename,
 
-                  password: cert.cert.PFXCert.password
+                    password: cert.cert.PFXCert.password
+                  }
                 }
               }
-            }
 
-            return [domain, newCert]
-          } else {
-            const newCert = <ClientCertificateEntry>{
-              ...cert,
-              cert: {
-                PEMCert: {
-                  certificate_pem: new Uint8Array(cert.cert.PEMCert.certificate_pem),
-                  certificate_filename: cert.cert.PEMCert.certificate_filename,
+              return [domain, newCert]
+            } else {
+              const newCert = <ClientCertificateEntry>{
+                ...cert,
+                cert: {
+                  PEMCert: {
+                    certificate_pem: new Uint8Array(cert.cert.PEMCert.certificate_pem),
+                    certificate_filename: cert.cert.PEMCert.certificate_filename,
 
-                  key_pem: new Uint8Array(cert.cert.PEMCert.key_pem),
-                  key_filename: cert.cert.PEMCert.key_filename
+                    key_pem: new Uint8Array(cert.cert.PEMCert.key_pem),
+                    key_filename: cert.cert.PEMCert.key_filename
+                  }
                 }
               }
-            }
 
-            return [domain, newCert]
-          }
-        })
+              return [domain, newCert]
+            }
+          })
       )
     }
 
@@ -427,6 +500,8 @@ export class NativeInterceptorService extends Service implements Interceptor {
   }
 
   public runRequest(req: AxiosRequestConfig): RequestRunResult<InterceptorError> {
+    const isRelayRequest = req && typeof req === 'object' && 'method' in req && 'version' in req;
+
     const processedReq = preProcessRequest(req)
 
     const relevantCookies = this.cookieJarService.getCookiesForURL(
@@ -446,8 +521,10 @@ export class NativeInterceptorService extends Service implements Interceptor {
         invoke("plugin:hopp_native_interceptor|cancel_request", { reqId: reqID });
       },
       response: (async () => {
+        const requestForConversion = isRelayRequest ? req : processedReq;
+
         const requestDef = await convertToRequestDef(
-          processedReq,
+          requestForConversion,
           reqID,
           this.caCertificates.value,
           this.clientCertificates.value,

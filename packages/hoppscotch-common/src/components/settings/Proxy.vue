@@ -1,5 +1,5 @@
 <template>
-  <div class="my-1 text-secondaryLight">
+  <div class="my-1 text-secondaryLight" v-if="false">
     {{ `${t("settings.official_proxy_hosting")} ${t("settings.read_the")}` }}
     <HoppSmartAnchor
       class="link"
@@ -8,7 +8,7 @@
       :label="t('app.proxy_privacy_policy')"
     />.
   </div>
-  <div class="flex items-center space-x-2 py-4">
+  <div class="flex items-center space-x-2 py-4" v-if="false">
     <HoppSmartInput
       v-model="proxyUrl"
       :autofocus="false"

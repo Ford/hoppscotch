@@ -129,18 +129,6 @@
                   "
                 />
                 <HoppSmartItem
-                  ref="shareAction"
-                  :icon="IconShare2"
-                  :label="t('action.share')"
-                  :shortcut="['S']"
-                  @click="
-                    () => {
-                      emit('share-request')
-                      hide()
-                    }
-                  "
-                />
-                <HoppSmartItem
                   ref="deleteAction"
                   :icon="IconTrash2"
                   :label="t('action.delete')"
@@ -148,6 +136,18 @@
                   @click="
                     () => {
                       emit('remove-request')
+                      hide()
+                    }
+                  "
+                />
+                <HoppSmartItem
+                  ref="shareAction"
+                  :icon="IconShare2"
+                  :label="t('action.share')"
+                  :shortcut="['S']"
+                  @click="
+                    () => {
+                      emit('share-request')
                       hide()
                     }
                   "

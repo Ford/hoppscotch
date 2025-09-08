@@ -32,4 +32,8 @@ interface ExpectationMethods {
   toBeType(type: string): void
   toHaveLength(length: number): void
   toInclude(value: any): void
+  toBeGreaterThan(value: number): void
+  toBeLessThan(value: number): void
+  toBeGreaterThanOrEqual(value: number): void
+  toBeLessThanOrEqual(value: number): void
 }

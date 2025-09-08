@@ -149,11 +149,13 @@ export interface Request {
     };
     proxy?: {
         url: string;
+        no_proxy: string;
         auth?: {
             username: string;
             password: string;
         };
     };
+    follow_redirects?: boolean;
 }
 export interface Response {
     id: number;

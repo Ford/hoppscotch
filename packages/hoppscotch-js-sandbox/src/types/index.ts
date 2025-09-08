@@ -84,5 +84,9 @@ export interface Expectation {
   toBeType(expectedType: any): void
   toHaveLength(expectedLength: any): void
   toInclude(needle: any): void
+  toBeGreaterThan(expected: any): void
+  toBeLessThan(expected: any): void
+  toBeGreaterThanOrEqual(expected: any): void
+  toBeLessThanOrEqual(expected: any): void
   readonly not: Expectation
 }
