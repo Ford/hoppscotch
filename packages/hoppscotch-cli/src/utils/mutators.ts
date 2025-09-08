@@ -8,6 +8,8 @@ import { error } from "../types/errors";
 import { FormDataEntry } from "../types/request";
 import { isHoppErrnoException } from "./checks";
 import { getResourceContents } from "./getters";
+import FormData from "form-data";
+import fsSync from "fs";
 
 const getValidRequests = (
   collections: HoppCollection[],
@@ -52,20 +54,9 @@ const getValidRequests = (
 export const toFormData = (values: FormDataEntry[]) => {
   const formData = new FormData();
 
-  values.forEach(({ key, value, contentType }) => {
-    if (contentType) {
-      formData.append(
-        key,
-        new Blob([value], {
-          type: contentType,
-        }),
-        key
-      );
-
-      return;
-    }
-
-    formData.append(key, value);
+  values.forEach(({ key, value }) => {
+    const isFilePath = typeof value === "string" && value.startsWith("/");
+    formData.append(key, isFilePath ? fsSync.createReadStream(value) : value);
   });
 
   return formData;

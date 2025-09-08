@@ -14,7 +14,11 @@ type ProxyHeaders = {
 
 type ProxyPayloadType =
   | FormData
-  | (AxiosRequestConfig & { wantsBinary: true; accessToken: string })
+  | (AxiosRequestConfig & {
+      wantsBinary: true
+      accessToken: string
+      followRedirects?: boolean
+    })
 
 const getProxyPayload = (
   req: AxiosRequestConfig,
@@ -24,6 +28,7 @@ const getProxyPayload = (
     ...req,
     wantsBinary: true,
     accessToken: import.meta.env.VITE_PROXYSCOTCH_ACCESS_TOKEN ?? "",
+    followRedirects: settingsStore.value.FOLLOW_REDIRECTS,
   }
 
   if (payload.data instanceof FormData) {
