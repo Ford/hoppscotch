@@ -55,7 +55,7 @@ export const implementation: VersionedAPI<RelayV1> = {
       auth: new Set(["basic", "bearer", "apikey", "aws"]),
       security: new Set([]),
       proxy: new Set([]),
-      advanced: new Set([]),
+      advanced: new Set(["redirects"]),
     },
 
     canHandle(request: RelayRequest) {
@@ -128,83 +128,13 @@ export const implementation: VersionedAPI<RelayV1> = {
               headers: request.headers,
               params: request.params,
               data: request.content?.content,
-              maxRedirects: request.meta?.options?.maxRedirects,
+              maxRedirects: request.options?.followRedirects ? 10 : 0,
               timeout: request.meta?.options?.timeout,
               decompress: request.meta?.options?.decompress ?? true,
               validateStatus: null,
               cancelToken: cancelTokenSource.token,
               responseType: "arraybuffer",
             }
-
-            // The following code is temporarily commented out because the auth has been pre-processed in EffectiveURL.ts and added in header
-            // and preprocessing here will cause the environment variables not parsed since the auth object only has the raw value
-
-            // if (request.auth) {
-            //   switch (request.auth.kind) {
-            //     case "basic":
-            //       config.auth = {
-            //         username: request.auth.username,
-            //         password: request.auth.password,
-            //       }
-            //       break
-            //     case "bearer":
-            //       config.headers = {
-            //         ...config.headers,
-            //         Authorization: `Bearer ${request.auth.token}`,
-            //       }
-            //       break
-            //     case "apikey":
-            //       if (request.auth.in === "header") {
-            //         config.headers = {
-            //           ...config.headers,
-            //           [request.auth.key]: request.auth.value,
-            //         }
-            //       } else {
-            //         config.params = {
-            //           ...config.params,
-            //           [request.auth.key]: request.auth.value,
-            //         }
-            //       }
-            //       break
-            //     case "aws": {
-            //       const {
-            //         accessKey,
-            //         secretKey,
-            //         region,
-            //         service,
-            //         sessionToken,
-            //         in: location,
-            //       } = request.auth
-            //       const signer = new AwsV4Signer({
-            //         url: request.url,
-            //         method: request.method,
-            //         accessKeyId: accessKey,
-            //         secretAccessKey: secretKey,
-            //         region,
-            //         service,
-            //         sessionToken,
-            //         datetime: new Date()
-            //           .toISOString()
-            //           .replace(/[:-]|\.\d{3}/g, ""),
-            //         signQuery: false,
-            //       })
-            //       const signed = await signer.sign()
-            //       if (location === "query") {
-            //         config.url = signed.url.toString()
-            //       } else {
-            //         const headers: Record<string, string> = {}
-            //         signed.headers.forEach((value, key) => {
-            //           headers[key] = value
-            //         })
-            //         config.headers = {
-            //           ...config.headers,
-            //           ...headers,
-            //         }
-            //       }
-            //       break
-            //     }
-            //   }
-            // }
 
             const axiosResponse = await axios(config)
             const endTime = Date.now()

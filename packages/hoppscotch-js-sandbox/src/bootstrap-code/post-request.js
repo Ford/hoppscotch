@@ -1947,6 +1947,7 @@
 
   const pwResponse = {
     status,
+    duration: responseTime,
     body,
     headers,
   }
@@ -2141,6 +2142,14 @@
         toHaveLength: (expectedLength) =>
           inputs.expectToHaveLength(expectVal, expectedLength),
         toInclude: (needle) => inputs.expectToInclude(expectVal, needle),
+        toBeGreaterThan: (expected) =>
+          inputs.expectToBeGreaterThan(expectVal, expected),
+        toBeLessThan: (expected) =>
+          inputs.expectToBeLessThan(expectVal, expected),
+        toBeGreaterThanOrEqual: (expected) =>
+          inputs.expectToBeGreaterThanOrEqual(expectVal, expected),
+        toBeLessThanOrEqual: (expected) =>
+          inputs.expectToBeLessThanOrEqual(expectVal, expected),
       }
 
       Object.defineProperty(expectation, "not", {
@@ -2155,6 +2164,14 @@
           toHaveLength: (expectedLength) =>
             inputs.expectNotToHaveLength(expectVal, expectedLength),
           toInclude: (needle) => inputs.expectNotToInclude(expectVal, needle),
+          toBeGreaterThan: (expected) =>
+            inputs.expectNotToBeGreaterThan(expectVal, expected),
+          toBeLessThan: (expected) =>
+            inputs.expectNotToBeLessThan(expectVal, expected),
+          toBeGreaterThanOrEqual: (expected) =>
+            inputs.expectNotToBeGreaterThanOrEqual(expectVal, expected),
+          toBeLessThanOrEqual: (expected) =>
+            inputs.expectNotToBeLessThanOrEqual(expectVal, expected),
         }),
       })
 

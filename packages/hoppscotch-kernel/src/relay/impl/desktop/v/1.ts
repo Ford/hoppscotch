@@ -19,51 +19,66 @@ import {
 } from "@hoppscotch/plugin-relay"
 
 export const implementation: VersionedAPI<RelayV1> = {
-  version: { major: 1, minor: 0, patch: 0 },
-  api: {
-    id: "desktop",
-    capabilities: {
-      method: new Set([
-        "GET",
-        "POST",
-        "PUT",
-        "DELETE",
-        "PATCH",
-        "HEAD",
-        "OPTIONS",
-      ]),
-      header: new Set(["stringvalue", "arrayvalue", "multivalue"]),
-      content: new Set([
-        "text",
-        "json",
-        "xml",
-        "form",
-        "binary",
-        "multipart",
-        "urlencoded",
-        "stream",
-        "compression",
-      ]),
-      auth: new Set(["basic", "bearer", "digest", "oauth2", "apikey"]),
-      security: new Set([
-        "clientcertificates",
-        "cacertificates",
-        "certificatevalidation",
-        "hostverification",
-        "peerverification",
-      ]),
-      proxy: new Set(["http", "https", "authentication", "certificates"]),
-      advanced: new Set([
-        "retry",
-        "redirects",
-        "timeout",
-        "cookies",
-        "keepalive",
-        "tcpoptions",
-        "http2",
-        "http3",
-      ]),
-    },
+    version: { major: 1, minor: 0, patch: 0 },
+    api: {
+        id: 'desktop',
+        capabilities: {
+            method: new Set([
+                'GET',
+                'POST',
+                'PUT',
+                'DELETE',
+                'PATCH',
+                'HEAD',
+                'OPTIONS'
+            ]),
+            header: new Set([
+                'stringvalue',
+                'arrayvalue',
+                'multivalue'
+            ]),
+            content: new Set([
+                'text',
+                'json',
+                'xml',
+                'form',
+                'binary',
+                'multipart',
+                'urlencoded',
+                'stream',
+                'compression'
+            ]),
+            auth: new Set([
+                'basic',
+                'bearer',
+                'digest',
+                'oauth2',
+                'apikey'
+            ]),
+            security: new Set([
+                'clientcertificates',
+                'cacertificates',
+                'certificatevalidation',
+                'hostverification',
+                'peerverification'
+            ]),
+            proxy: new Set([
+                'http',
+                'https',
+                'authentication',
+                'certificates'
+            ]),
+            advanced: new Set([
+                'retry',
+                'redirects',
+                'timeout',
+                'cookies',
+                'keepalive',
+                'tcpoptions',
+                'http2',
+                'http3'
+            ])
+        },
 
     canHandle(request: RelayRequest) {
       if (!this.capabilities.method.has(request.method)) {
@@ -132,26 +147,29 @@ export const implementation: VersionedAPI<RelayV1> = {
         off: () => {},
       }
 
-      const responsePromise = relayRequestToNativeAdapter(request)
-        .then((request) => {
-          // SAFETY: Type assertion is safe because:
-          // 1. The capabilities system prevents requests with unsupported methods from reaching this point
-          // 2. Content types not supported by the plugin are filtered by capabilities
-          // 3. Authentication methods are validated through capabilities
-          // 4. The plugin's Request type is a subset of our Request type
-          const pluginRequest = {
-            id: request.id,
-            url: request.url,
-            method: request.method,
-            version: request.version,
-            headers: request.headers,
-            params: request.params,
-            content: request.content,
-            auth: request.auth,
-            security: request.security,
-            proxy: request.proxy,
-            meta: request.meta,
-          }
+            const responsePromise = relayRequestToNativeAdapter(request)
+                .then(adaptedRequest => {
+                    // CRITICAL FIX: Create request structure that matches the plugin's Request interface
+                    // The plugin will handle the conversion to Rust RequestWithMetadata format
+                    const pluginRequest: Request = {
+                        id: adaptedRequest.id,
+                        url: adaptedRequest.url,
+                        method: adaptedRequest.method,
+                        version: adaptedRequest.version,
+                        headers: adaptedRequest.headers,
+                        params: adaptedRequest.params,
+                        content: adaptedRequest.content,
+                        auth: adaptedRequest.auth,
+                        security: adaptedRequest.security,
+                        proxy: adaptedRequest.proxy,
+                        // CRITICAL: Add the options property that contains followRedirects
+                        ...(adaptedRequest as any).options && { options: (adaptedRequest as any).options },
+                        // CRITICAL: Also add follow_redirects at top level for Rust compatibility
+                        ...(adaptedRequest as any).options?.followRedirects !== undefined && {
+                            follow_redirects: (adaptedRequest as any).options.followRedirects
+                        },
+                      meta: request.meta,
+                    }
 
           return execute(pluginRequest)
         })

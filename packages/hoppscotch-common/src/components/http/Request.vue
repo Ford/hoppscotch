@@ -198,6 +198,7 @@
                 />
                 <hr />
                 <HoppSmartItem
+                  v-if="false"
                   ref="copyRequestAction"
                   :label="t('request.share_request')"
                   :icon="IconShare2"

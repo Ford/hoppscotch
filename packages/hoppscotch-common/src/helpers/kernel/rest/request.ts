@@ -5,6 +5,7 @@ import { pipe } from "fp-ts/function"
 
 import { Method, RelayRequest, ContentType, AuthType } from "@hoppscotch/kernel"
 import { EffectiveHoppRESTRequest } from "~/helpers/utils/EffectiveURL"
+import { settingsStore } from "~/newstore/settings"
 
 import { transformAuth, transformContent } from "~/helpers/kernel/common"
 import { defaultAuth } from "~/helpers/kernel/common/auth"
@@ -29,7 +30,7 @@ export const RESTRequest = {
     const headers = filterActiveToRecord(request.effectiveFinalHeaders)
     const params = filterActiveParams(request.effectiveFinalParams)
 
-    return {
+    const relayRequest = {
       id: Date.now(),
       url: request.effectiveFinalURL,
       method: request.method.toUpperCase() as Method,
@@ -38,6 +39,11 @@ export const RESTRequest = {
       params,
       auth,
       content,
+      options: {
+        followRedirects: settingsStore.value.FOLLOW_REDIRECTS,
+      },
     }
+
+    return relayRequest
   },
 }

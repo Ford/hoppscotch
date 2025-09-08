@@ -185,6 +185,10 @@ export interface Expectation {
   toBeType(expectedType: SandboxValue): void
   toHaveLength(expectedLength: SandboxValue): void
   toInclude(needle: SandboxValue): void
+  toBeGreaterThan(expected: SandboxValue): void
+  toBeLessThan(expected: SandboxValue): void
+  toBeGreaterThanOrEqual(expected: SandboxValue): void
+  toBeLessThanOrEqual(expected: SandboxValue): void
   readonly not: Expectation
 }
 
@@ -295,6 +299,10 @@ export interface ExpectationMethods {
   expectToBeType: SandboxFunction
   expectToHaveLength: SandboxFunction
   expectToInclude: SandboxFunction
+  expectToBeGreaterThan: SandboxFunction
+  expectToBeLessThan: SandboxFunction
+  expectToBeGreaterThanOrEqual: SandboxFunction
+  expectToBeLessThanOrEqual: SandboxFunction
   expectNotToBe: SandboxFunction
   expectNotToBeLevel2xx: SandboxFunction
   expectNotToBeLevel3xx: SandboxFunction
@@ -303,6 +311,10 @@ export interface ExpectationMethods {
   expectNotToBeType: SandboxFunction
   expectNotToHaveLength: SandboxFunction
   expectNotToInclude: SandboxFunction
+  expectNotToBeGreaterThan: SandboxFunction
+  expectNotToBeLessThan: SandboxFunction
+  expectNotToBeGreaterThanOrEqual: SandboxFunction
+  expectNotToBeLessThanOrEqual: SandboxFunction
 }
 
 /**

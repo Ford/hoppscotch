@@ -75,6 +75,13 @@
           input-styles="floating-input !border-0"
           @update:model-value="updateProxyUrl"
         />
+        <HoppSmartInput
+          :model-value="domainSettings[selectedDomain].proxy.no_proxy"
+          :placeholder="' '"
+          :label="'Proxy Bypass (Enter comma separated values to bypass proxy settings. Example: localhost, .example.com)'"
+          input-styles="floating-input !border-0"
+          @update:model-value="updateNoProxy"
+        />
         <p class="my-1 text-secondaryLight">
           {{ t("settings.proxy_auth") }}
         </p>
@@ -595,6 +602,14 @@ function updateProxyPassword(value: string) {
         password: value,
       },
     },
+  })
+}
+
+function updateNoProxy(value: string) {
+  console.log(" Noproxy  " + JSON.stringify(value, null, 2))
+  const current = domainSettings[selectedDomain.value]?.proxy
+  updateDomainSettings({
+    proxy: { ...current, no_proxy: value },
   })
 }
 

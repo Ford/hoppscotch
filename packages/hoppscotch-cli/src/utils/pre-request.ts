@@ -35,6 +35,7 @@ import { isHoppCLIError } from "./checks";
 import { arrayFlatMap, arraySort, tupleToRecord } from "./functions/array";
 import { getEffectiveFinalMetaData, getResolvedVariables } from "./getters";
 import { stripComments } from "./jsonc";
+import FormData from "form-data";
 import { stripModulePrefix, toFormData } from "./mutators";
 
 /**
@@ -422,7 +423,14 @@ export async function getEffectiveRESTRequest(
 
   const effectiveFinalBody = _effectiveFinalBody.right;
 
-  if (
+  if (effectiveFinalBody instanceof FormData) {
+    effectiveFinalHeaders.push({
+      active: true,
+      key: "Content-Type",
+      value: `multipart/form-data; boundary=${effectiveFinalBody.getBoundary()}`,
+      description: "",
+    });
+  } else if (
     request.body.contentType &&
     !effectiveFinalHeaders.some(
       ({ key }) => key.toLowerCase() === "content-type"
