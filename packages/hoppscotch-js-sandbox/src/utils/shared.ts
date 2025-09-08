@@ -891,6 +891,146 @@ export const createExpectation = (
     return undefined
   }
 
+  const toBeGreaterThanFn = (expected: SandboxValue) => {
+    const parsedExpectVal = parseFloat(resolvedExpectVal)
+    const parsedExpected = parseFloat(expected)
+
+    if (Number.isNaN(parsedExpectVal) || Number.isNaN(parsedExpected)) {
+      const message = `Expected numerical values but got '${resolvedExpectVal}' and '${expected}'`
+      const targetTest = getCurrentTest()
+      if (!targetTest) return undefined
+      targetTest.expectResults.push({
+        status: "error",
+        message,
+      })
+      return undefined
+    }
+
+    let assertion = parsedExpectVal > parsedExpected
+
+    if (negated) {
+      assertion = !assertion
+    }
+
+    const status = assertion ? "pass" : "fail"
+    const message = `Expected '${parsedExpectVal}' to${
+      negated ? " not" : ""
+    } be greater than '${parsedExpected}'`
+
+    const targetTest = getCurrentTest()
+    if (!targetTest) return undefined
+    targetTest.expectResults.push({
+      status,
+      message,
+    })
+    return undefined
+  }
+
+  const toBeLessThanFn = (expected: SandboxValue) => {
+    const parsedExpectVal = parseFloat(resolvedExpectVal)
+    const parsedExpected = parseFloat(expected)
+
+    if (Number.isNaN(parsedExpectVal) || Number.isNaN(parsedExpected)) {
+      const message = `Expected numerical values but got '${resolvedExpectVal}' and '${expected}'`
+      const targetTest = getCurrentTest()
+      if (!targetTest) return undefined
+      targetTest.expectResults.push({
+        status: "error",
+        message,
+      })
+      return undefined
+    }
+
+    let assertion = parsedExpectVal < parsedExpected
+
+    if (negated) {
+      assertion = !assertion
+    }
+
+    const status = assertion ? "pass" : "fail"
+    const message = `Expected '${parsedExpectVal}' to${
+      negated ? " not" : ""
+    } be less than '${parsedExpected}'`
+
+    const targetTest = getCurrentTest()
+    if (!targetTest) return undefined
+    targetTest.expectResults.push({
+      status,
+      message,
+    })
+    return undefined
+  }
+
+  const toBeGreaterThanOrEqualFn = (expected: SandboxValue) => {
+    const parsedExpectVal = parseFloat(resolvedExpectVal)
+    const parsedExpected = parseFloat(expected)
+
+    if (Number.isNaN(parsedExpectVal) || Number.isNaN(parsedExpected)) {
+      const message = `Expected numerical values but got '${resolvedExpectVal}' and '${expected}'`
+      const targetTest = getCurrentTest()
+      if (!targetTest) return undefined
+      targetTest.expectResults.push({
+        status: "error",
+        message,
+      })
+      return undefined
+    }
+
+    let assertion = parsedExpectVal >= parsedExpected
+
+    if (negated) {
+      assertion = !assertion
+    }
+
+    const status = assertion ? "pass" : "fail"
+    const message = `Expected '${parsedExpectVal}' to${
+      negated ? " not" : ""
+    } be greater than or equal to '${parsedExpected}'`
+
+    const targetTest = getCurrentTest()
+    if (!targetTest) return undefined
+    targetTest.expectResults.push({
+      status,
+      message,
+    })
+    return undefined
+  }
+
+  const toBeLessThanOrEqualFn = (expected: SandboxValue) => {
+    const parsedExpectVal = parseFloat(resolvedExpectVal)
+    const parsedExpected = parseFloat(expected)
+
+    if (Number.isNaN(parsedExpectVal) || Number.isNaN(parsedExpected)) {
+      const message = `Expected numerical values but got '${resolvedExpectVal}' and '${expected}'`
+      const targetTest = getCurrentTest()
+      if (!targetTest) return undefined
+      targetTest.expectResults.push({
+        status: "error",
+        message,
+      })
+      return undefined
+    }
+
+    let assertion = parsedExpectVal <= parsedExpected
+
+    if (negated) {
+      assertion = !assertion
+    }
+
+    const status = assertion ? "pass" : "fail"
+    const message = `Expected '${parsedExpectVal}' to${
+      negated ? " not" : ""
+    } be less than or equal to '${parsedExpected}'`
+
+    const targetTest = getCurrentTest()
+    if (!targetTest) return undefined
+    targetTest.expectResults.push({
+      status,
+      message,
+    })
+    return undefined
+  }
+
   const result = {
     toBe: toBeFn,
     toBeLevel2xx: toBeLevel2xxFn,
@@ -900,6 +1040,10 @@ export const createExpectation = (
     toBeType: toBeTypeFn,
     toHaveLength: toHaveLengthFn,
     toInclude: toIncludeFn,
+    toBeGreaterThan: toBeGreaterThanFn,
+    toBeLessThan: toBeLessThanFn,
+    toBeGreaterThanOrEqual: toBeGreaterThanOrEqualFn,
+    toBeLessThanOrEqual: toBeLessThanOrEqualFn,
   } as Expectation
 
   Object.defineProperties(result, {

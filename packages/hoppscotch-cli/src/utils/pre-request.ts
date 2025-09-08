@@ -36,6 +36,7 @@ import {
   generateDigestAuthHeader,
 } from "./auth/digest";
 import { stripComments } from "./jsonc";
+import FormData from "form-data";
 
 /**
  * Runs pre-request-script runner over given request which extracts set ENVs and
@@ -422,7 +423,14 @@ export async function getEffectiveRESTRequest(
 
   const effectiveFinalBody = _effectiveFinalBody.right;
 
-  if (
+  if (effectiveFinalBody instanceof FormData) {
+    effectiveFinalHeaders.push({
+      active: true,
+      key: "Content-Type",
+      value: `multipart/form-data; boundary=${effectiveFinalBody.getBoundary()}`,
+      description: "",
+    });
+  } else if (
     request.body.contentType &&
     !effectiveFinalHeaders.some(
       ({ key }) => key.toLowerCase() === "content-type"

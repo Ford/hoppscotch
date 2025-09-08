@@ -22,6 +22,7 @@ import { Component, computed, reactive, ref } from "vue"
 import { useToast } from "~/composables/toast"
 import { getService } from "~/modules/dioc"
 import { getI18n } from "~/modules/i18n"
+import { settingsStore } from "~/newstore/settings"
 
 import { addGraphqlHistoryEntry, makeGQLHistoryEntry } from "~/newstore/history"
 
@@ -286,6 +287,9 @@ const getSchema = async (options: ConnectionRequestOptions) => {
         { query: getIntrospectionQuery() },
         MediaType.APPLICATION_JSON
       ),
+      options: {
+        followRedirects: settingsStore.value.FOLLOW_REDIRECTS,
+      },
     }
 
     const kernelInterceptorService = getService(KernelInterceptorService)

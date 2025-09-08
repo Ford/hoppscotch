@@ -340,14 +340,26 @@ export type RelayError =
   | { kind: "abort"; message: string }
 
 export interface RelayRequest {
-  id: number
-  url: string
-  method: Method
-  version: Version
-  headers?: Record<string, string>
-  params?: Record<string, string>
-  content?: ContentType
-  auth?: AuthType
+    id: number
+    url: string
+    method: Method
+    version: Version
+    headers?: Record<string, string>
+    params?: Record<string, string>
+    content?: ContentType
+    auth?: AuthType
+
+    // Add options at the top level for easier access
+    options?: {
+        timeout?: number
+        followRedirects?: boolean
+        maxRedirects?: number
+        decompress?: boolean
+        cookies?: boolean
+        keepAlive?: boolean
+        tcpNoDelay?: boolean
+        ipVersion?: "v4" | "v6" | "any"
+    }
 
   security?: {
     certificates?: {
@@ -358,46 +370,47 @@ export interface RelayRequest {
     verifyPeer?: boolean
   }
 
-  proxy?: {
-    url: string
-    auth?: {
-      username: string
-      password: string
+    proxy?: {
+        url: string
+        no_proxy: string
+        auth?: {
+            username: string
+            password: string
+        }
+        certificates?: {
+            ca?: Uint8Array[]
+            client?: CertificateType
+        }
     }
-    certificates?: {
-      ca?: Uint8Array[]
-      client?: CertificateType
-    }
-  }
 
-  meta?: {
-    timing?: {
-      connect?: number
-      request?: number
-      tls?: number
+    meta?: {
+        timing?: {
+            connect?: number
+            request?: number
+            tls?: number
+        }
+        retry?: {
+            count: number
+            delay: number
+        }
+        options?: {
+            timeout?: number
+            followRedirects?: boolean
+            maxRedirects?: number
+            decompress?: boolean
+            cookies?: boolean
+            keepAlive?: boolean
+            tcpNoDelay?: boolean
+            ipVersion?: "v4" | "v6" | "any"
+        }
+        http2?: {
+            settings: Record<string, number>
+            pushPromise: boolean
+        }
+        http3?: {
+            quicConfig: Record<string, unknown>
+        }
     }
-    retry?: {
-      count: number
-      delay: number
-    }
-    options?: {
-      timeout?: number
-      followRedirects?: boolean
-      maxRedirects?: number
-      decompress?: boolean
-      cookies?: boolean
-      keepAlive?: boolean
-      tcpNoDelay?: boolean
-      ipVersion?: "v4" | "v6" | "any"
-    }
-    http2?: {
-      settings: Record<string, number>
-      pushPromise: boolean
-    }
-    http3?: {
-      quicConfig: Record<string, unknown>
-    }
-  }
 }
 
 export interface RelayResponse {

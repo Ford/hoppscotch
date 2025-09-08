@@ -221,6 +221,7 @@ export interface Request {
 
   proxy?: {
     url: string
+    no_proxy: string
     auth?: {
       username: string
       password: string
