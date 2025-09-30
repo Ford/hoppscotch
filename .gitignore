@@ -84,6 +84,9 @@ web_modules/
 .env
 .env.*
 
+# npm configuration files (contains sensitive registry credentials)
+.npmrc
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

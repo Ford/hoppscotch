@@ -12,7 +12,13 @@ export const runTestScript = (
   response: TestResponse,
   experimentalScriptingSandbox = true
 ): TE.TaskEither<string, TestResult> => {
-  const responseObjHandle = preventCyclicObjects<TestResponse>(response)
+  const headersArray = Array.isArray(response.headers)
+      ? response.headers
+      : Object.entries(response.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
+  const responseObjHandle = preventCyclicObjects<TestResponse>({ ...response, headers: headersArray })
 
   if (E.isLeft(responseObjHandle)) {
     return TE.left(`Response marshalling failed: ${responseObjHandle.left}`)
