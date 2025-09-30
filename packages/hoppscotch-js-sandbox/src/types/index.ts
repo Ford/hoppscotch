@@ -12,6 +12,8 @@ export type TestResponse = {
    * Body of the response, this will be the JSON object if it is a JSON content type, else body string
    */
   body: string | object
+  /** Duration of the request in milliseconds */
+  duration: number
 }
 
 /**

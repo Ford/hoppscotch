@@ -152,6 +152,7 @@ export const getTestScriptParams = (
       body: reqRunnerRes.body,
       status: reqRunnerRes.status,
       headers: reqRunnerRes.headers,
+      duration: reqRunnerRes.duration,
     },
     envs,
     legacySandbox,
