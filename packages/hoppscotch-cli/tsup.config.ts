@@ -9,6 +9,7 @@ export default defineConfig({
   bundle: true,
   target: "esnext",
   skipNodeModulesBundle: false,
+  external: ["form-data", "proxy-agent"],
   esbuildOptions(options) {
     options.bundle = true;
   },
