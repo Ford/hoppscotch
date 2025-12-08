@@ -174,14 +174,6 @@
                   {{ t("settings.enable_experimental_mock_servers") }}
                 </HoppSmartToggle>
               </div>
-              <div class="flex items-center">
-                <HoppSmartToggle
-                  :on="ENABLE_EXPERIMENTAL_DOCUMENTATION"
-                  @change="toggleSetting('ENABLE_EXPERIMENTAL_DOCUMENTATION')"
-                >
-                  {{ t("settings.enable_experimental_documentation") }}
-                </HoppSmartToggle>
-              </div>
             </div>
           </section>
         </div>
@@ -379,9 +371,6 @@ const EXPERIMENTAL_SCRIPTING_SANDBOX = useSetting(
 )
 const ENABLE_EXPERIMENTAL_MOCK_SERVERS = useSetting(
   "ENABLE_EXPERIMENTAL_MOCK_SERVERS"
-)
-const ENABLE_EXPERIMENTAL_DOCUMENTATION = useSetting(
-  "ENABLE_EXPERIMENTAL_DOCUMENTATION"
 )
 
 const supportedNamingStyles = [
