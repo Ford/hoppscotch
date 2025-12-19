@@ -48,10 +48,10 @@ jobs:
           echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/setup-node@v3
         with:
-          node-version: 22
+          node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.23.0
+          version: 10.18.3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -91,8 +91,9 @@ jobs:
             Copy-Item ${{ env.WORKSPACE_PATH }}\.env.example ${{ env.WORKSPACE_PATH }}\.env
             Write-Host "No .env found, copied from .env.example template"
           }
-          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm install --no-frozen-lockfile --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
+          pnpm install -f --shamefully-hoist --ignore-scripts
+          pnpm --filter hoppscotch-backend exec prisma generate
+          pnpm install -f --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         shell: pwsh
         run: |
@@ -149,10 +150,10 @@ jobs:
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
         with:
-          node-version: 22
+          node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.23.0
+          version: 10.18.3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -191,8 +192,7 @@ jobs:
             cp ${{ env.WORKSPACE_PATH }}/.env.example ${{ env.WORKSPACE_PATH }}/.env
             echo "No .env found, copied from .env.example template"
           fi
-          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
+          pnpm install --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         run: |
           pnpm install --dir ${{ env.WEB_PATH }}
@@ -228,9 +228,9 @@ jobs:
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
           mkdir -p dist
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg || true
-          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz || true
-          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig || true
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -246,10 +246,10 @@ jobs:
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
         with:
-          node-version: 22
+          node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.23.0
+          version: 10.18.3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -288,8 +288,7 @@ jobs:
             cp ${{ env.WORKSPACE_PATH }}/.env.example ${{ env.WORKSPACE_PATH }}/.env
             echo "No .env found, copied from .env.example template"
           fi
-          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
+          pnpm install --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         run: |
           pnpm install --dir ${{ env.WEB_PATH }}
@@ -325,9 +324,9 @@ jobs:
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/
           mkdir -p dist
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg || true
-          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz || true
-          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig || true
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
