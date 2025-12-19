@@ -51,7 +51,7 @@ jobs:
           node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
+          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -91,9 +91,9 @@ jobs:
             Copy-Item ${{ env.WORKSPACE_PATH }}\.env.example ${{ env.WORKSPACE_PATH }}\.env
             Write-Host "No .env found, copied from .env.example template"
           }
-          pnpm install -f --shamefully-hoist --ignore-scripts
+          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
           pnpm --filter hoppscotch-backend exec prisma generate
-          pnpm install -f --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
+          pnpm install --no-frozen-lockfile --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         shell: pwsh
         run: |
@@ -153,7 +153,7 @@ jobs:
           node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
+          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -192,7 +192,9 @@ jobs:
             cp ${{ env.WORKSPACE_PATH }}/.env.example ${{ env.WORKSPACE_PATH }}/.env
             echo "No .env found, copied from .env.example template"
           fi
-          pnpm install --dir ${{ env.DESKTOP_PATH }}
+          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
+          pnpm --filter hoppscotch-backend exec prisma generate
+          pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
       - name: Build web app
         run: |
           pnpm install --dir ${{ env.WEB_PATH }}
@@ -249,7 +251,7 @@ jobs:
           node-version: 20
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
+          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -288,7 +290,9 @@ jobs:
             cp ${{ env.WORKSPACE_PATH }}/.env.example ${{ env.WORKSPACE_PATH }}/.env
             echo "No .env found, copied from .env.example template"
           fi
-          pnpm install --dir ${{ env.DESKTOP_PATH }}
+          pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
+          pnpm --filter hoppscotch-backend exec prisma generate
+          pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
       - name: Build web app
         run: |
           pnpm install --dir ${{ env.WEB_PATH }}
