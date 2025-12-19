@@ -229,8 +229,9 @@ jobs:
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
           mkdir -p dist
           cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
+          # The tar.gz build for x64 is currently disabled due to createUpdaterArtifacts set to false.
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
