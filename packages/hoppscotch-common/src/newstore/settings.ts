@@ -149,7 +149,7 @@ export const getDefaultSettings = (): SettingsDef => {
     CUSTOM_NAMING_STYLE: "",
 
     EXPERIMENTAL_SCRIPTING_SANDBOX: true,
-    ENABLE_EXPERIMENTAL_MOCK_SERVERS: true,
+    ENABLE_EXPERIMENTAL_MOCK_SERVERS: false,
   }
 }
 
