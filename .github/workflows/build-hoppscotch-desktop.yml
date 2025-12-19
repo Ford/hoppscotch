@@ -228,9 +228,9 @@ jobs:
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
           mkdir -p dist
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg || true
+          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz || true
+          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig || true
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -325,9 +325,9 @@ jobs:
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/
           mkdir -p dist
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
+          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg || true
+          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz || true
+          [ -f ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig ] && cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig || true
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
