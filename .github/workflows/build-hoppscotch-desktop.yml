@@ -215,7 +215,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin -b dmg -b updater
       - name: Build Tauri app without Apple signing
         if: ${{ inputs.disable_signing == true }}
         env:
@@ -223,7 +223,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin -b dmg -b updater
       - name: Prepare artifacts
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
@@ -311,7 +311,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin -b dmg -b updater
       - name: Build Tauri app without Apple signing
         if: ${{ inputs.disable_signing == true }}
         env:
@@ -319,7 +319,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin -b dmg -b updater
       - name: Prepare artifacts
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/
