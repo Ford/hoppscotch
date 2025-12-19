@@ -48,7 +48,7 @@ jobs:
           echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 22
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -92,7 +92,6 @@ jobs:
             Write-Host "No .env found, copied from .env.example template"
           }
           pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm --filter hoppscotch-backend exec prisma generate
           pnpm install --no-frozen-lockfile --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         shell: pwsh
@@ -150,7 +149,7 @@ jobs:
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 22
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -193,7 +192,6 @@ jobs:
             echo "No .env found, copied from .env.example template"
           fi
           pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm --filter hoppscotch-backend exec prisma generate
           pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
       - name: Build web app
         run: |
@@ -248,7 +246,7 @@ jobs:
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 22
       - uses: pnpm/action-setup@v4
         with:
           version: 10.23.0
@@ -291,7 +289,6 @@ jobs:
             echo "No .env found, copied from .env.example template"
           fi
           pnpm install --no-frozen-lockfile --shamefully-hoist --ignore-scripts
-          pnpm --filter hoppscotch-backend exec prisma generate
           pnpm install --no-frozen-lockfile --shamefully-hoist --dir "${{ env.DESKTOP_PATH }}"
       - name: Build web app
         run: |
