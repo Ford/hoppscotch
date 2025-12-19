@@ -215,7 +215,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin -b dmg -b updater
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin
       - name: Build Tauri app without Apple signing
         if: ${{ inputs.disable_signing == true }}
         env:
@@ -223,7 +223,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin -b dmg -b updater
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin
       - name: Prepare artifacts
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
@@ -311,7 +311,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin -b dmg -b updater
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin
       - name: Build Tauri app without Apple signing
         if: ${{ inputs.disable_signing == true }}
         env:
@@ -319,14 +319,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin -b dmg -b updater
+        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin
       - name: Prepare artifacts
         run: |
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/
           mkdir -p dist
           cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
+          # The tar.gz build for arm64 is currently disabled due to createUpdaterArtifacts set to false.
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
