@@ -12,7 +12,7 @@ on:
       branch:
         description: Branch to checkout
         required: false
-        default: "FS-Changes"
+        default: "newchanges"
       tag:
         description: Tag to checkout (takes precedence over branch if provided)
         required: false
