@@ -1,22 +1,22 @@
-import type { VersionedAPI } from "@type/versioning"
+import type { VersionedAPI } from '@type/versioning'
 import {
-  type RelayV1,
-  type RelayRequest,
-  type RelayRequestEvents,
-  type RelayEventEmitter,
-  type RelayResponse,
-  type RelayError,
-  body,
-  relayRequestToNativeAdapter,
-} from "@relay/v/1"
-import * as E from "fp-ts/Either"
+    type RelayV1,
+    type RelayRequest,
+    type RelayRequestEvents,
+    type RelayEventEmitter,
+    type RelayResponse,
+    type RelayError,
+    body,
+    relayRequestToNativeAdapter,
+} from '@relay/v/1'
+import * as E from 'fp-ts/Either'
 
 import {
-  execute,
-  cancel,
-  type Request as _Request,
-  type RequestResult,
-} from "@hoppscotch/plugin-relay"
+    execute,
+    cancel,
+    type Request,
+    type RequestResult
+} from '@hoppscotch/plugin-relay'
 
 export const implementation: VersionedAPI<RelayV1> = {
     version: { major: 1, minor: 0, patch: 0 },
@@ -80,72 +80,61 @@ export const implementation: VersionedAPI<RelayV1> = {
             ])
         },
 
-    canHandle(request: RelayRequest) {
-      if (!this.capabilities.method.has(request.method)) {
-        return E.left({
-          kind: "unsupported_feature",
-          feature: "method",
-          message: `Method ${request.method} is not supported`,
-          relay: "desktop",
-        })
-      }
+        canHandle(request: RelayRequest) {
+            if (!this.capabilities.method.has(request.method)) {
+                return E.left({
+                    kind: "unsupported_feature",
+                    feature: "method",
+                    message: `Method ${request.method} is not supported`,
+                    relay: "desktop"
+                })
+            }
 
-      if (
-        request.content &&
-        !this.capabilities.content.has(request.content.kind)
-      ) {
-        return E.left({
-          kind: "unsupported_feature",
-          feature: "content",
-          message: `Content type ${request.content.kind} is not supported`,
-          relay: "desktop",
-        })
-      }
+            if (request.content && !this.capabilities.content.has(request.content.kind)) {
+                return E.left({
+                    kind: "unsupported_feature",
+                    feature: "content",
+                    message: `Content type ${request.content.kind} is not supported`,
+                    relay: "desktop"
+                })
+            }
 
-      if (request.auth && !this.capabilities.auth.has(request.auth.kind)) {
-        return E.left({
-          kind: "unsupported_feature",
-          feature: "authentication",
-          message: `Authentication type ${request.auth.kind} is not supported`,
-          relay: "desktop",
-        })
-      }
+            if (request.auth && !this.capabilities.auth.has(request.auth.kind)) {
+                return E.left({
+                    kind: "unsupported_feature",
+                    feature: "authentication",
+                    message: `Authentication type ${request.auth.kind} is not supported`,
+                    relay: "desktop"
+                })
+            }
 
-      if (
-        request.security?.certificates &&
-        !this.capabilities.security.has("clientcertificates")
-      ) {
-        return E.left({
-          kind: "unsupported_feature",
-          feature: "security",
-          message: "Client certificates are not supported",
-          relay: "desktop",
-        })
-      }
+            if (request.security?.certificates && !this.capabilities.security.has('clientcertificates')) {
+                return E.left({
+                    kind: "unsupported_feature",
+                    feature: "security",
+                    message: "Client certificates are not supported",
+                    relay: "desktop"
+                })
+            }
 
-      if (
-        request.proxy &&
-        !this.capabilities.proxy.has(
-          request.proxy.url.startsWith("https") ? "https" : "http"
-        )
-      ) {
-        return E.left({
-          kind: "unsupported_feature",
-          feature: "proxy",
-          message: `Proxy protocol ${request.proxy.url.split(":")[0]} is not supported`,
-          relay: "desktop",
-        })
-      }
+            if (request.proxy && !this.capabilities.proxy.has(request.proxy.url.startsWith('https') ? 'https' : 'http')) {
+                return E.left({
+                    kind: "unsupported_feature",
+                    feature: "proxy",
+                    message: `Proxy protocol ${request.proxy.url.split(':')[0]} is not supported`,
+                    relay: "desktop"
+                })
+            }
 
-      return E.right(true)
-    },
+            return E.right(true)
+        },
 
-    execute(request: RelayRequest) {
-      const emitter: RelayEventEmitter<RelayRequestEvents> = {
-        on: () => () => {},
-        once: () => () => {},
-        off: () => {},
-      }
+        execute(request: RelayRequest) {
+            const emitter: RelayEventEmitter<RelayRequestEvents> = {
+                on: () => () => {},
+                once: () => () => {},
+                off: () => {}
+            }
 
             const responsePromise = relayRequestToNativeAdapter(request)
                 .then(adaptedRequest => {
@@ -168,53 +157,48 @@ export const implementation: VersionedAPI<RelayV1> = {
                         ...(adaptedRequest as any).options?.followRedirects !== undefined && {
                             follow_redirects: (adaptedRequest as any).options.followRedirects
                         },
-                      meta: request.meta,
+                        // Map the complex RelayRequest.meta to simple plugin Request.meta
+                        meta: request.meta?.options ? { options: request.meta.options } : undefined,
                     }
 
-          return execute(pluginRequest)
-        })
-        .then((result: RequestResult): E.Either<RelayError, RelayResponse> => {
-          if (result.kind === "success") {
-            const response: RelayResponse = {
-              id: result.response.id,
-              status: result.response.status,
-              statusText: result.response.statusText,
-              version: result.response.version,
-              headers: result.response.headers,
-              cookies: result.response.cookies,
-              body: body.body(
-                result.response.body.body,
-                result.response.body.mediaType
-              ),
-              meta: {
-                timing: {
-                  start: result.response.meta.timing.start,
-                  end: result.response.meta.timing.end,
-                },
-                size: result.response.meta.size,
-              },
-            }
-            return E.right(response)
-          }
-          return E.left(result.error)
-        })
-        .catch((error: unknown): E.Either<RelayError, RelayResponse> => {
-          const networkError: RelayError = {
-            kind: "network",
-            message:
-              error instanceof Error ? error.message : "Unknown error occurred",
-            cause: error,
-          }
-          return E.left(networkError)
-        })
+                    return execute(pluginRequest as Request)
+                })
+                .then((result: RequestResult): E.Either<RelayError, RelayResponse> => {
+                    if (result.kind === 'success') {
+                        const response: RelayResponse = {
+                            id: result.response.id,
+                            status: result.response.status,
+                            statusText: result.response.statusText,
+                            version: result.response.version,
+                            headers: result.response.headers,
+                            cookies: result.response.cookies,
+                            body: body.body(result.response.body.body, result.response.body.mediaType),
+                            meta: {
+                                timing: {
+                                    start: result.response.meta.timing.start,
+                                    end: result.response.meta.timing.end,
+                                },
+                                size: result.response.meta.size,
+                            }
+                        }
+                        return E.right(response)
+                    }
+                    return E.left(result.error)
+                })
+                .catch((error: unknown): E.Either<RelayError, RelayResponse> => {
+                    const networkError: RelayError = {
+                        kind: 'network',
+                        message: error instanceof Error ? error.message : 'Unknown error occurred',
+                        cause: error
+                    }
+                    return E.left(networkError)
+                })
 
-      return {
-        cancel: async () => {
-          await cancel(request.id)
-        },
-        emitter,
-        response: responsePromise,
-      }
-    },
-  },
+            return {
+                cancel: async () => { await cancel(request.id) },
+                emitter,
+                response: responsePromise
+            }
+        }
+    }
 }
