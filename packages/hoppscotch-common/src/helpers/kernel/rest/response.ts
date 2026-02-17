@@ -4,8 +4,6 @@ import {
   HoppRESTResponseHeader,
   HoppRESTSuccessResponse,
 } from "~/helpers/types/HoppRESTResponse"
-import { getService } from "~/modules/dioc"
-import { CookieJarService } from "~/services/cookie-jar.service"
 
 export type HoppRESTTransformError = {
   type: "fail"
@@ -86,32 +84,9 @@ export const RESTResponse = {
       }
     }
 
-    // Process headers to handle Set-Cookie splitting
-    const headers = processHeaders(response.headers)
-
-    // Extract Set-Cookie headers and store them in the cookie jar
-    const setCookieHeaders = headers
-      .filter(header => header.key.toLowerCase() === 'set-cookie')
-      .map(header => header.value)
-
-    console.log('[Cookie Debug] Set-Cookie headers found:', setCookieHeaders.length, setCookieHeaders)
-
-    if (setCookieHeaders.length > 0) {
-      try {
-        // Get CookieJarService instance and extract cookies
-        const cookieJarService = getService(CookieJarService)
-        console.log('[Cookie Debug] Extracting cookies for URL:', originalRequest.endpoint)
-        cookieJarService.extractCookiesFromResponse(setCookieHeaders, originalRequest.endpoint)
-        console.log('[Cookie Debug] Cookies extracted successfully')
-      } catch (error) {
-        console.warn("Failed to extract cookies from response:", error)
-        // Don't fail the response if cookie extraction fails
-      }
-    }
-
     return {
       type: "success",
-      headers,
+      headers: processHeaders(response.headers),
       body: response.body.body.buffer,
       statusCode: response.status,
       statusText: response.statusText ?? "",
