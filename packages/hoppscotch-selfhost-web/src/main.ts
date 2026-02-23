@@ -26,6 +26,7 @@ import { stdSupportOptionItems } from "@hoppscotch/common/platform/std/ui/suppor
 import { InfraPlatform } from "@app/platform/infra/infra.platform"
 import { kernelIO } from "@hoppscotch/common/platform/std/kernel-io"
 import { HeaderDownloadableLinksService } from "@app/services/headerDownloadableLinks.service"
+import { SecretManagerService } from "@hoppscotch/common/services/secret-manager.service"
 
 // Std interceptors
 import { NativeKernelInterceptorService } from "@hoppscotch/common/platform/std/kernel-interceptors/native"
@@ -180,7 +181,7 @@ async function initApp() {
     infra: InfraPlatform,
     backend: stdBackendDef,
     additionalLinks: [HeaderDownloadableLinksService],
-    addedServices: [],
+    addedServices: [SecretManagerService],
   })
 
   if (platform === "desktop") {

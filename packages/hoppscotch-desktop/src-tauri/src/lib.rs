@@ -4,6 +4,7 @@ pub mod dialog;
 pub mod error;
 pub mod logger;
 pub mod path;
+pub mod secrets;
 pub mod server;
 pub mod util;
 pub mod webview;
@@ -161,7 +162,12 @@ pub fn run() {
 
     let appload_config = appload_config.build();
 
+    // Initialize the secret registry for tracking stored secrets
+    let secret_registry = secrets::SecretRegistry::new();
+    tracing::info!("Initialized secret registry");
+
     let app = tauri::Builder::default()
+        .manage(secret_registry)
         .setup(|app| {
             tauri::async_runtime::block_on(async {
                 if let Err(e) = setup_version_backup(app).await {
@@ -215,6 +221,11 @@ pub fn run() {
             path::get_store_dir,
             path::get_backup_dir,
             path::get_logs_dir,
+            secrets::store_secret,
+            secrets::get_secret,
+            secrets::delete_secret,
+            secrets::list_secret_keys,
+            secrets::has_secret,
         ])
         .run(tauri::generate_context!());
 
