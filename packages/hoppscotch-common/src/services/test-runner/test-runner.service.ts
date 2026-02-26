@@ -226,6 +226,17 @@ export class TestRunnerService extends Service {
           throw new Error("Test execution stopped")
         }
 
+        // Check if this request should be executed based on selection state
+        const requestPath = this.buildRequestPath(parentPath, i)
+        const shouldExecute = this.shouldExecuteRequest(
+          requestPath,
+          options.requestSelection
+        )
+
+        if (!shouldExecute) {
+          continue // Skip this request if not selected
+        }
+
         const request = collection.requests[i] as TestRunnerRequest
         const currentPath = [...parentPath, i]
 
@@ -506,5 +517,29 @@ export class TestRunnerService extends Service {
     }
 
     return { passed, failed }
+  }
+
+  /**
+   * Builds a request path string from a path array
+   * Example: [0, 1, 2] -> "folder_0/folder_1/request_2"
+   */
+  private buildRequestPath(parentPath: number[], requestIndex: number): string {
+    const folderPath = parentPath.map((idx) => `folder_${idx}`).join("/")
+    const requestPath = `request_${requestIndex}`
+    return folderPath ? `${folderPath}/${requestPath}` : requestPath
+  }
+
+  /**
+   * Checks if a request should be executed based on selection state
+   * If no selection state is provided, all requests are executed
+   */
+  private shouldExecuteRequest(
+    requestPath: string,
+    selectionState?: Record<string, boolean>
+  ): boolean {
+    if (!selectionState || Object.keys(selectionState).length === 0) {
+      return true // Execute all if no selection state
+    }
+    return selectionState[requestPath] ?? false
   }
 }

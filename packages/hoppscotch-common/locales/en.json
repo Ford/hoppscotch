@@ -1943,7 +1943,13 @@
     "invalid_json" : "Invalid JSON file format",
     "dataset_iterations_info" : "Dataset contains {rows} rows, running {total} iterations as per your configuration.",
     "dataset_iterations_exceeds" : "Dataset contains {rows} rows, but {extra} iterations will be run as per your configuration.",
-    "no_failed_tests": "No tests failed"
+    "no_failed_tests": "No tests failed",
+    "request_selection": "Request Selection",
+    "select_requests": "Select Requests to Run",
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
+    "run_selected": "Run Selected",
+    "all_requests_selected": "All requests selected"
   },
   "ai_experiments": {
     "generate_request_name": "Generate Request Name Using AI",
