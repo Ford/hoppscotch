@@ -183,6 +183,19 @@
               </div>
             </section>
 
+            <!-- Request Selection Section -->
+            <section class="mt-6">
+              <h4 class="font-semibold text-secondaryDark mb-4">
+                {{ t("collection_runner.request_selection") }}
+              </h4>
+              <RequestSelectionTree
+                v-if="collectionTreeForSelection"
+                v-model="requestSelection"
+                :collection="collectionTreeForSelection"
+                class="max-h-96 overflow-y-auto border rounded border-divider p-2"
+              />
+            </section>
+
             <section class="mt-6">
               <span class="text-xs text-secondaryLight">
                 {{ t("collection_runner.advanced_settings") }}
@@ -379,9 +392,10 @@ import { useI18n } from "~/composables/i18n"
 import { HoppCollection } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
 import { useToast } from "~/composables/toast"
-import { TestRunnerConfig } from "~/helpers/rest/document"
+import { TestRunnerConfig, RequestSelectionState } from "~/helpers/rest/document"
 import { copyToClipboard } from "~/helpers/utils/clipboard"
 import { RESTTabService } from "~/services/tab/rest"
+import RequestSelectionTree from "./RequestSelectionTree.vue"
 import {
   parseCSV,
   parseJSON,
@@ -463,11 +477,29 @@ const config = ref<TestRunnerConfig>({
   keepVariableValues: true,
 })
 
+const requestSelection = ref<RequestSelectionState>({})
+const collectionTreeForSelection = ref<HoppCollection | null>(null)
+
 onMounted(async () => {
   if (props.prevConfig) {
     config.value = { ...config.value, ...props.prevConfig }
   }
+
+  // Load collection tree for request selection
+  const tree = await getCollectionTree(
+    props.collectionRunnerData.type,
+    props.collectionRunnerData.collectionID
+  )
+  
+  if (tree) {
+    collectionTreeForSelection.value = tree
+  }
 })
+
+// Sync requestSelection with config
+watch(requestSelection, (newSelection) => {
+  config.value.requestSelection = newSelection
+}, { deep: true })
 
 const runTests = async () => {
   const collectionTree = await getCollectionTree(
