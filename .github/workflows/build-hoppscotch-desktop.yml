@@ -50,8 +50,6 @@ jobs:
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -152,8 +150,6 @@ jobs:
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -249,8 +245,6 @@ jobs:
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.23.0
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
