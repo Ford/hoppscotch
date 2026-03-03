@@ -1979,7 +1979,15 @@
     "select_all": "Select All",
     "deselect_all": "Deselect All",
     "run_selected": "Run Selected",
-    "all_requests_selected": "All requests selected"
+    "all_requests_selected": "All requests selected",
+    "expand_modal": "Expand",
+    "collapse_modal": "Collapse",
+    "loading_requests": "Loading requests...",
+    "select_tab": "Select",
+    "order_tab": "Order",
+    "drag_to_reorder": "Drag to reorder",
+    "will_run": "will run",
+    "reset_order": "Reset"
   },
   "ai_experiments": {
     "generate_request_name": "Generate Request Name Using AI",

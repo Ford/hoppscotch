@@ -115,6 +115,7 @@ export type TestRunnerConfig = {
     fileName?: string // Store the original file name
   }
   requestSelection?: RequestSelectionState // Track selected/unselected requests
+  requestOrder?: string[] // Custom execution order — flat list of request paths in desired run order
 }
 
 export type HoppTestRunnerDocument = {
