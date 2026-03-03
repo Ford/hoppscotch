@@ -216,6 +216,7 @@ declare module 'vue' {
     HttpTestEnv: typeof import('./components/http/test/Env.vue')['default']
     HttpTestFolder: typeof import('./components/http/test/Folder.vue')['default']
     HttpTestRequest: typeof import('./components/http/test/Request.vue')['default']
+    HttpTestRequestRunOrder: typeof import('./components/http/test/RequestRunOrder.vue')['default']
     HttpTestRequestSelectionTree: typeof import('./components/http/test/RequestSelectionTree.vue')['default']
     HttpTestRequestSelectionTreeNode: typeof import('./components/http/test/RequestSelectionTreeNode.vue')['default']
     HttpTestResponse: typeof import('./components/http/test/Response.vue')['default']
