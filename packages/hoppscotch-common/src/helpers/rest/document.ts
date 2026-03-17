@@ -95,6 +95,12 @@ export type HoppCollectionSaveContext =
     }
   | null
 
+export type RequestSelectionState = {
+  // Map of request path to selection state
+  // Path format: "folder_0/folder_1/request_2" or "request_0" for root-level requests
+  [path: string]: boolean
+}
+
 export type TestRunnerConfig = {
   iterations: number
   delay: number
@@ -108,6 +114,8 @@ export type TestRunnerConfig = {
     rawContent?: string // Store the original file content for persistence
     fileName?: string // Store the original file name
   }
+  requestSelection?: RequestSelectionState // Track selected/unselected requests
+  requestOrder?: string[] // Custom execution order — flat list of request paths in desired run order
 }
 
 export type HoppTestRunnerDocument = {

@@ -119,18 +119,30 @@ export class TestRunnerService extends Service {
       }
 
       // Run the collection for this iteration
-      await this.runTestCollection(
-        tab,
-        collection,
-        options,
-        [],
-        undefined,
-        undefined,
-        [],
-        undefined,
-        shouldResetCollection,
-        iterationData
-      )
+      if (options.requestOrder && options.requestOrder.length > 0) {
+        // Custom execution order: use flat order with resolved context
+        await this.runTestsInCustomOrder(
+          tab,
+          collection,
+          options,
+          shouldResetCollection,
+          iterationData
+        )
+      } else {
+        // Default: recursive traversal in natural collection order
+        await this.runTestCollection(
+          tab,
+          collection,
+          options,
+          [],
+          undefined,
+          undefined,
+          [],
+          undefined,
+          shouldResetCollection,
+          iterationData
+        )
+      }
 
       // Add delay between iterations (except after the last one)
       if (iteration < iterations - 1 && options.delay && options.delay > 0) {
@@ -224,6 +236,17 @@ export class TestRunnerService extends Service {
         if (options.stopRef?.value) {
           tab.value.document.status = "stopped"
           throw new Error("Test execution stopped")
+        }
+
+        // Check if this request should be executed based on selection state
+        const requestPath = this.buildRequestPath(parentPath, i)
+        const shouldExecute = this.shouldExecuteRequest(
+          requestPath,
+          options.requestSelection
+        )
+
+        if (!shouldExecute) {
+          continue // Skip this request if not selected
         }
 
         const request = collection.requests[i] as TestRunnerRequest
@@ -506,5 +529,214 @@ export class TestRunnerService extends Service {
     }
 
     return { passed, failed }
+  }
+
+  /**
+   * Resolves a string path (e.g. "folder_0/folder_1/request_2") to the actual
+   * request plus its inherited auth, headers, and parent path array.
+   */
+  private resolveRequestContext(
+    collection: HoppCollection,
+    pathStr: string
+  ): {
+    request: TestRunnerRequest
+    parentPath: number[]
+    requestIndex: number
+    inheritedAuth: HoppRESTRequest["auth"]
+    inheritedHeaders: HoppRESTHeaders
+  } | null {
+    const parts = pathStr.split("/")
+    let current: HoppCollection = collection
+    const parentPath: number[] = []
+
+    // Start with root-level auth/headers
+    let inheritedAuth: HoppRESTRequest["auth"] =
+      collection.auth?.authType === "inherit"
+        ? { authType: "none", authActive: false }
+        : collection.auth || { authType: "none", authActive: false }
+
+    let inheritedHeaders: HoppRESTHeaders = [...(collection.headers || [])]
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const isLast = i === parts.length - 1
+
+      if (part.startsWith("folder_")) {
+        const folderIdx = parseInt(part.replace("folder_", ""), 10)
+        if (isLast) return null // path ends in folder, not a request
+
+        const folder = current.folders[folderIdx]
+        if (!folder) return null
+
+        // Accumulate auth/headers from this folder
+        inheritedAuth =
+          folder.auth?.authType === "inherit" && folder.auth?.authActive
+            ? inheritedAuth
+            : folder.auth || { authType: "none", authActive: false }
+
+        inheritedHeaders = [...inheritedHeaders, ...(folder.headers || [])]
+
+        parentPath.push(folderIdx)
+        current = folder as HoppCollection
+      } else if (part.startsWith("request_")) {
+        const reqIdx = parseInt(part.replace("request_", ""), 10)
+        const request = current.requests[reqIdx]
+        if (!request) return null
+
+        return {
+          request: request as TestRunnerRequest,
+          parentPath,
+          requestIndex: reqIdx,
+          inheritedAuth,
+          inheritedHeaders,
+        }
+      } else {
+        return null // unknown segment
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Pre-populates all folder nodes in the result collection from the source
+   * collection. This is required before custom-order execution so that
+   * appendRequestToPath / updateRequestAtPath can navigate into sub-folders.
+   */
+  private buildFolderSkeleton(
+    resultCollection: HoppCollection,
+    sourceCollection: HoppCollection,
+    path: number[] = []
+  ): void {
+    sourceCollection.folders.forEach((folder, i) => {
+      const folderPath = [...path, i]
+      this.addFolderToPath(resultCollection, folderPath, {
+        ...cloneDeep(folder),
+        folders: [],
+        requests: [],
+      })
+      this.buildFolderSkeleton(
+        resultCollection,
+        folder as HoppCollection,
+        folderPath
+      )
+    })
+  }
+
+  /**
+   * Executes requests in the user-defined flat order stored in options.requestOrder.
+   * Auth/header inheritance is resolved for each request individually.
+   */
+  private async runTestsInCustomOrder(
+    tab: Ref<HoppTab<HoppTestRunnerDocument>>,
+    collection: HoppCollection,
+    options: TestRunnerOptions,
+    shouldResetFoldersAndRequests: boolean,
+    iterationData?: any
+  ) {
+    // On the first iteration, pre-populate the folder tree in the result collection
+    // so that appendRequestToPath can navigate into sub-folders safely.
+    if (shouldResetFoldersAndRequests) {
+      this.buildFolderSkeleton(tab.value.document.resultCollection!, collection)
+    }
+
+    // Sequential per-folder insertion counter so that the result collection always
+    // stores requests in the dragged custom order — not by their original array index.
+    // Without this, shouldReplaceAtIndex=true (first iteration) would write each
+    // request at its ORIGINAL index, recreating the default order on run 1.
+    const folderRequestCounters = new Map<string, number>()
+
+    for (const requestPath of options.requestOrder!) {
+      if (options.stopRef?.value) {
+        tab.value.document.status = "stopped"
+        throw new Error("Test execution stopped")
+      }
+
+      // Honour selection: skip deselected requests
+      const shouldExecute = this.shouldExecuteRequest(
+        requestPath,
+        options.requestSelection
+      )
+      if (!shouldExecute) continue
+
+      // Resolve the request and its inherited context from the collection tree
+      const ctx = this.resolveRequestContext(collection, requestPath)
+      if (!ctx) continue
+
+      const { request, parentPath, inheritedAuth, inheritedHeaders } = ctx
+
+      // Use a sequential per-folder counter as the insertion index.
+      // This keeps the result collection in custom order regardless of the
+      // request's original position in the source collection.
+      const folderKey = parentPath.join("/")
+      const seqIndex = folderRequestCounters.get(folderKey) ?? 0
+      folderRequestCounters.set(folderKey, seqIndex + 1)
+
+      const fullPath = [...parentPath, seqIndex]
+
+      // Add request slot to the result collection
+      this.appendRequestToPath(
+        tab.value.document.resultCollection!,
+        fullPath,
+        cloneDeep(request),
+        shouldResetFoldersAndRequests
+      )
+
+      // Apply inherited auth and headers
+      const finalRequest: TestRunnerRequest = {
+        ...request,
+        auth:
+          request.auth.authType === "inherit" && request.auth.authActive
+            ? inheritedAuth
+            : request.auth,
+        headers: [...inheritedHeaders, ...request.headers],
+      }
+
+      await this.runTestRequest(
+        tab,
+        finalRequest,
+        collection,
+        options,
+        fullPath,
+        [], // inherited variables — simplified for custom order
+        shouldResetFoldersAndRequests,
+        iterationData
+      )
+
+      if (options.delay && options.delay > 0) {
+        try {
+          await delay(options.delay)
+        } catch (_error) {
+          if (options.stopRef?.value) {
+            tab.value.document.status = "stopped"
+            throw new Error("Test execution stopped")
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Builds a request path string from a path array
+   * Example: [0, 1, 2] -> "folder_0/folder_1/request_2"
+   */
+  private buildRequestPath(parentPath: number[], requestIndex: number): string {
+    const folderPath = parentPath.map((idx) => `folder_${idx}`).join("/")
+    const requestPath = `request_${requestIndex}`
+    return folderPath ? `${folderPath}/${requestPath}` : requestPath
+  }
+
+  /**
+   * Checks if a request should be executed based on selection state
+   * If no selection state is provided, all requests are executed
+   */
+  private shouldExecuteRequest(
+    requestPath: string,
+    selectionState?: Record<string, boolean>
+  ): boolean {
+    if (!selectionState || Object.keys(selectionState).length === 0) {
+      return true // Execute all if no selection state
+    }
+    return selectionState[requestPath] ?? false
   }
 }

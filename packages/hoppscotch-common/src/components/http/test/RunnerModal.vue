@@ -3,14 +3,38 @@
     dialog
     :title="t('collection_runner.run_collection')"
     :full-width-body="true"
+    :styles="modalStyles"
     @close="closeModal"
   >
     <template #body>
       <HoppSmartTabs v-model="activeTab">
         <HoppSmartTab id="gui" :label="t('collection_runner.ui')">
-          <div
-            class="flex-shrink-0 w-full h-full p-4 overflow-auto overflow-x-auto bg-primary"
-          >
+          <div class="flex min-h-[600px] h-full">
+            <!-- Left Panel: Request Selection with drag-to-reorder -->
+            <div
+              class="flex flex-col w-3/5 border-r border-divider p-4 overflow-hidden"
+            >
+              <div
+                class="flex-1 overflow-y-auto border rounded border-divider p-2"
+              >
+                <RequestRunOrder
+                  v-if="collectionTreeForSelection"
+                  v-model="requestOrder"
+                  :collection="collectionTreeForSelection"
+                  :selection="requestSelection"
+                  @update:selection="requestSelection = $event"
+                />
+                <div
+                  v-else
+                  class="flex items-center justify-center h-32 text-secondaryLight text-sm"
+                >
+                  {{ t("collection_runner.loading_requests") }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Panel: Configuration -->
+            <div class="flex flex-col w-2/5 p-4 overflow-y-auto">
             <section>
               <h4 class="font-semibold text-secondaryDark">
                 {{ t("collection_runner.run_config") }}
@@ -230,7 +254,8 @@
                 </HoppSmartCheckbox>
               </div>
             </section>
-          </div>
+            </div><!-- end right panel -->
+          </div><!-- end flex container -->
         </HoppSmartTab>
 
         <HoppSmartTab id="cli" :label="t('collection_runner.cli')">
@@ -273,6 +298,12 @@
           </template>
         </HoppSmartTab>
         <template #actions>
+          <HoppButtonSecondary
+            v-tippy="{ theme: 'tooltip' }"
+            :title="isExpanded ? t('collection_runner.collapse_modal') : t('collection_runner.expand_modal')"
+            :icon="isExpanded ? IconMinimize2 : IconMaximize2"
+            @click="isExpanded = !isExpanded"
+          />
           <HoppButtonSecondary
             v-tippy="{ theme: 'tooltip' }"
             class="!py-0 pl-2"
@@ -379,9 +410,11 @@ import { useI18n } from "~/composables/i18n"
 import { HoppCollection } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
 import { useToast } from "~/composables/toast"
-import { TestRunnerConfig } from "~/helpers/rest/document"
+import { TestRunnerConfig, RequestSelectionState } from "~/helpers/rest/document"
 import { copyToClipboard } from "~/helpers/utils/clipboard"
 import { RESTTabService } from "~/services/tab/rest"
+import RequestSelectionTree from "./RequestSelectionTree.vue"
+import RequestRunOrder from "./RequestRunOrder.vue"
 import {
   parseCSV,
   parseJSON,
@@ -394,6 +427,8 @@ import IconPlay from "~icons/lucide/play"
 import IconDownload from "~icons/lucide/download"
 import IconEye from "~icons/lucide/eye"
 import IconTrash from "~icons/lucide/trash-2"
+import IconMaximize2 from "~icons/lucide/maximize-2"
+import IconMinimize2 from "~icons/lucide/minimize-2"
 import { CurrentEnv } from "./Env.vue"
 import { pipe } from "fp-ts/lib/function"
 import {
@@ -463,11 +498,71 @@ const config = ref<TestRunnerConfig>({
   keepVariableValues: true,
 })
 
+const requestSelection = ref<RequestSelectionState>({})
+const requestOrder = ref<string[]>([])
+const collectionTreeForSelection = ref<HoppCollection | null>(null)
+const isExpanded = ref(false)
+
+/**
+ * Flatten a collection to a list of request paths in natural traversal order
+ * (folders first, then requests — matching the runner's default order).
+ */
+const buildFlatOrder = (collection: HoppCollection): string[] => {
+  const paths: string[] = []
+  const traverse = (node: HoppCollection, parentPath: string) => {
+    node.folders.forEach((folder, folderIdx) => {
+      const folderSeg = parentPath
+        ? `${parentPath}/folder_${folderIdx}`
+        : `folder_${folderIdx}`
+      traverse(folder as HoppCollection, folderSeg)
+    })
+    node.requests.forEach((_: unknown, reqIdx: number) => {
+      paths.push(
+        parentPath ? `${parentPath}/request_${reqIdx}` : `request_${reqIdx}`
+      )
+    })
+  }
+  traverse(collection, "")
+  return paths
+}
+const modalStyles = computed(() =>
+  isExpanded.value ? "max-w-6xl w-full" : "max-w-4xl w-full"
+)
+
 onMounted(async () => {
   if (props.prevConfig) {
     config.value = { ...config.value, ...props.prevConfig }
   }
+
+  // Load collection tree for request selection
+  const tree = await getCollectionTree(
+    props.collectionRunnerData.type,
+    props.collectionRunnerData.collectionID
+  )
+  
+  if (tree) {
+    collectionTreeForSelection.value = tree
+    // Initialize run order from natural traversal (if not already set from prevConfig)
+    if (requestOrder.value.length === 0) {
+      const flatPaths = buildFlatOrder(tree)
+      requestOrder.value = flatPaths
+      // Default: all requests selected
+      const allSelected: RequestSelectionState = {}
+      flatPaths.forEach((path) => { allSelected[path] = true })
+      requestSelection.value = allSelected
+    }
+  }
 })
+
+// Sync requestSelection with config
+watch(requestSelection, (newSelection) => {
+  config.value.requestSelection = newSelection
+}, { deep: true })
+
+// Sync requestOrder with config
+watch(requestOrder, (newOrder) => {
+  config.value.requestOrder = newOrder
+}, { deep: true })
 
 const runTests = async () => {
   const collectionTree = await getCollectionTree(
