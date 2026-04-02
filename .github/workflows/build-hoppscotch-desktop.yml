@@ -32,6 +32,7 @@ env:
   WEB_PATH: ${{ github.workspace }}/packages/hoppscotch-selfhost-web
   DESKTOP_PATH: ${{ github.workspace }}/packages/hoppscotch-desktop
   BUNDLER_PATH: ${{ github.workspace }}/packages/hoppscotch-desktop/crates/webapp-bundler
+  UNINSTALLER_PATH: ${{ github.workspace }}/packages/hoppscotch-macos-uninstaller
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -328,8 +329,185 @@ jobs:
         with:
           name: macos-aarch64
           path: dist/*
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB: build-macos-uninstaller
+  # Builds the production HoppscotchUninstaller-<version>.pkg using Apple-
+  # proprietary tools (pkgbuild + productbuild). Must run on macos-latest.
+  # Reuses the same version / signing / checkout inputs as the desktop jobs.
+  # The output is a standalone PKG uploaded as its own artifact — it is NOT
+  # part of the Tauri updater manifest (it is distributed separately to IT /
+  # MDM admins who need to remove the desktop app from managed Macs).
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-macos-uninstaller:
+    name: Build macOS Uninstaller PKG
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
+          token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22.12.0
+
+      # pkgbuild / productbuild are Apple-only tools — confirm they exist on
+      # the runner before spending time on any other step.
+      - name: Verify build tools (pkgbuild / productbuild)
+        run: |
+          command -v pkgbuild     || { echo "ERROR: pkgbuild not found"; exit 1; }
+          command -v productbuild || { echo "ERROR: productbuild not found"; exit 1; }
+          echo "  pkgbuild    : $(which pkgbuild)"
+          echo "  productbuild: $(which productbuild)"
+          sw_vers && uname -m
+
+      # Import the Developer ID Installer certificate so productsign (called
+      # inside build-pkg.sh) can reference it. Skipped when disable_signing=true.
+      - name: Import Developer ID Installer certificate
+        if: ${{ inputs.disable_signing != true }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MACOS_UNINSTALLER_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_UNINSTALLER_CERTIFICATE_PASSWORD }}
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+      # build-pkg.sh orchestrates: pkgbuild → productbuild → (productsign) → (notarytool)
+      # PKG_VERSION empty → script reads version from package.json automatically.
+      # SIGN_IDENTITY empty → signing step inside the script is silently skipped.
+      - name: Build PKG
+        working-directory: ${{ env.UNINSTALLER_PATH }}
+        env:
+          PKG_VERSION: ${{ inputs.version }}
+          SIGN_IDENTITY: ${{ inputs.disable_signing != true && secrets.MACOS_UNINSTALLER_SIGN_IDENTITY || '' }}
+        run: |
+          echo "Building macOS Uninstaller PKG..."
+          echo "  Version : ${PKG_VERSION:-<from package.json>}"
+          echo "  Signing : ${{ inputs.disable_signing != true }}"
+          bash scripts/build-pkg.sh
+
+      - name: List built artifacts
+        working-directory: ${{ env.UNINSTALLER_PATH }}
+        run: ls -lah dist/
+
+      # SHA-256 checksums let IT admins / MDM verify integrity before deploying.
+      - name: Generate SHA-256 checksums
+        working-directory: ${{ env.UNINSTALLER_PATH }}/dist
+        run: |
+          mkdir -p shas
+          for file in *.pkg; do
+            [ -f "$file" ] || continue
+            shasum -a 256 "$file" | tee "shas/${file}.sha256"
+          done
+
+      - name: Verify PKG signature
+        if: ${{ inputs.disable_signing != true }}
+        working-directory: ${{ env.UNINSTALLER_PATH }}/dist
+        run: |
+          for file in *.pkg; do
+            [ -f "$file" ] || continue
+            echo "Checking signature: $file"
+            pkgutil --check-signature "$file"
+          done
+
+      - name: Upload PKG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HoppscotchUninstaller-macos
+          path: ${{ env.UNINSTALLER_PATH }}/dist/
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB: build-macos-uninstaller-test
+  # Builds the dry-run TEST PKG that opens the same macOS Installer GUI but
+  # deletes nothing — it only scans and produces an HTML report.
+  # Validates that the build scripts and resources are intact on every release
+  # build so the uninstaller is always in a shippable state.
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-macos-uninstaller-test:
+    name: Build macOS Uninstaller TEST PKG (dry-run validation)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
+          token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22.12.0
+
+      - name: Verify build tools (pkgbuild / productbuild)
+        run: |
+          command -v pkgbuild     || { echo "ERROR: pkgbuild not found"; exit 1; }
+          command -v productbuild || { echo "ERROR: productbuild not found"; exit 1; }
+          echo "  pkgbuild    : $(which pkgbuild)"
+          echo "  productbuild: $(which productbuild)"
+
+      # Fail early with a clear message if a required file has been removed.
+      - name: Validate package structure
+        working-directory: ${{ env.UNINSTALLER_PATH }}
+        run: |
+          required_files=(
+            "scripts/build-test-pkg.sh"
+            "scripts/pkg-test/preinstall"
+            "scripts/pkg-test/postinstall"
+            "resources/test/distribution.xml"
+            "resources/test/welcome-test.html"
+            "resources/test/conclusion-test.html"
+            "package.json"
+          )
+          all_ok=true
+          for f in "${required_files[@]}"; do
+            if [[ -f "$f" ]]; then echo "  ✓ $f"
+            else echo "  ✗ MISSING: $f"; all_ok=false; fi
+          done
+          [[ "$all_ok" == "true" ]] || { echo "ERROR: required files missing"; exit 1; }
+
+      # No signing required — this is a test/validation artifact only.
+      - name: Build TEST PKG (dry-run — nothing deleted)
+        working-directory: ${{ env.UNINSTALLER_PATH }}
+        run: bash scripts/build-test-pkg.sh
+
+      - name: Verify TEST PKG was produced
+        working-directory: ${{ env.UNINSTALLER_PATH }}
+        run: |
+          ls -lah dist/
+          pkg_count=$(find dist/ -name "HoppscotchUninstaller-TEST-*.pkg" | wc -l | tr -d ' ')
+          echo "TEST PKGs found: $pkg_count"
+          [[ "$pkg_count" -ge 1 ]] || { echo "ERROR: No TEST PKG found in dist/"; exit 1; }
+
+      # pkgutil --expand confirms the PKG archive is a valid flat package.
+      - name: Validate PKG is a valid flat package
+        working-directory: ${{ env.UNINSTALLER_PATH }}/dist
+        run: |
+          for pkg in HoppscotchUninstaller-TEST-*.pkg; do
+            echo "Validating: $pkg"
+            tmp_dir="$(mktemp -d)"
+            pkgutil --expand "$pkg" "$tmp_dir/expanded" \
+              && echo "  ✓ PKG expands cleanly" \
+              || { echo "  ✗ PKG is corrupt"; exit 1; }
+            rm -rf "$tmp_dir"
+          done
+
+      - name: Upload TEST PKG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HoppscotchUninstaller-TEST-macos
+          path: ${{ env.UNINSTALLER_PATH }}/dist/HoppscotchUninstaller-TEST-*.pkg
+          retention-days: 7
+
   create-update-manifest:
-    needs: [build-windows, build-macos-x64, build-macos-arm64]
+    needs: [build-windows, build-macos-x64, build-macos-arm64, build-macos-uninstaller, build-macos-uninstaller-test]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
