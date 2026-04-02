@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# =============================================================================
+# preinstall — Hoppscotch Uninstaller PKG preflight check
+# =============================================================================
+# Runs as root before the payload is laid down.
+# We use this to verify the environment and log context for MDM reporting.
+# =============================================================================
+
+set -euo pipefail
+
+readonly APP_ID="io.hoppscotch.desktop"
+readonly APP_BUNDLE="/Applications/Hoppscotch.app"
+
+echo "[Hoppscotch Uninstaller] Preflight check starting..."
+echo "[Hoppscotch Uninstaller] macOS version: $(sw_vers -productVersion)"
+echo "[Hoppscotch Uninstaller] Architecture : $(uname -m)"
+
+# Check whether the app or its data exist
+if [[ -d "$APP_BUNDLE" ]]; then
+  echo "[Hoppscotch Uninstaller] App bundle found: $APP_BUNDLE"
+else
+  echo "[Hoppscotch Uninstaller] App bundle NOT found — data-only cleanup will proceed."
+fi
+
+# Confirm we have write permission to /Applications
+if [[ ! -w "/Applications" ]]; then
+  echo "[Hoppscotch Uninstaller] ERROR: No write access to /Applications" >&2
+  exit 1
+fi
+
+echo "[Hoppscotch Uninstaller] Preflight check passed."
+exit 0
+

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Hoppscotch Uninstaller</title>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 13px;
+      color: #1d1d1f;
+      padding: 20px 24px;
+      line-height: 1.6;
+    }
+    .test-badge {
+      display: inline-block;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 20px;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 4px; }
+    .info {
+      background: #e8f4fd;
+      border-left: 4px solid #0EA5E9;
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #0c5460;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-badge">🧪 Test Mode — Nothing will be deleted</div>
+  <h2>Hoppscotch Uninstaller — Preview Run</h2>
+  <p>
+    This test package scans your Mac and shows exactly what the real
+    uninstaller <strong>would</strong> remove, without deleting anything.
+  </p>
+  <p>Items that will be scanned:</p>
+  <ul>
+    <li>The <strong>Hoppscotch.app</strong> bundle in <code>/Applications</code></li>
+    <li>App support data — <code>~/Library/Application Support/io.hoppscotch.desktop</code></li>
+    <li>Log files — <code>~/Library/Logs/io.hoppscotch.desktop</code></li>
+    <li>Caches — <code>~/Library/Caches/io.hoppscotch.desktop</code></li>
+    <li>WebKit storage, saved state, HTTP storages, preferences</li>
+    <li>Any LaunchAgents / LaunchDaemons</li>
+  </ul>
+  <div class="info">
+    ✅ After clicking <strong>Install</strong>, a detailed HTML report will open
+    in your browser showing every file found or not found on this Mac.
+    Nothing is deleted at any point.
+  </div>
+</body>
+</html>
+

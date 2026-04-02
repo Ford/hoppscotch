@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# =============================================================================
+# postinstall — Hoppscotch TEST PKG
+# =============================================================================
+# Scans the Mac for every file/folder the real uninstaller would remove.
+# Generates a self-contained HTML report and opens it in the default browser.
+# NOTHING IS DELETED.
+# =============================================================================
+
+set -euo pipefail
+
+readonly APP_ID="io.hoppscotch.desktop"
+readonly APP_NAME="Hoppscotch"
+readonly APP_BUNDLE="/Applications/${APP_NAME}.app"
+readonly REPORT_FILE="/tmp/Hoppscotch-Uninstall-Preview-$(date +%Y%m%d-%H%M%S).html"
+
+echo "[TEST] Scanning system — nothing will be deleted..."
+
+# ── Collect paths ─────────────────────────────────────────────────────────────
+# Each entry: "STATUS|PATH|SIZE"  (STATUS = FOUND | MISSING)
+declare -a ROWS=()
+
+scan_path() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    local size
+    size=$(du -sh "$path" 2>/dev/null | cut -f1 || echo "—")
+    ROWS+=("FOUND|${path}|${size}")
+    echo "[TEST]   ✓ Found   : $path  ($size)"
+  else
+    ROWS+=("MISSING|${path}|—")
+    echo "[TEST]   – Missing : $path"
+  fi
+}
+
+# App bundle
+scan_path "$APP_BUNDLE"
+
+# Per-user Library data
+user_homes=()
+while IFS=$'\t' read -r _user home; do
+  [[ "$home" == /Users/* && -d "$home" ]] || continue
+  user_homes+=("$home")
+done < <(dscl . -list /Users NFSHomeDirectory 2>/dev/null | awk '{print $1"\t"$2}' || true)
+
+for home in "${user_homes[@]}"; do
+  lib="$home/Library"
+  scan_path "$lib/Application Support/${APP_ID}"
+  scan_path "$lib/Logs/${APP_ID}"
+  scan_path "$lib/Caches/${APP_ID}"
+  scan_path "$lib/WebKit/${APP_ID}"
+  scan_path "$lib/Saved Application State/${APP_ID}.savedState"
+  scan_path "$lib/HTTPStorages/${APP_ID}"
+  scan_path "$lib/Preferences/${APP_ID}.plist"
+done
+
+# LaunchAgents / Daemons
+for dir in /Library/LaunchDaemons /Library/LaunchAgents /Users/*/Library/LaunchAgents; do
+  [[ -d "$dir" ]] || continue
+  while IFS= read -r -d '' plist; do
+    scan_path "$plist"
+  done < <(find "$dir" -maxdepth 1 -name "*${APP_ID}*" -print0 2>/dev/null || true)
+done
+
+# ── Count results ─────────────────────────────────────────────────────────────
+found_count=0
+missing_count=0
+for row in "${ROWS[@]}"; do
+  [[ "$row" == FOUND* ]]   && (( found_count++   )) || true
+  [[ "$row" == MISSING* ]] && (( missing_count++ )) || true
+done
+total_count=$(( found_count + missing_count ))
+
+# ── Build HTML rows ───────────────────────────────────────────────────────────
+html_rows=""
+for row in "${ROWS[@]}"; do
+  status="${row%%|*}"
+  rest="${row#*|}"
+  path="${rest%%|*}"
+  size="${rest##*|}"
+
+  if [[ "$status" == "FOUND" ]]; then
+    badge='<span class="badge found">Will be removed</span>'
+    row_class="found"
+  else
+    badge='<span class="badge missing">Not present</span>'
+    row_class="missing"
+  fi
+
+  html_rows+="
+    <tr class=\"${row_class}\">
+      <td class=\"path\">${path}</td>
+      <td class=\"size\">${size}</td>
+      <td>${badge}</td>
+    </tr>"
+done
+
+# ── Generate self-contained HTML report ──────────────────────────────────────
+cat > "$REPORT_FILE" << HTMLEOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hoppscotch Uninstall Preview — Test Report</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 32px 24px;
+      line-height: 1.6;
+    }
+
+    .container { max-width: 860px; margin: 0 auto; }
+
+    /* ── Test Mode Banner ── */
+    .test-banner {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 10px;
+      padding: 14px 20px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .test-banner .icon { font-size: 24px; }
+    .test-banner strong { font-size: 15px; color: #856404; }
+    .test-banner p { font-size: 13px; color: #856404; margin-top: 2px; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .logo {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, #31C48D, #0EA5E9);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+    }
+    h1 { font-size: 24px; font-weight: 700; }
+    h1 span { color: #6e6e73; font-size: 15px; font-weight: 400; display: block; margin-top: 2px; }
+
+    /* ── Summary cards ── */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px 20px;
+      border: 1px solid #e0e0e5;
+    }
+    .card .number {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .card .label { font-size: 12px; color: #6e6e73; text-transform: uppercase; letter-spacing: .5px; }
+    .card.total  .number { color: #1d1d1f; }
+    .card.danger .number { color: #dc3545; }
+    .card.safe   .number { color: #6e6e73; }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e0e0e5;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .table-head {
+      background: #f5f5f7;
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      border-bottom: 1px solid #e0e0e5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 10px 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      background: #fafafa;
+      border-bottom: 1px solid #e8e8ed;
+    }
+    td {
+      padding: 11px 20px;
+      border-bottom: 1px solid #f0f0f5;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr.found   td { background: #fff8f8; }
+    tr.missing td { background: #fafafa; }
+    tr:hover td   { background: #f0f6ff !important; }
+
+    .path {
+      font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+      font-size: 12.5px;
+      word-break: break-all;
+      color: #1d1d1f;
+    }
+    .size { font-size: 12px; color: #6e6e73; white-space: nowrap; width: 70px; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge.found   { background: #fde8e8; color: #c0392b; }
+    .badge.missing { background: #e8f5e9; color: #2e7d32; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #aeaeb2;
+      padding-top: 8px;
+    }
+
+    /* ── Action note ── */
+    .action-note {
+      background: #fff;
+      border: 1px solid #e0e0e5;
+      border-left: 4px solid #0EA5E9;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 28px;
+      font-size: 13px;
+    }
+    .action-note strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    code {
+      background: #f0f0f5;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12.5px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Test banner -->
+  <div class="test-banner">
+    <div class="icon">🧪</div>
+    <div>
+      <strong>TEST MODE — Nothing was deleted</strong>
+      <p>This report was generated by the Hoppscotch Uninstaller Test Package.
+         All items below are shown for review only. No files or folders were
+         removed from this Mac.</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">🦔</div>
+    <div>
+      <h1>Hoppscotch Uninstall Preview
+        <span>Generated on $(date "+%B %d, %Y at %H:%M:%S") · macOS $(sw_vers -productVersion)</span>
+      </h1>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary">
+    <div class="card total">
+      <div class="number">${total_count}</div>
+      <div class="label">Total paths scanned</div>
+    </div>
+    <div class="card danger">
+      <div class="number">${found_count}</div>
+      <div class="label">Would be removed</div>
+    </div>
+    <div class="card safe">
+      <div class="number">${missing_count}</div>
+      <div class="label">Not present (safe to skip)</div>
+    </div>
+  </div>
+
+  <!-- Action note -->
+  <div class="action-note">
+    <strong>✅ Verified — Ready to generate the real uninstaller?</strong>
+    If the list above looks correct, build the real PKG on a Mac with:<br/>
+    <code>cd packages/hoppscotch-macos-uninstaller &amp;&amp; make pkg</code>
+    and deploy it via your software center.
+  </div>
+
+  <!-- File table -->
+  <div class="table-wrap">
+    <div class="table-head">
+      <span>📁 Files &amp; Folders scanned on this Mac</span>
+      <span>${found_count} items would be removed</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Path</th>
+          <th>Size</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${html_rows}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Hoppscotch macOS Uninstaller · Test Report · App ID: ${APP_ID}
+  </div>
+
+</div>
+</body>
+</html>
+HTMLEOF
+
+echo "[TEST] Report generated: $REPORT_FILE"
+
+# Open report in default browser
+open "$REPORT_FILE" 2>/dev/null || true
+
+echo "[TEST] Opened report in browser."
+echo "[TEST] Dry-run complete — nothing was deleted."
+
+exit 0
+

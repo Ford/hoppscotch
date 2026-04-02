@@ -104,7 +104,9 @@ const buildAllPaths = (
 const initStateFromCollection = (): RequestSelectionState => {
   const paths = buildAllPaths(props.collection)
   const state: RequestSelectionState = {}
-  paths.forEach((p) => { state[p] = true })
+  paths.forEach((p) => {
+    state[p] = true
+  })
   return state
 }
 
@@ -130,7 +132,9 @@ const allSelected = computed(
 const selectAll = () => {
   const allPaths = buildAllPaths(props.collection)
   const newState: RequestSelectionState = {}
-  allPaths.forEach((path) => { newState[path] = true })
+  allPaths.forEach((path) => {
+    newState[path] = true
+  })
   selectionState.value = newState
   emitUpdate()
 }
@@ -138,7 +142,9 @@ const selectAll = () => {
 const deselectAll = () => {
   const allPaths = buildAllPaths(props.collection)
   const newState: RequestSelectionState = {}
-  allPaths.forEach((path) => { newState[path] = false })
+  allPaths.forEach((path) => {
+    newState[path] = false
+  })
   selectionState.value = newState
   emitUpdate()
 }

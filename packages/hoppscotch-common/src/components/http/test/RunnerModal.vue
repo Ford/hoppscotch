@@ -35,227 +35,229 @@
 
             <!-- Right Panel: Configuration -->
             <div class="flex flex-col w-2/5 p-4 overflow-y-auto">
-            <section>
-              <h4 class="font-semibold text-secondaryDark">
-                {{ t("collection_runner.run_config") }}
-              </h4>
-              <div class="mt-4 space-y-4">
-                <!-- Iterations Input -->
-                <HoppSmartInput
-                  v-model="config.iterations as any"
-                  type="number"
-                  :label="t('test.iterations')"
-                  class="!rounded-r-none !border-r-0"
-                  :class="{ 'border-red-500': config.iterations < 1 }"
-                  input-styles="floating-input !rounded-r-none !border-r-0"
-                >
-                  <template #button>
-                    <span
-                      class="px-4 py-2 font-semibold border rounded-r bg-primaryLight border-divider text-secondaryLight"
-                    >
-                      {{
-                        config.iterations === 1
-                          ? t("count.time")
-                          : t("count.times")
-                      }}
-                    </span>
-                  </template>
-                </HoppSmartInput>
-                <p
-                  v-if="config.iterations < 1"
-                  class="text-xs text-red-500 mt-1"
-                >
-                  {{ t("collection_runner.invalid_iterations") }}
-                </p>
-                <p
-                  v-if="datasetEnabled && datasetRowCount > 0"
-                  class="text-xs text-secondaryLight"
-                >
-                  <span v-if="config.iterations <= datasetRowCount">
-                    {{
-                      t("collection_runner.dataset_iterations_info", {
-                        iterations: config.iterations,
-                        rows: datasetRowCount,
-                        total: config.iterations,
-                      })
-                    }}
-                  </span>
-                  <span v-else>
-                    {{
-                      t("collection_runner.dataset_iterations_exceeds", {
-                        iterations: config.iterations,
-                        rows: datasetRowCount,
-                        extra: config.iterations,
-                      })
-                    }}
-                  </span>
-                </p>
-
-                <!-- Data Feed Section (Postman Style) -->
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <label class="text-sm font-medium text-secondaryDark">
-                      {{ t("collection_runner.data_feed") }}
-                    </label>
-                  </div>
-
-                  <div v-if="!datasetEnabled" class="space-y-2">
-                    <!--                    <p class="text-xs text-secondaryLight">
-                      {{ t("collection_runner.data_feed_description") }}
-                    </p>-->
-                    <div class="flex gap-2">
-                      <label
-                        class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
-                      >
-                        <input
-                          ref="csvFileInput"
-                          type="file"
-                          accept=".csv"
-                          class="hidden"
-                          @change="handleFileUpload($event, 'csv')"
-                        />
-                        <span>{{ t("collection_runner.select_csv") }}</span>
-                      </label>
-
-                      <label
-                        class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
-                      >
-                        <input
-                          ref="jsonFileInput"
-                          type="file"
-                          accept=".json"
-                          class="hidden"
-                          @change="handleFileUpload($event, 'json')"
-                        />
-                        <span>{{ t("collection_runner.select_json") }}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div
-                    v-else
-                    class="p-3 border rounded bg-primaryLight border-divider space-y-2"
+              <section>
+                <h4 class="font-semibold text-secondaryDark">
+                  {{ t("collection_runner.run_config") }}
+                </h4>
+                <div class="mt-4 space-y-4">
+                  <!-- Iterations Input -->
+                  <HoppSmartInput
+                    v-model="config.iterations as any"
+                    type="number"
+                    :label="t('test.iterations')"
+                    class="!rounded-r-none !border-r-0"
+                    :class="{ 'border-red-500': config.iterations < 1 }"
+                    input-styles="floating-input !rounded-r-none !border-r-0"
                   >
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2 text-sm">
-                        <span class="font-medium text-secondaryDark">{{
-                          datasetFileName
-                        }}</span>
-                        <span class="text-secondaryLight">•</span>
-                        <span class="text-secondaryLight">{{
-                          datasetSource?.toUpperCase()
-                        }}</span>
-                        <span class="text-secondaryLight">•</span>
-                        <span class="text-accent"
-                          >{{ datasetRowCount }}
-                          {{
-                            datasetRowCount === 1
-                              ? t("collection_runner.row")
-                              : t("collection_runner.rows")
-                          }}</span
-                        >
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <HoppButtonSecondary
-                          v-tippy="{ theme: 'tooltip' }"
-                          :title="t('collection_runner.preview_data')"
-                          :icon="IconEye"
-                          class="!py-1 !px-2"
-                          outline
-                          @click="showPreviewModal = true"
-                        />
-                        <HoppButtonSecondary
-                          v-tippy="{ theme: 'tooltip' }"
-                          :title="t('action.remove')"
-                          :icon="IconTrash"
-                          class="!py-1 !px-2"
-                          outline
-                          @click="clearDataset"
-                        />
-                      </div>
-                    </div>
-                    <p class="text-xs text-accent">
+                    <template #button>
+                      <span
+                        class="px-4 py-2 font-semibold border rounded-r bg-primaryLight border-divider text-secondaryLight"
+                      >
+                        {{
+                          config.iterations === 1
+                            ? t("count.time")
+                            : t("count.times")
+                        }}
+                      </span>
+                    </template>
+                  </HoppSmartInput>
+                  <p
+                    v-if="config.iterations < 1"
+                    class="text-xs text-red-500 mt-1"
+                  >
+                    {{ t("collection_runner.invalid_iterations") }}
+                  </p>
+                  <p
+                    v-if="datasetEnabled && datasetRowCount > 0"
+                    class="text-xs text-secondaryLight"
+                  >
+                    <span v-if="config.iterations <= datasetRowCount">
                       {{
-                        t("collection_runner.iterations_from_data", {
-                          count: datasetRowCount,
+                        t("collection_runner.dataset_iterations_info", {
+                          iterations: config.iterations,
+                          rows: datasetRowCount,
+                          total: config.iterations,
                         })
                       }}
-                    </p>
-                  </div>
-                </div>
-
-                <!-- Delay Input -->
-                <HoppSmartInput
-                  v-model="config.delay as any"
-                  type="number"
-                  :label="t('collection_runner.delay')"
-                  class="!rounded-r-none !border-r-0"
-                  :class="{ 'border-red-500': config.delay < 0 }"
-                  input-styles="floating-input !rounded-r-none !border-r-0"
-                >
-                  <template #button>
-                    <span
-                      class="px-4 py-2 font-semibold border rounded-r bg-primaryLight border-divider text-secondaryLight"
-                    >
-                      ms
                     </span>
-                  </template>
-                </HoppSmartInput>
-                <p v-if="config.delay < 0" class="text-xs text-red-500 mt-1">
-                  {{ t("collection_runner.negative_delay") }}
-                </p>
-              </div>
-            </section>
+                    <span v-else>
+                      {{
+                        t("collection_runner.dataset_iterations_exceeds", {
+                          iterations: config.iterations,
+                          rows: datasetRowCount,
+                          extra: config.iterations,
+                        })
+                      }}
+                    </span>
+                  </p>
 
-            <section class="mt-6">
-              <span class="text-xs text-secondaryLight">
-                {{ t("collection_runner.advanced_settings") }}
-              </span>
+                  <!-- Data Feed Section (Postman Style) -->
+                  <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                      <label class="text-sm font-medium text-secondaryDark">
+                        {{ t("collection_runner.data_feed") }}
+                      </label>
+                    </div>
 
-              <div class="flex flex-col gap-4 mt-4 items-start">
-                <HoppSmartCheckbox
-                  class="pr-2"
-                  :on="config.stopOnError"
-                  @change="config.stopOnError = !config.stopOnError"
-                >
-                  <span>
-                    {{ t("collection_runner.stop_on_error") }}
-                  </span>
-                </HoppSmartCheckbox>
+                    <div v-if="!datasetEnabled" class="space-y-2">
+                      <!--                    <p class="text-xs text-secondaryLight">
+                      {{ t("collection_runner.data_feed_description") }}
+                    </p>-->
+                      <div class="flex gap-2">
+                        <label
+                          class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
+                        >
+                          <input
+                            ref="csvFileInput"
+                            type="file"
+                            accept=".csv"
+                            class="hidden"
+                            @change="handleFileUpload($event, 'csv')"
+                          />
+                          <span>{{ t("collection_runner.select_csv") }}</span>
+                        </label>
 
-                <HoppSmartCheckbox
-                  class="pr-2"
-                  :on="config.persistResponses"
-                  @change="config.persistResponses = !config.persistResponses"
-                >
-                  <span>
-                    {{ t("collection_runner.persist_responses") }}
-                  </span>
-                </HoppSmartCheckbox>
+                        <label
+                          class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
+                        >
+                          <input
+                            ref="jsonFileInput"
+                            type="file"
+                            accept=".json"
+                            class="hidden"
+                            @change="handleFileUpload($event, 'json')"
+                          />
+                          <span>{{ t("collection_runner.select_json") }}</span>
+                        </label>
+                      </div>
+                    </div>
 
-                <HoppSmartCheckbox
-                  class="pr-2"
-                  :on="config.keepVariableValues"
-                  @change="
-                    config.keepVariableValues = !config.keepVariableValues
-                  "
-                >
-                  <span>
-                    {{ t("collection_runner.keep_variable_values") }}
-                  </span>
-                  <HoppButtonSecondary
-                    v-tippy="{ theme: 'tooltip' }"
-                    class="!py-0 pl-2"
-                    to="https://docs.hoppscotch.io/documentation/features/inspections"
-                    blank
-                    :title="t('app.wiki')"
-                    :icon="IconHelpCircle"
-                  />
-                </HoppSmartCheckbox>
-              </div>
-            </section>
-            </div><!-- end right panel -->
-          </div><!-- end flex container -->
+                    <div
+                      v-else
+                      class="p-3 border rounded bg-primaryLight border-divider space-y-2"
+                    >
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2 text-sm">
+                          <span class="font-medium text-secondaryDark">{{
+                            datasetFileName
+                          }}</span>
+                          <span class="text-secondaryLight">•</span>
+                          <span class="text-secondaryLight">{{
+                            datasetSource?.toUpperCase()
+                          }}</span>
+                          <span class="text-secondaryLight">•</span>
+                          <span class="text-accent"
+                            >{{ datasetRowCount }}
+                            {{
+                              datasetRowCount === 1
+                                ? t("collection_runner.row")
+                                : t("collection_runner.rows")
+                            }}</span
+                          >
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <HoppButtonSecondary
+                            v-tippy="{ theme: 'tooltip' }"
+                            :title="t('collection_runner.preview_data')"
+                            :icon="IconEye"
+                            class="!py-1 !px-2"
+                            outline
+                            @click="showPreviewModal = true"
+                          />
+                          <HoppButtonSecondary
+                            v-tippy="{ theme: 'tooltip' }"
+                            :title="t('action.remove')"
+                            :icon="IconTrash"
+                            class="!py-1 !px-2"
+                            outline
+                            @click="clearDataset"
+                          />
+                        </div>
+                      </div>
+                      <p class="text-xs text-accent">
+                        {{
+                          t("collection_runner.iterations_from_data", {
+                            count: datasetRowCount,
+                          })
+                        }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Delay Input -->
+                  <HoppSmartInput
+                    v-model="config.delay as any"
+                    type="number"
+                    :label="t('collection_runner.delay')"
+                    class="!rounded-r-none !border-r-0"
+                    :class="{ 'border-red-500': config.delay < 0 }"
+                    input-styles="floating-input !rounded-r-none !border-r-0"
+                  >
+                    <template #button>
+                      <span
+                        class="px-4 py-2 font-semibold border rounded-r bg-primaryLight border-divider text-secondaryLight"
+                      >
+                        ms
+                      </span>
+                    </template>
+                  </HoppSmartInput>
+                  <p v-if="config.delay < 0" class="text-xs text-red-500 mt-1">
+                    {{ t("collection_runner.negative_delay") }}
+                  </p>
+                </div>
+              </section>
+
+              <section class="mt-6">
+                <span class="text-xs text-secondaryLight">
+                  {{ t("collection_runner.advanced_settings") }}
+                </span>
+
+                <div class="flex flex-col gap-4 mt-4 items-start">
+                  <HoppSmartCheckbox
+                    class="pr-2"
+                    :on="config.stopOnError"
+                    @change="config.stopOnError = !config.stopOnError"
+                  >
+                    <span>
+                      {{ t("collection_runner.stop_on_error") }}
+                    </span>
+                  </HoppSmartCheckbox>
+
+                  <HoppSmartCheckbox
+                    class="pr-2"
+                    :on="config.persistResponses"
+                    @change="config.persistResponses = !config.persistResponses"
+                  >
+                    <span>
+                      {{ t("collection_runner.persist_responses") }}
+                    </span>
+                  </HoppSmartCheckbox>
+
+                  <HoppSmartCheckbox
+                    class="pr-2"
+                    :on="config.keepVariableValues"
+                    @change="
+                      config.keepVariableValues = !config.keepVariableValues
+                    "
+                  >
+                    <span>
+                      {{ t("collection_runner.keep_variable_values") }}
+                    </span>
+                    <HoppButtonSecondary
+                      v-tippy="{ theme: 'tooltip' }"
+                      class="!py-0 pl-2"
+                      to="https://docs.hoppscotch.io/documentation/features/inspections"
+                      blank
+                      :title="t('app.wiki')"
+                      :icon="IconHelpCircle"
+                    />
+                  </HoppSmartCheckbox>
+                </div>
+              </section>
+            </div>
+            <!-- end right panel -->
+          </div>
+          <!-- end flex container -->
         </HoppSmartTab>
 
         <HoppSmartTab id="cli" :label="t('collection_runner.cli')">
@@ -300,7 +302,11 @@
         <template #actions>
           <HoppButtonSecondary
             v-tippy="{ theme: 'tooltip' }"
-            :title="isExpanded ? t('collection_runner.collapse_modal') : t('collection_runner.expand_modal')"
+            :title="
+              isExpanded
+                ? t('collection_runner.collapse_modal')
+                : t('collection_runner.expand_modal')
+            "
             :icon="isExpanded ? IconMinimize2 : IconMaximize2"
             @click="isExpanded = !isExpanded"
           />
@@ -410,10 +416,12 @@ import { useI18n } from "~/composables/i18n"
 import { HoppCollection } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
 import { useToast } from "~/composables/toast"
-import { TestRunnerConfig, RequestSelectionState } from "~/helpers/rest/document"
+import {
+  TestRunnerConfig,
+  RequestSelectionState,
+} from "~/helpers/rest/document"
 import { copyToClipboard } from "~/helpers/utils/clipboard"
 import { RESTTabService } from "~/services/tab/rest"
-import RequestSelectionTree from "./RequestSelectionTree.vue"
 import RequestRunOrder from "./RequestRunOrder.vue"
 import {
   parseCSV,
@@ -539,7 +547,7 @@ onMounted(async () => {
     props.collectionRunnerData.type,
     props.collectionRunnerData.collectionID
   )
-  
+
   if (tree) {
     collectionTreeForSelection.value = tree
     // Initialize run order from natural traversal (if not already set from prevConfig)
@@ -548,21 +556,31 @@ onMounted(async () => {
       requestOrder.value = flatPaths
       // Default: all requests selected
       const allSelected: RequestSelectionState = {}
-      flatPaths.forEach((path) => { allSelected[path] = true })
+      flatPaths.forEach((path) => {
+        allSelected[path] = true
+      })
       requestSelection.value = allSelected
     }
   }
 })
 
 // Sync requestSelection with config
-watch(requestSelection, (newSelection) => {
-  config.value.requestSelection = newSelection
-}, { deep: true })
+watch(
+  requestSelection,
+  (newSelection) => {
+    config.value.requestSelection = newSelection
+  },
+  { deep: true }
+)
 
 // Sync requestOrder with config
-watch(requestOrder, (newOrder) => {
-  config.value.requestOrder = newOrder
-}, { deep: true })
+watch(
+  requestOrder,
+  (newOrder) => {
+    config.value.requestOrder = newOrder
+  },
+  { deep: true }
+)
 
 const runTests = async () => {
   const collectionTree = await getCollectionTree(
@@ -743,7 +761,7 @@ const handleFileUpload = (event: Event, type: "csv" | "json") => {
         config.value.iterations = parsedData.length
 
         toast.success(t("collection_runner.dataset_loaded"))
-      } catch (error) {
+      } catch (_error) {
         const errorMsg =
           type === "csv"
             ? t("collection_runner.invalid_csv")

@@ -1,0 +1,201 @@
+name: Build macOS Uninstaller TEST PKG
+
+# ── When does this run? ───────────────────────────────────────────────────────
+# Two triggers:
+#   1. workflow_dispatch — manual run from GitHub UI / API on any branch.
+#   2. pull_request      — automatically on every PR that touches files inside
+#      the hoppscotch-macos-uninstaller package.  This validates that the build
+#      scripts, resources, and PKG structure are still intact before merging.
+#
+# The TEST PKG is completely safe to run:
+#   • It scans the Mac for Hoppscotch artefacts and produces an HTML report.
+#   • It deletes NOTHING. It is a pure preview / dry-run.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch or tag to checkout
+        required: false
+        default: "main"
+
+  pull_request:
+    # Only trigger when files inside this package change — avoids unnecessary
+    # macOS runner costs for unrelated PRs.
+    paths:
+      - "packages/hoppscotch-macos-uninstaller/**"
+    branches:
+      - main
+      - staging
+      - next
+
+# ── Shared path constant ──────────────────────────────────────────────────────
+env:
+  PACKAGE_PATH: packages/hoppscotch-macos-uninstaller
+
+# ── Concurrency guard ─────────────────────────────────────────────────────────
+# Cancel in-progress runs on the same PR branch to avoid wasting macOS runner
+# minutes when a developer pushes multiple commits in quick succession.
+concurrency:
+  group: macos-uninstaller-test-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB: build-test-pkg
+  # Builds HoppscotchUninstaller-TEST-<version>.pkg — a PKG that carries the
+  # exact same macOS Installer GUI as the real uninstaller but runs a dry-run
+  # scan instead of deleting anything.
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-test-pkg:
+    name: Build macOS Uninstaller TEST .pkg (dry-run)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Source code ───────────────────────────────────────────────────
+      # For PRs, check out the head branch so the build reflects the proposed
+      # changes. For manual dispatch, use the branch the user specified.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.head_ref }}
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────
+      # build-test-pkg.sh calls `node -p "require('./package.json').version"`
+      # to derive the PKG file name. Node must be present on the runner PATH.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # ── 3. Build-tool gate ───────────────────────────────────────────────
+      # pkgbuild and productbuild are Apple-proprietary CLI tools included with
+      # Xcode Command Line Tools. They only exist on macOS; the check ensures
+      # a clear error message if the runner image ever changes.
+      - name: Verify build tools (pkgbuild / productbuild)
+        run: |
+          echo "Checking for Apple PKG build tools..."
+          command -v pkgbuild     || { echo "ERROR: pkgbuild not found. Install Xcode Command Line Tools."; exit 1; }
+          command -v productbuild || { echo "ERROR: productbuild not found. Install Xcode Command Line Tools."; exit 1; }
+          echo "  pkgbuild    : $(which pkgbuild)"
+          echo "  productbuild: $(which productbuild)"
+          echo "  macOS       : $(sw_vers -productVersion)"
+          echo "  arch        : $(uname -m)"
+
+      # ── 4. Validate package structure ────────────────────────────────────
+      # Fail the job early with a clear message if someone accidentally removes
+      # a file the build script depends on. Runs before the real build to avoid
+      # confusing errors deep inside build-test-pkg.sh.
+      - name: Validate package structure
+        working-directory: ${{ env.PACKAGE_PATH }}
+        run: |
+          echo "Validating required files..."
+          required_files=(
+            "scripts/build-test-pkg.sh"
+            "scripts/pkg-test/preinstall"
+            "scripts/pkg-test/postinstall"
+            "resources/test/distribution.xml"
+            "resources/test/welcome-test.html"
+            "resources/test/conclusion-test.html"
+            "package.json"
+          )
+          all_ok=true
+          for f in "${required_files[@]}"; do
+            if [[ -f "$f" ]]; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ MISSING: $f"
+              all_ok=false
+            fi
+          done
+          [[ "$all_ok" == "true" ]] || { echo "ERROR: One or more required files are missing."; exit 1; }
+          echo "All required files present."
+
+      # ── 5. Build the TEST PKG ────────────────────────────────────────────
+      # build-test-pkg.sh runs two Apple tools:
+      #   a) pkgbuild  — creates a component pkg from scripts/pkg-test/
+      #                  (preinstall + postinstall; no payload / no real files)
+      #   b) productbuild — wraps with the GUI defined in resources/test/
+      #                  (welcome-test.html, conclusion-test.html)
+      # No signing. No credentials required.
+      - name: Build TEST PKG (dry-run — nothing deleted)
+        working-directory: ${{ env.PACKAGE_PATH }}
+        run: bash scripts/build-test-pkg.sh
+
+      # ── 6. Verify artifact ───────────────────────────────────────────────
+      - name: List built artifacts
+        working-directory: ${{ env.PACKAGE_PATH }}
+        run: |
+          echo "Contents of dist/:"
+          ls -lah dist/
+          # Fail if no TEST PKG was produced.
+          pkg_count=$(find dist/ -name "HoppscotchUninstaller-TEST-*.pkg" | wc -l | tr -d ' ')
+          echo "TEST PKGs found: $pkg_count"
+          [[ "$pkg_count" -ge 1 ]] || { echo "ERROR: No TEST PKG was generated in dist/."; exit 1; }
+
+      # ── 7. Validate PKG structure ────────────────────────────────────────
+      # pkgutil --payload-files lists files embedded in the PKG. For a
+      # scripts-only ("nopayload") PKG this verifies the PKG itself is a valid
+      # flat package. A zero-exit code means the PKG archive is not corrupt.
+      - name: Validate PKG is a valid flat package
+        working-directory: ${{ env.PACKAGE_PATH }}/dist
+        run: |
+          for pkg in HoppscotchUninstaller-TEST-*.pkg; do
+            echo "Validating: $pkg"
+            pkgutil --check-signature "$pkg" 2>&1 | grep -E "Status|Developer|unsigned" || true
+            # An unsigned pkg returns non-zero from --check-signature; use --expand
+            # instead to confirm the archive can be opened cleanly.
+            tmp_dir="$(mktemp -d)"
+            pkgutil --expand "$pkg" "$tmp_dir/expanded" && echo "  ✓ PKG expands cleanly" || { echo "  ✗ PKG is corrupt"; exit 1; }
+            rm -rf "$tmp_dir"
+          done
+
+      # ── 8. Upload to GitHub Artifacts ────────────────────────────────────
+      # The TEST PKG is uploaded so reviewers and IT admins can download it,
+      # install it on a real Mac, and verify the GUI + HTML report look correct
+      # before the PR is merged. Retention is kept short (7 days) as TEST PKGs
+      # are not release artefacts.
+      - name: Upload TEST PKG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HoppscotchUninstaller-TEST-macos
+          path: ${{ env.PACKAGE_PATH }}/dist/HoppscotchUninstaller-TEST-*.pkg
+          retention-days: 7
+
+      # ── 9. PR comment — download link ────────────────────────────────────
+      # Posts a comment on the PR with instructions for reviewers so they know
+      # how to find and test the uploaded PKG. Only runs on pull_request events.
+      - name: Post PR comment with test instructions
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              '## 🧪 macOS Uninstaller — TEST PKG built',
+              '',
+              'A safe, **dry-run** TEST PKG has been built for this PR.',
+              'It opens the same macOS Installer GUI as the real uninstaller but **deletes nothing**.',
+              '',
+              `**Download:** [HoppscotchUninstaller-TEST-macos](${runUrl}) → Artifacts section`,
+              '',
+              '### How to test on a Mac',
+              '1. Download and unzip `HoppscotchUninstaller-TEST-macos`',
+              '2. Double-click `HoppscotchUninstaller-TEST-*.pkg`',
+              '3. Click through the installer screens',
+              '4. A browser window opens with a full HTML report of every file',
+              '   that **would** be removed — nothing is actually deleted',
+              '',
+              '> Artifact expires in **7 days**.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+

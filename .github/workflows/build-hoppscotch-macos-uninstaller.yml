@@ -1,0 +1,159 @@
+name: Build macOS Uninstaller PKG
+
+# ── When does this run? ───────────────────────────────────────────────────────
+# Manual-only via GitHub UI / API (Actions → Run workflow).
+# Building a PKG is a deliberate release action, not a routine CI event.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >
+          PKG version string (e.g. 1.2.0).
+          Leave empty to read from packages/hoppscotch-macos-uninstaller/package.json.
+        required: false
+        default: ""
+      branch:
+        description: Branch or tag to checkout
+        required: true
+        default: "main"
+      sign:
+        description: Sign the PKG with a Developer ID Installer certificate
+        type: boolean
+        required: false
+        default: false
+      notarize:
+        description: >
+          Notarize the PKG with Apple (sign must also be true).
+          Requires MACOS_UNINSTALLER_APPLE_ID, MACOS_UNINSTALLER_APPLE_TEAM_ID,
+          and MACOS_UNINSTALLER_APP_PASSWORD secrets.
+        type: boolean
+        required: false
+        default: false
+
+# ── Shared path constant ──────────────────────────────────────────────────────
+env:
+  PACKAGE_PATH: packages/hoppscotch-macos-uninstaller
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB: build-pkg
+  # Build (and optionally sign + notarize) the real uninstaller .pkg.
+  # Must run on macOS — pkgbuild and productbuild are Apple-proprietary tools
+  # that do not exist on Linux or Windows runners.
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-pkg:
+    name: Build macOS Uninstaller .pkg
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Source code ───────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────
+      # build-pkg.sh calls `node -p "require('./package.json').version"` to
+      # read the default version. Node must be available even for unsigned builds.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # ── 3. Build-tool gate ───────────────────────────────────────────────
+      # Fail fast if the Apple developer toolchain is missing. pkgbuild and
+      # productbuild are installed by Xcode CLT and are always present on
+      # GitHub's macos-latest runner, but the check protects against future
+      # runner image changes or accidental use on a non-macOS runner.
+      - name: Verify build tools (pkgbuild / productbuild)
+        run: |
+          echo "Checking for Apple PKG build tools..."
+          command -v pkgbuild     || { echo "ERROR: pkgbuild not found. Install Xcode Command Line Tools."; exit 1; }
+          command -v productbuild || { echo "ERROR: productbuild not found. Install Xcode Command Line Tools."; exit 1; }
+          echo "  pkgbuild    : $(which pkgbuild)"
+          echo "  productbuild: $(which productbuild)"
+          sw_vers
+          uname -m
+
+      # ── 4. Code-signing certificate (optional) ───────────────────────────
+      # Imports a Developer ID Installer .p12 certificate into the runner's
+      # temporary keychain so that productsign (called inside build-pkg.sh) can
+      # reference it by the SIGN_IDENTITY string.
+      # Skipped when inputs.sign == false, keeping the unsigned build path cheap.
+      - name: Import Developer ID Installer certificate
+        if: ${{ inputs.sign == true }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MACOS_UNINSTALLER_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_UNINSTALLER_CERTIFICATE_PASSWORD }}
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+      # ── 5. Build the PKG ─────────────────────────────────────────────────
+      # build-pkg.sh orchestrates three Apple tools in sequence:
+      #   a) pkgbuild  — creates a "component" pkg (scripts only, no payload)
+      #   b) productbuild — wraps it in a GUI installer (welcome/conclusion HTML)
+      #   c) productsign — code-signs the final flat pkg (when SIGN_IDENTITY set)
+      #   d) xcrun notarytool + stapler — notarizes (when all Apple creds set)
+      # Environment variables drive the optional steps; build-pkg.sh reads them.
+      - name: Build PKG
+        working-directory: ${{ env.PACKAGE_PATH }}
+        env:
+          # Empty string → build-pkg.sh falls back to package.json version.
+          PKG_VERSION: ${{ inputs.version }}
+          # Signing identity — e.g. "Developer ID Installer: Hoppscotch Inc (TEAMID)"
+          # Empty string → signing step inside build-pkg.sh is silently skipped.
+          SIGN_IDENTITY: ${{ inputs.sign == true && secrets.MACOS_UNINSTALLER_SIGN_IDENTITY || '' }}
+          # Notarization credentials — all three must be set for notarize to run.
+          APPLE_ID:      ${{ inputs.notarize == true && secrets.MACOS_UNINSTALLER_APPLE_ID      || '' }}
+          APPLE_TEAM_ID: ${{ inputs.notarize == true && secrets.MACOS_UNINSTALLER_APPLE_TEAM_ID || '' }}
+          APP_PASSWORD:  ${{ inputs.notarize == true && secrets.MACOS_UNINSTALLER_APP_PASSWORD  || '' }}
+        run: |
+          echo "Building PKG..."
+          echo "  Version  : ${PKG_VERSION:-<from package.json>}"
+          echo "  Signing  : ${{ inputs.sign }}"
+          echo "  Notarize : ${{ inputs.notarize }}"
+          bash scripts/build-pkg.sh
+
+      # ── 6. Verify the artifact exists ────────────────────────────────────
+      - name: List built artifacts
+        working-directory: ${{ env.PACKAGE_PATH }}
+        run: ls -lah dist/
+
+      # ── 7. Generate SHA-256 checksums ────────────────────────────────────
+      # Consumers (IT admins, MDM systems, download pages) can verify integrity
+      # before deploying the PKG. Matches the pattern used in agent/desktop builds.
+      - name: Generate SHA-256 checksums
+        working-directory: ${{ env.PACKAGE_PATH }}/dist
+        run: |
+          mkdir -p shas
+          for file in *.pkg; do
+            [ -f "$file" ] || continue
+            shasum -a 256 "$file" | tee "shas/${file}.sha256"
+            echo "Checksum written: shas/${file}.sha256"
+          done
+
+      # ── 8. Verify signature (when signed) ────────────────────────────────
+      - name: Verify PKG signature
+        if: ${{ inputs.sign == true }}
+        working-directory: ${{ env.PACKAGE_PATH }}/dist
+        run: |
+          for file in *.pkg; do
+            [ -f "$file" ] || continue
+            echo "Checking signature on: $file"
+            pkgutil --check-signature "$file"
+          done
+
+      # ── 9. Upload to GitHub Artifacts ────────────────────────────────────
+      # Retains the .pkg and checksums for 30 days (default retention).
+      # Download from: Actions → this run → Artifacts section.
+      - name: Upload PKG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HoppscotchUninstaller-macos
+          path: ${{ env.PACKAGE_PATH }}/dist/
+          retention-days: 30
+

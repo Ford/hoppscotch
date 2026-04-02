@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+
+  <title>Hoppscotch Uninstaller — TEST MODE</title>
+
+  <welcome    file="welcome-test.html"    mime-type="text/html" />
+  <conclusion file="conclusion-test.html" mime-type="text/html" />
+
+  <os-version min="12.0" />
+
+  <options
+    customize="never"
+    require-scripts="false"
+    rootVolumeOnly="true"
+    allow-external-scripts="false"
+  />
+
+  <pkg-ref id="io.hoppscotch.uninstaller.test" />
+
+  <choices-outline>
+    <line choice="default">
+      <line choice="io.hoppscotch.uninstaller.test" />
+    </line>
+  </choices-outline>
+
+  <choice id="default" />
+
+  <choice
+    id="io.hoppscotch.uninstaller.test"
+    visible="false"
+    title="Hoppscotch Uninstaller TEST"
+    description="Dry-run only — scans and reports what would be removed. Nothing is deleted."
+  >
+    <pkg-ref id="io.hoppscotch.uninstaller.test" />
+  </choice>
+
+  <pkg-ref
+    id="io.hoppscotch.uninstaller.test"
+    version="1.0.0"
+    onConclusion="none"
+  >component-test.pkg</pkg-ref>
+
+</installer-gui-script>
+

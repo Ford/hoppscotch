@@ -1,0 +1,11 @@
+# Build output
+dist/
+
+# macOS artefacts
+.DS_Store
+*.DS_Store
+
+# Temporary pkgbuild staging directories
+*.build/
+tmp/
+

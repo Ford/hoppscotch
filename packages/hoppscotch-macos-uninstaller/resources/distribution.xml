@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  distribution.xml — productbuild distribution file for Hoppscotch Uninstaller
+
+  This file controls the macOS Installer GUI experience (title, welcome screen,
+  conclusion screen, and the single-choice "installation" that actually runs
+  the uninstall scripts).
+-->
+<installer-gui-script minSpecVersion="2">
+
+  <title>Hoppscotch Uninstaller</title>
+
+  <!-- GUI screens -->
+  <welcome    file="welcome.html"    mime-type="text/html" />
+  <conclusion file="conclusion.html" mime-type="text/html" />
+
+  <!-- Require macOS 12 (Monterey) or later — matches Hoppscotch minimum -->
+  <os-version min="12.0" />
+
+  <!-- Options: no customisation needed; must install to the boot volume -->
+  <options
+    customize="never"
+    require-scripts="false"
+    rootVolumeOnly="true"
+    allow-external-scripts="false"
+  />
+
+  <!-- Single package reference -->
+  <pkg-ref id="io.hoppscotch.uninstaller" />
+
+  <choices-outline>
+    <line choice="default">
+      <line choice="io.hoppscotch.uninstaller" />
+    </line>
+  </choices-outline>
+
+  <choice id="default" />
+
+  <choice
+    id="io.hoppscotch.uninstaller"
+    visible="false"
+    title="Hoppscotch Uninstaller"
+    description="Removes Hoppscotch and all associated data from this Mac."
+  >
+    <pkg-ref id="io.hoppscotch.uninstaller" />
+  </choice>
+
+  <pkg-ref
+    id="io.hoppscotch.uninstaller"
+    version="1.0.0"
+    onConclusion="none"
+  >component.pkg</pkg-ref>
+
+</installer-gui-script>
+

@@ -238,13 +238,17 @@ const toggleSelection = (path: string) => {
 
 const selectAll = () => {
   const newState: RequestSelectionState = {}
-  items.value.forEach((item) => { newState[item.path] = true })
+  items.value.forEach((item) => {
+    newState[item.path] = true
+  })
   emit("update:selection", newState)
 }
 
 const deselectAll = () => {
   const newState: RequestSelectionState = {}
-  items.value.forEach((item) => { newState[item.path] = false })
+  items.value.forEach((item) => {
+    newState[item.path] = false
+  })
   emit("update:selection", newState)
 }
 

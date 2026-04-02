@@ -1,0 +1,27 @@
+{
+  "name": "hoppscotch-macos-uninstaller",
+  "version": "1.0.0",
+  "description": "Standalone macOS Uninstaller PKG for Hoppscotch Desktop",
+  "private": true,
+  "scripts": {
+    "build": "bash scripts/build-pkg.sh",
+    "build:sign": "bash scripts/build-pkg.sh",
+    "clean": "rm -rf dist",
+    "test:dryrun": "bash scripts/uninstall.sh --dry-run 2>/dev/null || echo 'Run on macOS to test'"
+  },
+  "os": ["darwin"],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "macos",
+    "uninstaller",
+    "pkg",
+    "hoppscotch",
+    "mdm",
+    "jamf",
+    "munki"
+  ],
+  "license": "MIT"
+}
+

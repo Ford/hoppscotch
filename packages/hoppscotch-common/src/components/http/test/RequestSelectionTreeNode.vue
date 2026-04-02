@@ -12,7 +12,9 @@
       >
         <icon
           :icon="
-            isFolderExpanded(Number(folderIdx)) ? IconChevronDown : IconChevronRight
+            isFolderExpanded(Number(folderIdx))
+              ? IconChevronDown
+              : IconChevronRight
           "
           class="text-secondaryLight flex-shrink-0"
         />
@@ -49,11 +51,20 @@
               <span
                 class="text-xs font-medium flex-shrink-0 px-2 py-0.5 rounded"
                 :class="{
-                  'bg-green-500/10 text-green-500': (request as HoppRESTRequest).method === 'GET',
-                  'bg-yellow-500/10 text-yellow-500': (request as HoppRESTRequest).method === 'POST',
-                  'bg-blue-500/10 text-blue-500': (request as HoppRESTRequest).method === 'PUT',
-                  'bg-red-500/10 text-red-500': (request as HoppRESTRequest).method === 'DELETE',
-                  'bg-gray-500/10 text-gray-500': !['GET', 'POST', 'PUT', 'DELETE'].includes((request as HoppRESTRequest).method),
+                  'bg-green-500/10 text-green-500':
+                    (request as HoppRESTRequest).method === 'GET',
+                  'bg-yellow-500/10 text-yellow-500':
+                    (request as HoppRESTRequest).method === 'POST',
+                  'bg-blue-500/10 text-blue-500':
+                    (request as HoppRESTRequest).method === 'PUT',
+                  'bg-red-500/10 text-red-500':
+                    (request as HoppRESTRequest).method === 'DELETE',
+                  'bg-gray-500/10 text-gray-500': ![
+                    'GET',
+                    'POST',
+                    'PUT',
+                    'DELETE',
+                  ].includes((request as HoppRESTRequest).method),
                 }"
               >
                 {{ (request as HoppRESTRequest).method }}
@@ -90,11 +101,20 @@
           <span
             class="text-xs font-medium flex-shrink-0 px-2 py-0.5 rounded"
             :class="{
-              'bg-green-500/10 text-green-500': (request as HoppRESTRequest).method === 'GET',
-              'bg-yellow-500/10 text-yellow-500': (request as HoppRESTRequest).method === 'POST',
-              'bg-blue-500/10 text-blue-500': (request as HoppRESTRequest).method === 'PUT',
-              'bg-red-500/10 text-red-500': (request as HoppRESTRequest).method === 'DELETE',
-              'bg-gray-500/10 text-gray-500': !['GET', 'POST', 'PUT', 'DELETE'].includes((request as HoppRESTRequest).method),
+              'bg-green-500/10 text-green-500':
+                (request as HoppRESTRequest).method === 'GET',
+              'bg-yellow-500/10 text-yellow-500':
+                (request as HoppRESTRequest).method === 'POST',
+              'bg-blue-500/10 text-blue-500':
+                (request as HoppRESTRequest).method === 'PUT',
+              'bg-red-500/10 text-red-500':
+                (request as HoppRESTRequest).method === 'DELETE',
+              'bg-gray-500/10 text-gray-500': ![
+                'GET',
+                'POST',
+                'PUT',
+                'DELETE',
+              ].includes((request as HoppRESTRequest).method),
             }"
           >
             {{ (request as HoppRESTRequest).method }}
@@ -152,9 +172,7 @@ const isFolderExpanded = (folderIdx: number) => {
 
 // Helper to build path string
 const buildPath = (folderIdx?: number, reqIdx?: number): string => {
-  const basePath = props.path
-    .map((idx) => `folder_${idx}`)
-    .join("/")
+  const basePath = props.path.map((idx) => `folder_${idx}`).join("/")
 
   if (folderIdx !== undefined && reqIdx !== undefined) {
     const folderPath = basePath
@@ -253,9 +271,7 @@ const isFolderSelected = (folderIdx: number): boolean => {
 
 const isFolderIndeterminate = (folderIdx: number): boolean => {
   const { allPaths, selectedPaths } = getFolderSelectionPaths(folderIdx)
-  return (
-    selectedPaths.length > 0 && selectedPaths.length < allPaths.length
-  )
+  return selectedPaths.length > 0 && selectedPaths.length < allPaths.length
 }
 
 const toggleFolderSelection = (folderIdx: number) => {

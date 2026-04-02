@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# =============================================================================
+# postinstall — Hoppscotch Uninstaller PKG payload script
+# =============================================================================
+# This script is executed by macOS Installer (as root) after the (empty)
+# payload is laid down.  It performs the actual uninstallation by delegating
+# to the bundled uninstall.sh script.
+#
+# MDM / Software Center context:
+#   - Jamf Pro  : deploy as a Policy with this .pkg — logs appear in Jamf log
+#   - Munki     : add to managed_uninstalls in the manifest
+#   - Intune    : upload as a Line-of-Business app (PKG)
+#   - SCCM/MECM : deploy as an Application using the .pkg
+# =============================================================================
+
+set -euo pipefail
+
+# The PKG payload is installed to a temp dir; scripts are co-located.
+# $PACKAGE_PATH is the path to the .pkg being installed (set by macOS Installer).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "[Hoppscotch Uninstaller] postinstall starting (running as: $(whoami))"
+
+# The uninstall.sh is bundled in the PKG's scripts directory alongside this file
+UNINSTALL_SCRIPT="${SCRIPT_DIR}/uninstall.sh"
+
+if [[ ! -f "$UNINSTALL_SCRIPT" ]]; then
+  echo "[Hoppscotch Uninstaller] ERROR: uninstall.sh not found at $UNINSTALL_SCRIPT" >&2
+  exit 1
+fi
+
+chmod +x "$UNINSTALL_SCRIPT"
+bash "$UNINSTALL_SCRIPT"
+
+echo "[Hoppscotch Uninstaller] postinstall complete."
+exit 0
+
