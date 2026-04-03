@@ -301,14 +301,6 @@ cat > "$REPORT_FILE" << HTMLEOF
     </div>
   </div>
 
-  <!-- Action note -->
-  <div class="action-note">
-    <strong>✅ Verified — Ready to generate the real uninstaller?</strong>
-    If the list above looks correct, build the real PKG on a Mac with:<br/>
-    <code>cd packages/hoppscotch-macos-uninstaller &amp;&amp; make pkg</code>
-    and deploy it via your software center.
-  </div>
-
   <!-- File table -->
   <div class="table-wrap">
     <div class="table-head">
