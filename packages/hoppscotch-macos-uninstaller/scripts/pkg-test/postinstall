@@ -332,10 +332,27 @@ HTMLEOF
 
 echo "[TEST] Report generated: $REPORT_FILE"
 
-# Open report in default browser
-open "$REPORT_FILE" 2>/dev/null || true
-
-echo "[TEST] Opened report in browser."
+# ── Open report as the logged-in user, NOT as root/system_installd ────────────
+# Calling `open` directly from a root installer script causes macOS TCC to
+# queue a "Installer would like to access your Downloads folder" permission
+# prompt that is shown to the user when they click the Close button.
+# Using `launchctl asuser` runs `open` inside the user's own login session,
+# so no TCC prompt is triggered.
+CONSOLE_USER=$(stat -f%Su /dev/console 2>/dev/null || true)
+if [[ -n "$CONSOLE_USER" && "$CONSOLE_USER" != "root" && "$CONSOLE_USER" != "" ]]; then
+  CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || true)
+  if [[ -n "$CONSOLE_UID" ]]; then
+    launchctl asuser "$CONSOLE_UID" /usr/bin/open "$REPORT_FILE" 2>/dev/null || true
+    echo "[TEST] Opened report in browser (as user: $CONSOLE_USER)."
+  else
+    echo "[TEST] WARNING: could not resolve UID for $CONSOLE_USER — skipping auto-open."
+    echo "[TEST] Open manually: open $REPORT_FILE"
+  fi
+else
+  # No console user found (e.g. headless MDM run) — just log the path.
+  echo "[TEST] No console user detected — report saved at: $REPORT_FILE"
+  echo "[TEST] Open manually: open $REPORT_FILE"
+fi
 echo "[TEST] Dry-run complete — nothing was deleted."
 
 exit 0

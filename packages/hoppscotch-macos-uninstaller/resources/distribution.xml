@@ -18,29 +18,17 @@
   <os-version min="12.0" />
 
   <!-- Options: no customisation; must install to the boot volume.
-       customize="never"   → hides the Installation Type pane.
-       rootVolumeOnly="true" → hides the Destination Select pane. -->
+       customize="never"     → hides the "Installation Type" pane.
+       rootVolumeOnly="true" → hides the "Destination Select" pane.
+       NOTE: do NOT add a <domains> element — its mere presence re-enables
+       the Destination Select UI even when only one domain is listed. -->
   <options
     customize="never"
-    require-scripts="false"
     rootVolumeOnly="true"
-    allow-external-scripts="false"
   />
 
-  <!-- Restrict to local system domain only (no user-home option),
-       which prevents the Destination Select pane from appearing. -->
-  <domains enable_localSystem="true" />
-
-  <!-- JavaScript: auto-confirm the root volume so the installer
-       never pauses to ask the user where to install. -->
-  <script>
-  function volume_check() { return true; }
-  function pm_install_check() { return true; }
-  </script>
-
-  <!-- Flat (no group wrapper) choices-outline — a nested default group
-       can cause the Installation Type pane to appear even with
-       customize="never". A single flat line avoids that. -->
+  <!-- Flat choices-outline (no nested default group) keeps the
+       Installation Type pane suppressed even with customize="never". -->
   <pkg-ref id="io.hoppscotch.uninstaller" />
 
   <choices-outline>

@@ -8,19 +8,13 @@
 
   <os-version min="12.0" />
 
+  <!-- customize="never"     → hides "Installation Type" pane.
+       rootVolumeOnly="true" → hides "Destination Select" pane.
+       Do NOT add <domains> — it re-enables the Destination Select UI. -->
   <options
     customize="never"
-    require-scripts="false"
     rootVolumeOnly="true"
-    allow-external-scripts="false"
   />
-
-  <domains enable_localSystem="true" />
-
-  <script>
-  function volume_check() { return true; }
-  function pm_install_check() { return true; }
-  </script>
 
   <pkg-ref id="io.hoppscotch.uninstaller.test" />
 
