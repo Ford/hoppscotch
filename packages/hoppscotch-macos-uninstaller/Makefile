@@ -56,7 +56,7 @@ test:
 	 for home in /Users/*/; do \
 	   [[ -d "$$home" ]] || continue; \
 	   lib="$$home/Library"; \
-	   echo "  $$lib/Application Support/$$APP_ID"; \
+	   echo "  $$lib/Application Support/$$APP_ID  [PRESERVED — pass --purge-data to remove]"; \
 	   echo "  $$lib/Logs/$$APP_ID"; \
 	   echo "  $$lib/Caches/$$APP_ID"; \
 	   echo "  $$lib/WebKit/$$APP_ID"; \
