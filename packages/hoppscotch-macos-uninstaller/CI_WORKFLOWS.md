@@ -1,4 +1,4 @@
-# macOS Uninstaller — GitHub Actions Workflows
+﻿# macOS Uninstaller — GitHub Actions Workflows
 
 This document explains the two CI/CD workflows that build the Hoppscotch macOS Uninstaller `.pkg` artefacts. It covers **what** each workflow does, **why** every configuration decision was made, and **how** to use them.
 
@@ -249,36 +249,10 @@ The `KEYCHAIN_PASSWORD` is distinct from the `.p12` password because macOS uses 
 
 **Why:** Confirms the build produced at least one file and shows the exact file name and size in the workflow log. Makes debugging easy — if the PKG name or version is wrong you see it immediately without downloading the artifact.
 
----
-
-#### Step 7 — Generate SHA-256 checksums
-
-```yaml
-- name: Generate SHA-256 checksums
-  working-directory: ${{ env.PACKAGE_PATH }}/dist
-  run: |
-    mkdir -p shas
-    for file in *.pkg; do
-      [ -f "$file" ] || continue
-      shasum -a 256 "$file" | tee "shas/${file}.sha256"
-    done
-```
-
-**What:** For each `.pkg` in `dist/`, generates a `shas/<filename>.sha256` file containing `<hash>  <filename>`.
-
-**Why SHA-256 checksums?**
-
-- IT administrators and MDM systems can verify the PKG was not tampered with during transit.
-- Download pages can display checksums alongside the download link.
-- The pattern is consistent with the agent and desktop workflows, which also produce `.sha256` files.
-
-**Why `shasum -a 256` (not `sha256sum`)?**
-
-`sha256sum` is a GNU coreutils command available on Linux. macOS ships with BSD `shasum` instead. Since this job runs on `macos-latest`, `shasum -a 256` is the correct tool.
 
 ---
 
-#### Step 8 — Verify PKG signature
+#### Step 7 — Verify PKG signature
 
 ```yaml
 - name: Verify PKG signature
@@ -292,18 +266,18 @@ The `KEYCHAIN_PASSWORD` is distinct from the `.p12` password because macOS uses 
 
 ---
 
-#### Step 9 — Upload PKG artifact
+#### Step 8 — Upload PKG artifact
 
 ```yaml
 - name: Upload PKG artifact
   uses: actions/upload-artifact@v4
   with:
     name: HoppscotchUninstaller-macos
-    path: ${{ env.PACKAGE_PATH }}/dist/
+    path: ${{ env.PACKAGE_PATH }}/dist/*.pkg
     retention-days: 30
 ```
 
-**What:** Zips and uploads the entire `dist/` directory (PKG + checksum files) to GitHub Artifacts.
+**What:** Zips and uploads the built `.pkg` file from `dist/` to GitHub Artifacts.
 
 **Why 30-day retention:** Release PKGs should remain available long enough for the release process to complete and for any post-release validation. GitHub's default is 90 days; 30 days is a reasonable reduction that covers typical release timelines while controlling storage costs.
 
@@ -578,7 +552,6 @@ Most contributors work on Windows or Linux and cannot install the TEST PKG thems
 | **Notarization** | Optional | ❌ |
 | **Package structure check** | ❌ | ✅ |
 | **PKG integrity check** | `pkgutil --check-signature` (signed) | `pkgutil --expand` (unsigned-safe) |
-| **SHA-256 checksums** | ✅ | ❌ |
 | **Artifact name** | `HoppscotchUninstaller-macos` | `HoppscotchUninstaller-TEST-macos` |
 | **Artifact retention** | 30 days | 7 days |
 | **PR comment** | ❌ | ✅ (on PR events) |

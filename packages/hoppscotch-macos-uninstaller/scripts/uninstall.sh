@@ -3,18 +3,22 @@
 # Hoppscotch macOS Uninstaller
 # =============================================================================
 #
-# Usage (interactive):
+# Usage (interactive — requires sudo):
 #   chmod +x uninstall.sh && sudo ./uninstall.sh
-# Usage (dry-run — no sudo, nothing deleted, just prints paths):
+#
+# Usage (dry-run — no sudo needed, nothing deleted, just prints what would go):
 #   ./uninstall.sh --dry-run
 #
 # The script:
 #   1. Removes the .app bundle from /Applications
 #   2. Removes all per-user Library data for every local user account
 #   3. Removes any LaunchAgents / LaunchDaemons the app may have installed
-#   4. Reports what was removed / skipped
+#   4. Updates the Spotlight index
+#   5. Reports what was removed / skipped
 # =============================================================================
 
+
+set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 readonly APP_ID="io.hoppscotch.desktop"
@@ -22,7 +26,15 @@ readonly APP_NAME="Hoppscotch"
 readonly APP_BUNDLE="/Applications/${APP_NAME}.app"
 readonly SCRIPT_VERSION="1.0.0"
 
-# Colour helpers (disabled when not a TTY, e.g. MDM log streams)
+# ── Argument parsing ──────────────────────────────────────────────────────────
+DRY_RUN="false"
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN="true" ;;
+  esac
+done
+
+# ── Colour helpers (disabled when not a TTY, e.g. MDM log streams) ───────────
 if [[ -t 1 ]]; then
   RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
   CYAN='\033[0;36m'; BLUE='\033[0;34m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -30,25 +42,49 @@ else
   RED=''; GREEN=''; YELLOW=''; CYAN=''; BLUE=''; BOLD=''; RESET=''
 fi
 
-  CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 log()     { echo -e "${CYAN}[INFO]${RESET}     $*"; }
-  RED=''; GREEN=''; YELLOW=''; CYAN=''; BOLD=''; RESET=''
 dryrun()  { echo -e "${BLUE}[DRY-RUN]${RESET}  $*"; }
-log()    { echo -e "${CYAN}[INFO]${RESET}  $*"; }
-ok()     { echo -e "${GREEN}[OK]${RESET}    $*"; }
-warn()   { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
-error()  { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
-section(){ echo -e "\n${BOLD}$*${RESET}"; }
+ok()      { echo -e "${GREEN}[OK]${RESET}      $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${RESET}    $*"; }
+error()   { echo -e "${RED}[ERROR]${RESET}   $*" >&2; }
+section() { echo -e "\n${BOLD}$*${RESET}"; }
+
+# ── Counters ──────────────────────────────────────────────────────────────────
+removed=0
+skipped=0
+would_remove=0
+would_skip=0
+
+# ── remove_path ───────────────────────────────────────────────────────────────
+# Remove a path if it exists; increment counters either way.
+remove_path() {
+  local path="$1"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
     if [[ -e "$path" || -L "$path" ]]; then
       dryrun "Would remove : $path"
       (( would_remove++ )) || true
     else
+      dryrun "Not present  : $path"
       (( would_skip++ )) || true
     fi
-# Remove a path if it exists; increment counters either way.
+    return
   fi
 
   # Real mode
+  if [[ -e "$path" || -L "$path" ]]; then
+    rm -rf "$path"
+    ok "Removed      : $path"
+    (( removed++ )) || true
+  else
+    log "Already gone : $path"
+    (( skipped++ )) || true
+  fi
+}
+
+# ── Privilege check ───────────────────────────────────────────────────────────
+# Dry-run does not need root; real removal does.
+if [[ "$DRY_RUN" != "true" && "$EUID" -ne 0 ]]; then
   error "This script must be run as root."
   error "Re-run with:       sudo $0"
   error "Or for a dry-run:  $0 --dry-run"
@@ -61,40 +97,53 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${BLUE}${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION} — DRY-RUN MODE${RESET}"
   echo -e "${BLUE}Nothing will be deleted. This is a preview only.${RESET}"
 else
-# ── Privilege check ───────────────────────────────────────────────────────────
-if [[ "$EUID" -ne 0 ]]; then
+  echo -e "${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION}${RESET}"
+fi
+
 # ── 1. Kill the app if it is running ─────────────────────────────────────────
 section "1. Stopping Hoppscotch (if running)"
-  error "Re-run with: sudo $0"
+if pgrep -x "${APP_NAME}" &>/dev/null; then
+  if [[ "$DRY_RUN" == "true" ]]; then
     dryrun "Hoppscotch is running — would send SIGTERM then SIGKILL"
   else
-    log "Hoppscotch is not running."
+    pkill -TERM -x "${APP_NAME}" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -x "${APP_NAME}" 2>/dev/null || true
+    ok "Process terminated."
   fi
 else
-echo -e "${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION}${RESET}"
+  log "Hoppscotch is not running."
+fi
+
+# ── 2. Application bundle ─────────────────────────────────────────────────────
 section "2. Application bundle"
 remove_path "$APP_BUNDLE"
 
 # ── 3. Remove per-user Library data ──────────────────────────────────────────
 section "3. Per-user data"
 
-# Build list of real user home directories (UID >= 500, valid home dirs)
+# Build list of real user home directories (valid /Users/* home dirs)
 user_homes=()
 while IFS=$'\t' read -r _username home; do
   [[ "$home" == /Users/* && -d "$home" ]] || continue
   user_homes+=("$home")
-done < <(dscl . -list /Users NFSHomeDirectory 2>/dev/null | tr ' ' '\t' || true)
+done < <(dscl . -list /Users NFSHomeDirectory 2>/dev/null | awk '{print $1"\t"$2}' || true)
 
 if [[ ${#user_homes[@]} -eq 0 ]]; then
-  remove_path "$lib/Preferences/com.apple.preference.security.plist.lockfile"
-if pgrep -x "${APP_NAME}" &>/dev/null; then
-  pkill -TERM -x "${APP_NAME}" 2>/dev/null || true
-  sleep 1
-  pkill -KILL -x "${APP_NAME}" 2>/dev/null || true
-  ok "Process terminated."
+  warn "No user home directories found via dscl."
 else
-  log "Hoppscotch is not running."
-done
+  for home in "${user_homes[@]}"; do
+    log "Cleaning data for: $home"
+    lib="$home/Library"
+    remove_path "$lib/Application Support/${APP_ID}"
+    remove_path "$lib/Logs/${APP_ID}"
+    remove_path "$lib/Caches/${APP_ID}"
+    remove_path "$lib/WebKit/${APP_ID}"
+    remove_path "$lib/Saved Application State/${APP_ID}.savedState"
+    remove_path "$lib/HTTPStorages/${APP_ID}"
+    remove_path "$lib/Preferences/${APP_ID}.plist"
+  done
+fi
 
 # ── 4. Remove LaunchAgents / LaunchDaemons ────────────────────────────────────
 section "4. LaunchAgents and LaunchDaemons"
@@ -106,32 +155,21 @@ for dir in \
   [[ -d "$dir" ]] || continue
   while IFS= read -r -d '' plist; do
     remove_path "$plist"
-section "2. Removing application bundle"
+  done < <(find "$dir" -maxdepth 1 -name "*${APP_ID}*" -print0 2>/dev/null || true)
 done
 
-# ── 5. Clear Spotlight index entry ───────────────────────────────────────────
+# ── 5. Update Spotlight index ─────────────────────────────────────────────────
 section "5. Updating Spotlight index"
-if [[ -d "$APP_BUNDLE" ]]; then
-  # Only needed if the bundle removal above failed
-# ── 5. Spotlight ──────────────────────────────────────────────────────────────
-section "3. Removing per-user data"
 if [[ "$DRY_RUN" == "true" ]]; then
-  dryrun "Would update Spotlight index (mdimport)"
+  dryrun "Would update Spotlight index (mdimport -r)"
 elif [[ -d "$APP_BUNDLE" ]]; then
+  # Only needed if the bundle removal above failed
   mdimport -d1 "$APP_BUNDLE" 2>/dev/null || true
 fi
-log "Spotlight cleanup done."
 log "Spotlight step done."
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}Uninstall Summary${RESET}"
-echo "  Items removed : ${removed}"
-echo "  Items skipped : ${skipped} (already absent)"
-echo ""
-echo -e "${GREEN}${BOLD}Hoppscotch has been successfully uninstalled.${RESET}"
-  log "Cleaning data for: $home"
-
 if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${BLUE}${BOLD}Dry-Run Summary (nothing was deleted)${RESET}"
   echo "  Would remove : ${would_remove} items"
@@ -140,7 +178,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${BLUE}Run with sudo to perform the real uninstall:${RESET}"
   echo "  sudo bash $0"
 else
-section "4. Removing LaunchAgents and LaunchDaemons"
+  echo -e "${BOLD}Uninstall Summary${RESET}"
   echo "  Items removed : ${removed}"
   echo "  Items skipped : ${skipped} (already absent)"
   echo ""

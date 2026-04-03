@@ -123,20 +123,7 @@ jobs:
         working-directory: ${{ env.PACKAGE_PATH }}
         run: ls -lah dist/
 
-      # ── 7. Generate SHA-256 checksums ────────────────────────────────────
-      # Consumers (IT admins, MDM systems, download pages) can verify integrity
-      # before deploying the PKG. Matches the pattern used in agent/desktop builds.
-      - name: Generate SHA-256 checksums
-        working-directory: ${{ env.PACKAGE_PATH }}/dist
-        run: |
-          mkdir -p shas
-          for file in *.pkg; do
-            [ -f "$file" ] || continue
-            shasum -a 256 "$file" | tee "shas/${file}.sha256"
-            echo "Checksum written: shas/${file}.sha256"
-          done
-
-      # ── 8. Verify signature (when signed) ────────────────────────────────
+      # ── 7. Verify signature (when signed) ────────────────────────────────
       - name: Verify PKG signature
         if: ${{ inputs.sign == true }}
         working-directory: ${{ env.PACKAGE_PATH }}/dist
@@ -147,13 +134,13 @@ jobs:
             pkgutil --check-signature "$file"
           done
 
-      # ── 9. Upload to GitHub Artifacts ────────────────────────────────────
-      # Retains the .pkg and checksums for 30 days (default retention).
+      # ── 8. Upload to GitHub Artifacts ────────────────────────────────────
+      # Retains the signed .pkg for 30 days.
       # Download from: Actions → this run → Artifacts section.
       - name: Upload PKG artifact
         uses: actions/upload-artifact@v4
         with:
           name: HoppscotchUninstaller-macos
-          path: ${{ env.PACKAGE_PATH }}/dist/
+          path: ${{ env.PACKAGE_PATH }}/dist/*.pkg
           retention-days: 30
 
