@@ -13,18 +13,54 @@
     }
     h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: #1a7f37; }
     p  { margin-bottom: 10px; }
+    .tip {
+      background: #f5f5f7;
+      border-left: 4px solid #8e8e93;
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin-top: 14px;
+      font-size: 12px;
+      color: #3a3a3c;
+    }
+    code {
+      background: #e8e8ed;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 11.5px;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: #f5f5f7;
+      }
+      h2 { color: #4ade80; }
+      .tip {
+        background: #1c1c1e;
+        color: #d1d1d6;
+        border-left-color: #636366;
+      }
+      code {
+        background: #2c2c2e;
+        color: #f5f5f7;
+      }
+      a { color: #38bdf8; }
+    }
   </style>
 </head>
 <body>
   <h2>✓ Hoppscotch has been uninstalled</h2>
   <p>
-    Hoppscotch and all associated data have been successfully removed from
-    this Mac.
+    Hoppscotch and all associated data have been removed from this Mac.
+    You can now click <strong>Close</strong> to exit the installer.
   </p>
   <p>
     Thank you for using Hoppscotch. You can always reinstall it from
-    <a href="https://azureford.sharepoint.com/sites/SDE/SitePages/Hoppscotch@Ford.aspx#download-hoppscotch">hoppscotch.com</a>.
+    <a href="https://azureford.sharepoint.com/sites/SDE/SitePages/Hoppscotch@Ford.aspx#download-hoppscotch">the Ford Hoppscotch download page</a>.
   </p>
+  <div class="tip">
+    💡 If any items were not fully removed, check the installer log for details:<br>
+    <code>open /var/log/install.log</code>
+  </div>
 </body>
 </html>
 

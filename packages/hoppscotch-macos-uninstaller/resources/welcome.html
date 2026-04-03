@@ -14,6 +14,33 @@
     h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
     ul { padding-left: 20px; }
     li { margin-bottom: 4px; }
+    .macos-note {
+      background: #e8f4fd;
+      border: 1.5px solid #0EA5E9;
+      border-left: 5px solid #0EA5E9;
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: #000000;
+    }
+    .macos-note .note-heading {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0369a1;
+      margin-bottom: 5px;
+      display: block;
+    }
+    .btn-label {
+      display: inline-block;
+      background: #0369a1;
+      color: #ffffff !important;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 4px;
+      letter-spacing: .2px;
+    }
     .warn {
       background: #fff3cd;
       border-left: 4px solid #ffc107;
@@ -23,13 +50,43 @@
       color: #000000;
       font-size: 12px;
     }
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: #f5f5f7;
+      }
+      .macos-note {
+        background: #0c2d3f;
+        border-color: #0EA5E9;
+        color: #d1eaf9;
+      }
+      .macos-note .note-heading { color: #38bdf8; }
+      .btn-label {
+        background: #0284c7;
+        color: #ffffff !important;
+      }
+      .warn {
+        background: #3a2e00;
+        color: #fde68a;
+      }
+    }
   </style>
 </head>
 <body>
-  <h2>Uninstall Hoppscotch</h2>
+
+  <!-- Explain the macOS "Installing…" label FIRST so the user isn't confused -->
+  <div class="macos-note">
+    <span class="note-heading">ℹ️ Why does the button say "Install"?</span>
+    macOS always labels this button <span class="btn-label">Install</span> — even
+    for uninstallers. It is a system label that cannot be renamed.
+    Clicking <span class="btn-label">Install</span> will
+    <strong>permanently remove</strong> Hoppscotch from this Mac.
+    Nothing is being installed.
+  </div>
+
+  <h2>Remove Hoppscotch from this Mac</h2>
   <p>
-    This package will <strong>completely remove Hoppscotch</strong> from your Mac,
-    including:
+    Clicking <strong>Install</strong> will <strong>completely remove
+    Hoppscotch</strong> from your Mac, including:
   </p>
   <ul>
     <li>The <strong>Hoppscotch.app</strong> bundle from <code>/Applications</code></li>

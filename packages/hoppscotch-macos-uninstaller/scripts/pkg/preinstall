@@ -4,9 +4,15 @@
 # =============================================================================
 # Runs as root before the payload is laid down.
 # We use this to verify the environment and log context for MDM reporting.
+#
+# IMPORTANT: This script must always exit 0.
+# If it exits non-zero, macOS Installer shows an error dialog and — when the
+# user clicks Close on that dialog — macOS triggers a storage-access permission
+# prompt as part of its failure-cleanup path.  Warnings are logged; the actual
+# removal work is handled by postinstall → uninstall.sh.
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail   # Note: NO -e  — we handle every error explicitly below
 
 readonly APP_ID="io.hoppscotch.desktop"
 readonly APP_BUNDLE="/Applications/Hoppscotch.app"
@@ -22,12 +28,14 @@ else
   echo "[Hoppscotch Uninstaller] App bundle NOT found — data-only cleanup will proceed."
 fi
 
-# Confirm we have write permission to /Applications
+# Check write permission to /Applications — warn only, never fail.
+# The PKG runs as root via system_installd so this check almost always passes.
+# If it does not, uninstall.sh will handle the error gracefully at runtime.
 if [[ ! -w "/Applications" ]]; then
-  echo "[Hoppscotch Uninstaller] ERROR: No write access to /Applications" >&2
-  exit 1
+  echo "[Hoppscotch Uninstaller] WARNING: /Applications may not be writable — removal will be attempted anyway." >&2
+else
+  echo "[Hoppscotch Uninstaller] /Applications is writable."
 fi
 
 echo "[Hoppscotch Uninstaller] Preflight check passed."
-exit 0
-
+exit 0   # Always exit 0 — never let preinstall trigger the Installer error path

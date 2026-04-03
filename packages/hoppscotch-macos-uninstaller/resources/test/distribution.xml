@@ -15,19 +15,25 @@
     allow-external-scripts="false"
   />
 
+  <domains enable_localSystem="true" />
+
+  <script>
+  function volume_check() { return true; }
+  function pm_install_check() { return true; }
+  </script>
+
   <pkg-ref id="io.hoppscotch.uninstaller.test" />
 
   <choices-outline>
-    <line choice="default">
-      <line choice="io.hoppscotch.uninstaller.test" />
-    </line>
+    <line choice="io.hoppscotch.uninstaller.test" />
   </choices-outline>
-
-  <choice id="default" />
 
   <choice
     id="io.hoppscotch.uninstaller.test"
     visible="false"
+    start_selected="true"
+    start_enabled="false"
+    start_visible="false"
     title="Hoppscotch Uninstaller TEST"
     description="Dry-run only — scans and reports what would be removed. Nothing is deleted."
   >

@@ -8,7 +8,7 @@
 -->
 <installer-gui-script minSpecVersion="2">
 
-  <title>Hoppscotch Uninstaller</title>
+  <title>Remove Hoppscotch from This Mac</title>
 
   <!-- GUI screens -->
   <welcome    file="welcome.html"    mime-type="text/html" />
@@ -17,7 +17,9 @@
   <!-- Require macOS 12 (Monterey) or later — matches Hoppscotch minimum -->
   <os-version min="12.0" />
 
-  <!-- Options: no customisation needed; must install to the boot volume -->
+  <!-- Options: no customisation; must install to the boot volume.
+       customize="never"   → hides the Installation Type pane.
+       rootVolumeOnly="true" → hides the Destination Select pane. -->
   <options
     customize="never"
     require-scripts="false"
@@ -25,20 +27,32 @@
     allow-external-scripts="false"
   />
 
-  <!-- Single package reference -->
+  <!-- Restrict to local system domain only (no user-home option),
+       which prevents the Destination Select pane from appearing. -->
+  <domains enable_localSystem="true" />
+
+  <!-- JavaScript: auto-confirm the root volume so the installer
+       never pauses to ask the user where to install. -->
+  <script>
+  function volume_check() { return true; }
+  function pm_install_check() { return true; }
+  </script>
+
+  <!-- Flat (no group wrapper) choices-outline — a nested default group
+       can cause the Installation Type pane to appear even with
+       customize="never". A single flat line avoids that. -->
   <pkg-ref id="io.hoppscotch.uninstaller" />
 
   <choices-outline>
-    <line choice="default">
-      <line choice="io.hoppscotch.uninstaller" />
-    </line>
+    <line choice="io.hoppscotch.uninstaller" />
   </choices-outline>
-
-  <choice id="default" />
 
   <choice
     id="io.hoppscotch.uninstaller"
     visible="false"
+    start_selected="true"
+    start_enabled="false"
+    start_visible="false"
     title="Hoppscotch Uninstaller"
     description="Removes Hoppscotch and all associated data from this Mac."
   >

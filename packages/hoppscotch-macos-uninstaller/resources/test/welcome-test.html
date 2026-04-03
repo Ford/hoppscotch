@@ -27,6 +27,15 @@
     h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
     ul { padding-left: 20px; }
     li { margin-bottom: 4px; }
+    .macos-note {
+      background: #f0f0f5;
+      border-left: 4px solid #8e8e93;
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      color: #3a3a3c;
+    }
     .info {
       background: #e8f4fd;
       border-left: 4px solid #0EA5E9;
@@ -36,11 +45,40 @@
       font-size: 12px;
       color: #000000;
     }
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: #f5f5f7;
+      }
+      .test-badge {
+        background: #3a2e00;
+        border-color: #ffc107;
+        color: #fde68a;
+      }
+      .macos-note {
+        background: #2c2c2e;
+        color: #d1d1d6;
+        border-left-color: #636366;
+      }
+      .info {
+        background: #0c2d3f;
+        color: #d1eaf9;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="test-badge">🧪 Test Mode — Nothing will be deleted</div>
   <h2>Hoppscotch Uninstaller — Preview Run</h2>
+
+  <!-- Explain the macOS "Installing…" label so the user isn't confused -->
+  <div class="macos-note">
+    ℹ️ macOS Installer always shows <em>Installing…</em> and an
+    <em>Install</em> button — even for uninstallers and test packages.
+    This is a macOS system label that cannot be changed.
+    In this <strong>test run</strong>, clicking <strong>Install</strong>
+    only scans your Mac — nothing is removed.
+  </div>
+
   <p>
     This test package scans your Mac and shows exactly what the real
     uninstaller <strong>would</strong> remove, without deleting anything.

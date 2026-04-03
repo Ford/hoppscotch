@@ -11,27 +11,42 @@
 #   - Munki     : add to managed_uninstalls in the manifest
 #   - Intune    : upload as a Line-of-Business app (PKG)
 #   - SCCM/MECM : deploy as an Application using the .pkg
+#
+# IMPORTANT: This script must always exit 0.
+# If it exits non-zero, macOS Installer shows an error dialog and — when the
+# user clicks Close on that dialog — macOS triggers a storage-access permission
+# prompt as part of its failure-cleanup path.  All errors from uninstall.sh
+# are captured, logged, and handled here; the Installer always sees success.
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail   # Note: NO -e  — we handle every error explicitly below
 
-# The PKG payload is installed to a temp dir; scripts are co-located.
-# $PACKAGE_PATH is the path to the .pkg being installed (set by macOS Installer).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "[Hoppscotch Uninstaller] postinstall starting (running as: $(whoami))"
 
-# The uninstall.sh is bundled in the PKG's scripts directory alongside this file
 UNINSTALL_SCRIPT="${SCRIPT_DIR}/uninstall.sh"
 
 if [[ ! -f "$UNINSTALL_SCRIPT" ]]; then
-  echo "[Hoppscotch Uninstaller] ERROR: uninstall.sh not found at $UNINSTALL_SCRIPT" >&2
-  exit 1
+  # Log the missing script but still exit 0 — the Installer must not fail,
+  # otherwise macOS shows an error dialog that triggers a storage-access prompt.
+  echo "[Hoppscotch Uninstaller] WARNING: uninstall.sh not found at $UNINSTALL_SCRIPT" >&2
+  echo "[Hoppscotch Uninstaller] Nothing was removed. Please delete /Applications/Hoppscotch.app manually." >&2
+  exit 0
 fi
 
 chmod +x "$UNINSTALL_SCRIPT"
-bash "$UNINSTALL_SCRIPT"
 
-echo "[Hoppscotch Uninstaller] postinstall complete."
-exit 0
+# Run uninstall.sh and capture its exit code without aborting this script.
+# Any non-zero exit from uninstall.sh is logged as a warning; we still exit 0
+# so macOS Installer shows the normal conclusion screen — not the error dialog.
+if bash "$UNINSTALL_SCRIPT"; then
+  echo "[Hoppscotch Uninstaller] postinstall complete — Hoppscotch removed successfully."
+else
+  uninstall_exit=$?
+  echo "[Hoppscotch Uninstaller] WARNING: uninstall.sh exited with code ${uninstall_exit}." >&2
+  echo "[Hoppscotch Uninstaller] Some files may not have been removed." >&2
+  echo "[Hoppscotch Uninstaller] Check /var/log/install.log for details." >&2
+fi
 
+exit 0   # Always exit 0 — never let postinstall trigger the Installer error path
