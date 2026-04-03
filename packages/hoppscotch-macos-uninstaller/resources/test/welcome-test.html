@@ -86,14 +86,20 @@
   <p>Items that will be scanned:</p>
   <ul>
     <li>The <strong>Hoppscotch.app</strong> bundle in <code>/Applications</code></li>
-    <li>App support data — <code>~/Library/Application Support/io.hoppscotch.desktop</code></li>
     <li>Log files — <code>~/Library/Logs/io.hoppscotch.desktop</code></li>
     <li>Caches — <code>~/Library/Caches/io.hoppscotch.desktop</code></li>
     <li>WebKit storage, saved state, HTTP storages, preferences</li>
     <li>Any LaunchAgents / LaunchDaemons</li>
   </ul>
   <div class="info">
-    ✅ After clicking <strong>Install</strong>, a detailed HTML report will open
+    ✅ <strong>Collections are preserved.</strong>
+    <code>~/Library/Application Support/io.hoppscotch.desktop</code> (which
+    holds your saved collections, environments, and history) is scanned but
+    will be marked <strong>Preserved</strong> in the report — the real
+    uninstaller will not delete it.
+  </div>
+  <div class="info" style="margin-top:10px;">
+    📊 After clicking <strong>Install</strong>, a detailed HTML report will open
     in your browser showing every file found or not found on this Mac.
     Nothing is deleted at any point.
   </div>

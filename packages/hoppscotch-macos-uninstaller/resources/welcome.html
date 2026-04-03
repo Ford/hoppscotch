@@ -85,20 +85,19 @@
 
   <h2>Remove Hoppscotch from this Mac</h2>
   <p>
-    Clicking <strong>Install</strong> will <strong>completely remove
-    Hoppscotch</strong> from your Mac, including:
+    Clicking <strong>Install</strong> will remove Hoppscotch from your Mac.
   </p>
-  <ul>
-    <li>The <strong>Hoppscotch.app</strong> bundle from <code>/Applications</code></li>
-    <li>Application support data in <code>~/Library/Application Support/io.hoppscotch.desktop</code></li>
-    <li>Log files in <code>~/Library/Logs/io.hoppscotch.desktop</code></li>
-    <li>Caches in <code>~/Library/Caches/io.hoppscotch.desktop</code></li>
-    <li>WebKit storage in <code>~/Library/WebKit/io.hoppscotch.desktop</code></li>
-    <li>Saved state and preferences</li>
-  </ul>
+  <div class="macos-note">
+    <span class="note-heading">✅ Your collections and data are preserved</span>
+    Your saved collections, environments, and request history are stored in
+    <code>~/Library/Application Support/io.hoppscotch.desktop</code> and will
+    <strong>not</strong> be deleted. If you reinstall Hoppscotch, they will be
+    automatically restored. To permanently remove all data, delete that folder
+    manually after uninstalling.
+  </div>
   <div class="warn">
-    ⚠️ <strong>This action cannot be undone.</strong> All local workspaces,
-    collections, and settings stored by Hoppscotch will be permanently deleted.
+    ⚠️ <strong>This action cannot be undone.</strong> The app and its caches
+    will be permanently removed. Your collections are safe — see the note above.
   </div>
 </body>
 </html>

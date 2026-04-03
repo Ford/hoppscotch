@@ -54,10 +54,18 @@
   </p>
   <p>
     The report shows every file and folder that the real uninstaller
-    <strong>would</strong> remove, with a found / not-found status and size
-    for each item.
+    <strong>would</strong> remove, with a found / preserved / not-found status
+    and size for each item.
   </p>
   <div class="info">
+    ✅ <strong>Collections are preserved.</strong>
+    Items marked <em>Preserved — not removed</em> (shown in blue) will
+    <strong>not</strong> be deleted by the real uninstaller. Your collections,
+    environments, and history in
+    <code>~/Library/Application Support/io.hoppscotch.desktop</code>
+    are safe.
+  </div>
+  <div class="info" style="margin-top:10px;">
     📁 If the browser did not open automatically, find the report at:<br/>
     <code>/tmp/Hoppscotch-Uninstall-Preview-*.html</code><br/><br/>
     Open it with: <code>open /tmp/Hoppscotch-Uninstall-Preview-*.html</code>

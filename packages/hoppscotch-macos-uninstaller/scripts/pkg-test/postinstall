@@ -17,9 +17,10 @@ readonly REPORT_FILE="/tmp/Hoppscotch-Uninstall-Preview-$(date +%Y%m%d-%H%M%S).h
 echo "[TEST] Scanning system — nothing will be deleted..."
 
 # ── Collect paths ─────────────────────────────────────────────────────────────
-# Each entry: "STATUS|PATH|SIZE"  (STATUS = FOUND | MISSING)
+# Each entry: "STATUS|PATH|SIZE"  (STATUS = FOUND | MISSING | PRESERVED)
 declare -a ROWS=()
 
+# scan_path — path would be REMOVED by the real uninstaller
 scan_path() {
   local path="$1"
   if [[ -e "$path" ]]; then
@@ -27,6 +28,20 @@ scan_path() {
     size=$(du -sh "$path" 2>/dev/null | cut -f1 || echo "—")
     ROWS+=("FOUND|${path}|${size}")
     echo "[TEST]   ✓ Found   : $path  ($size)"
+  else
+    ROWS+=("MISSING|${path}|—")
+    echo "[TEST]   – Missing : $path"
+  fi
+}
+
+# scan_preserved — path is KEPT by default (collections / environments / history)
+scan_preserved() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    local size
+    size=$(du -sh "$path" 2>/dev/null | cut -f1 || echo "—")
+    ROWS+=("PRESERVED|${path}|${size}")
+    echo "[TEST]   ✓ Preserved (not removed): $path  ($size)"
   else
     ROWS+=("MISSING|${path}|—")
     echo "[TEST]   – Missing : $path"
@@ -45,7 +60,8 @@ done < <(dscl . -list /Users NFSHomeDirectory 2>/dev/null | awk '{print $1"\t"$2
 
 for home in "${user_homes[@]}"; do
   lib="$home/Library"
-  scan_path "$lib/Application Support/${APP_ID}"
+  # Application Support holds collections/environments/history — preserved by default
+  scan_preserved "$lib/Application Support/${APP_ID}"
   scan_path "$lib/Logs/${APP_ID}"
   scan_path "$lib/Caches/${APP_ID}"
   scan_path "$lib/WebKit/${APP_ID}"
@@ -65,11 +81,13 @@ done
 # ── Count results ─────────────────────────────────────────────────────────────
 found_count=0
 missing_count=0
+preserved_count=0
 for row in "${ROWS[@]}"; do
-  [[ "$row" == FOUND* ]]   && (( found_count++   )) || true
-  [[ "$row" == MISSING* ]] && (( missing_count++ )) || true
+  [[ "$row" == FOUND*     ]] && (( found_count++     )) || true
+  [[ "$row" == MISSING*   ]] && (( missing_count++   )) || true
+  [[ "$row" == PRESERVED* ]] && (( preserved_count++ )) || true
 done
-total_count=$(( found_count + missing_count ))
+total_count=$(( found_count + missing_count + preserved_count ))
 
 # ── Build HTML rows ───────────────────────────────────────────────────────────
 html_rows=""
@@ -82,6 +100,9 @@ for row in "${ROWS[@]}"; do
   if [[ "$status" == "FOUND" ]]; then
     badge='<span class="badge found">Will be removed</span>'
     row_class="found"
+  elif [[ "$status" == "PRESERVED" ]]; then
+    badge='<span class="badge preserved">Preserved — not removed</span>'
+    row_class="preserved"
   else
     badge='<span class="badge missing">Not present</span>'
     row_class="missing"
@@ -152,7 +173,7 @@ cat > "$REPORT_FILE" << HTMLEOF
     /* ── Summary cards ── */
     .summary {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 14px;
       margin-bottom: 28px;
     }
@@ -169,9 +190,10 @@ cat > "$REPORT_FILE" << HTMLEOF
       margin-bottom: 4px;
     }
     .card .label { font-size: 12px; color: #6e6e73; text-transform: uppercase; letter-spacing: .5px; }
-    .card.total  .number { color: #1d1d1f; }
-    .card.danger .number { color: #dc3545; }
-    .card.safe   .number { color: #6e6e73; }
+    .card.total     .number { color: #1d1d1f; }
+    .card.danger    .number { color: #dc3545; }
+    .card.safe      .number { color: #6e6e73; }
+    .card.preserved .number { color: #0369a1; }
 
     /* ── Table ── */
     .table-wrap {
@@ -210,9 +232,10 @@ cat > "$REPORT_FILE" << HTMLEOF
       vertical-align: middle;
     }
     tr:last-child td { border-bottom: none; }
-    tr.found   td { background: #fff8f8; }
-    tr.missing td { background: #fafafa; }
-    tr:hover td   { background: #f0f6ff !important; }
+    tr.found     td { background: #fff8f8; }
+    tr.preserved td { background: #f0f8ff; }
+    tr.missing   td { background: #fafafa; }
+    tr:hover td      { background: #f0f6ff !important; }
 
     .path {
       font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
@@ -230,8 +253,9 @@ cat > "$REPORT_FILE" << HTMLEOF
       font-weight: 600;
       white-space: nowrap;
     }
-    .badge.found   { background: #fde8e8; color: #c0392b; }
-    .badge.missing { background: #e8f5e9; color: #2e7d32; }
+    .badge.found     { background: #fde8e8; color: #c0392b; }
+    .badge.preserved { background: #e8f4fd; color: #0369a1; }
+    .badge.missing   { background: #e8f5e9; color: #2e7d32; }
 
     /* ── Footer ── */
     .footer {
@@ -295,17 +319,30 @@ cat > "$REPORT_FILE" << HTMLEOF
       <div class="number">${found_count}</div>
       <div class="label">Would be removed</div>
     </div>
+    <div class="card preserved">
+      <div class="number">${preserved_count}</div>
+      <div class="label">Preserved (collections)</div>
+    </div>
     <div class="card safe">
       <div class="number">${missing_count}</div>
       <div class="label">Not present (safe to skip)</div>
     </div>
   </div>
 
+  <!-- Data-preservation notice -->
+  <div class="action-note">
+    <strong>✅ Collections &amp; data are preserved by default</strong>
+    The real uninstaller does <em>not</em> delete
+    <code>~/Library/Application Support/io.hoppscotch.desktop</code>.
+    Your saved collections, environments, and history remain intact after uninstalling.
+    To fully remove all data, run: <code>sudo bash uninstall.sh --purge-data</code>
+  </div>
+
   <!-- File table -->
   <div class="table-wrap">
     <div class="table-head">
       <span>📁 Files &amp; Folders scanned on this Mac</span>
-      <span>${found_count} items would be removed</span>
+      <span>${found_count} would be removed · ${preserved_count} preserved</span>
     </div>
     <table>
       <thead>

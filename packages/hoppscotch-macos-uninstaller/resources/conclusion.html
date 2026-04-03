@@ -50,9 +50,19 @@
 <body>
   <h2>✓ Hoppscotch has been uninstalled</h2>
   <p>
-    Hoppscotch and all associated data have been removed from this Mac.
+    Hoppscotch has been removed from this Mac.
     You can now click <strong>Close</strong> to exit the installer.
   </p>
+  <p>
+    <strong>Your collections, environments, and history have been preserved.</strong>
+    They are stored at:
+  </p>
+  <p><code>~/Library/Application Support/io.hoppscotch.desktop</code></p>
+  <p>
+    If you reinstall Hoppscotch, your data will be automatically picked up from that location.
+    To permanently delete all data, remove that folder manually via Finder or run:
+  </p>
+  <p><code>sudo bash uninstall.sh --purge-data</code></p>
   <p>
     Thank you for using Hoppscotch. You can always reinstall it from
     <a href="https://azureford.sharepoint.com/sites/SDE/SitePages/Hoppscotch@Ford.aspx#download-hoppscotch">the Ford Hoppscotch download page</a>.

@@ -9,9 +9,15 @@
 # Usage (dry-run — no sudo needed, nothing deleted, just prints what would go):
 #   ./uninstall.sh --dry-run
 #
+# Usage (full purge — also removes user collections, environments, history):
+#   sudo ./uninstall.sh --purge-data
+#
 # The script:
 #   1. Removes the .app bundle from /Applications
-#   2. Removes all per-user Library data for every local user account
+#   2. Removes per-user Library caches, logs, WebKit data, and preferences
+#      for every local user account.
+#      ► Application Support (collections / environments / history) is KEPT
+#        by default — pass --purge-data to remove it too.
 #   3. Removes any LaunchAgents / LaunchDaemons the app may have installed
 #   4. Updates the Spotlight index
 #   5. Reports what was removed / skipped
@@ -28,9 +34,11 @@ readonly SCRIPT_VERSION="1.0.0"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 DRY_RUN="false"
+PURGE_DATA="false"
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN="true" ;;
+    --dry-run)    DRY_RUN="true" ;;
+    --purge-data) PURGE_DATA="true" ;;
   esac
 done
 
@@ -96,8 +104,12 @@ echo ""
 if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${BLUE}${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION} — DRY-RUN MODE${RESET}"
   echo -e "${BLUE}Nothing will be deleted. This is a preview only.${RESET}"
+elif [[ "$PURGE_DATA" == "true" ]]; then
+  echo -e "${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION} — PURGE MODE${RESET}"
+  echo -e "${YELLOW}User collections and all app data will also be removed.${RESET}"
 else
   echo -e "${BOLD}Hoppscotch macOS Uninstaller v${SCRIPT_VERSION}${RESET}"
+  echo -e "${GREEN}User collections and app data will be preserved (pass --purge-data to remove them too).${RESET}"
 fi
 
 # ── 1. Kill the app if it is running ─────────────────────────────────────────
@@ -135,7 +147,21 @@ else
   for home in "${user_homes[@]}"; do
     log "Cleaning data for: $home"
     lib="$home/Library"
-    remove_path "$lib/Application Support/${APP_ID}"
+
+    # Application Support contains user collections and all persisted app data.
+    # By default we PRESERVE this directory so that collections, environments,
+    # and history are not lost on uninstall.  Pass --purge-data to remove it.
+    if [[ "$PURGE_DATA" == "true" ]]; then
+      remove_path "$lib/Application Support/${APP_ID}"
+    else
+      if [[ "$DRY_RUN" == "true" ]]; then
+        dryrun "Preserving   : $lib/Application Support/${APP_ID}  (pass --purge-data to remove)"
+      else
+        log "Preserving   : $lib/Application Support/${APP_ID}  (pass --purge-data to remove)"
+      fi
+      (( would_skip++ )) || true
+    fi
+
     remove_path "$lib/Logs/${APP_ID}"
     remove_path "$lib/Caches/${APP_ID}"
     remove_path "$lib/WebKit/${APP_ID}"
@@ -177,11 +203,25 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo ""
   echo -e "${BLUE}Run with sudo to perform the real uninstall:${RESET}"
   echo "  sudo bash $0"
+  echo ""
+  if [[ "$PURGE_DATA" != "true" ]]; then
+    echo -e "${BLUE}To also remove collections and app data:${RESET}"
+    echo "  sudo bash $0 --purge-data"
+  fi
 else
   echo -e "${BOLD}Uninstall Summary${RESET}"
   echo "  Items removed : ${removed}"
   echo "  Items skipped : ${skipped} (already absent)"
   echo ""
+  if [[ "$PURGE_DATA" != "true" ]]; then
+    echo -e "${GREEN}${BOLD}Your collections and app data have been preserved.${RESET}"
+    echo -e "  Location: ${BOLD}~/Library/Application Support/${APP_ID}/${RESET}"
+    echo ""
+    echo -e "  This folder contains your saved collections, environments, and history."
+    echo -e "  To fully remove all data, run:"
+    echo -e "  ${CYAN}sudo bash $0 --purge-data${RESET}"
+    echo ""
+  fi
   echo -e "${GREEN}${BOLD}Hoppscotch has been successfully uninstalled.${RESET}"
 fi
 echo ""

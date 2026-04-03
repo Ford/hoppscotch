@@ -40,8 +40,15 @@ chmod +x "$UNINSTALL_SCRIPT"
 # Run uninstall.sh and capture its exit code without aborting this script.
 # Any non-zero exit from uninstall.sh is logged as a warning; we still exit 0
 # so macOS Installer shows the normal conclusion screen — not the error dialog.
+#
+# NOTE: uninstall.sh is invoked WITHOUT --purge-data intentionally.
+# This means user collections, environments, and history stored in
+# ~/Library/Application Support/io.hoppscotch.desktop are PRESERVED.
+# To fully remove all user data, run:
+#   sudo bash uninstall.sh --purge-data
 if bash "$UNINSTALL_SCRIPT"; then
   echo "[Hoppscotch Uninstaller] postinstall complete — Hoppscotch removed successfully."
+  echo "[Hoppscotch Uninstaller] User collections preserved at: ~/Library/Application Support/io.hoppscotch.desktop"
 else
   uninstall_exit=$?
   echo "[Hoppscotch Uninstaller] WARNING: uninstall.sh exited with code ${uninstall_exit}." >&2
