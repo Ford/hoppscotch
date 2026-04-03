@@ -112,16 +112,45 @@ else
   echo -e "${GREEN}User collections and app data will be preserved (pass --purge-data to remove them too).${RESET}"
 fi
 
-# ── 1. Kill the app if it is running ─────────────────────────────────────────
+# ── 1. Kill the app if it is running ─────────────────────────────────────────────────
 section "1. Stopping Hoppscotch (if running)"
-if pgrep -x "${APP_NAME}" &>/dev/null; then
+
+# Returns 0 if the main process OR any Tauri helper is still alive
+app_is_running() {
+  pgrep -x "${APP_NAME}" &>/dev/null ||
+  pgrep -f  "${APP_BUNDLE}" &>/dev/null
+}
+
+if app_is_running; then
   if [[ "$DRY_RUN" == "true" ]]; then
-    dryrun "Hoppscotch is running — would send SIGTERM then SIGKILL"
+    dryrun "Hoppscotch is running — would quit gracefully, then SIGTERM, then SIGKILL"
   else
-    pkill -TERM -x "${APP_NAME}" 2>/dev/null || true
-    sleep 1
-    pkill -KILL -x "${APP_NAME}" 2>/dev/null || true
-    ok "Process terminated."
+    # Stage 1 — ask the app to quit gracefully via AppleScript
+    log "Asking Hoppscotch to quit gracefully..."
+    osascript -e "tell application \"${APP_NAME}\" to quit" 2>/dev/null || true
+    sleep 2
+
+    # Stage 2 — SIGTERM the main process and any Tauri helper processes
+    if app_is_running; then
+      log "Still running — sending SIGTERM..."
+      pkill -TERM -x "${APP_NAME}"        2>/dev/null || true
+      pkill -TERM -f "${APP_BUNDLE}"      2>/dev/null || true
+      sleep 2
+    fi
+
+    # Stage 3 — force-kill anything left
+    if app_is_running; then
+      warn "Still running after SIGTERM — sending SIGKILL..."
+      pkill -KILL -x "${APP_NAME}"        2>/dev/null || true
+      pkill -KILL -f "${APP_BUNDLE}"      2>/dev/null || true
+      sleep 1
+    fi
+
+    if app_is_running; then
+      warn "Could not fully terminate Hoppscotch. Some helper processes may still be running."
+    else
+      ok "Hoppscotch and all helper processes terminated."
+    fi
   fi
 else
   log "Hoppscotch is not running."

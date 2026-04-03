@@ -5,9 +5,16 @@
 # Scans the Mac for every file/folder the real uninstaller would remove.
 # Generates a self-contained HTML report and opens it in the default browser.
 # NOTHING IS DELETED.
+#
+# IMPORTANT: This script must always exit 0.
+# If it exits non-zero, macOS Installer shows an error dialog and -- when the
+# user clicks Close on that dialog -- macOS triggers a storage-access permission
+# prompt as part of its failure-cleanup path.  That is why -e (errexit) is
+# intentionally omitted: every error is handled inline and the script always
+# falls through to the explicit `exit 0` at the bottom.
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail   # Note: NO -e  -- we handle every error explicitly below
 
 readonly APP_ID="io.hoppscotch.desktop"
 readonly APP_NAME="Hoppscotch"
@@ -15,6 +22,13 @@ readonly APP_BUNDLE="/Applications/${APP_NAME}.app"
 readonly REPORT_FILE="/tmp/Hoppscotch-Uninstall-Preview-$(date +%Y%m%d-%H%M%S).html"
 
 echo "[TEST] Scanning system — nothing will be deleted..."
+
+# ── Check if Hoppscotch is currently running ──────────────────────────────────
+APP_RUNNING="false"
+if pgrep -x "${APP_NAME}" &>/dev/null || pgrep -f "${APP_BUNDLE}" &>/dev/null; then
+  APP_RUNNING="true"
+  echo "[TEST] WARNING: Hoppscotch is currently running. The real uninstaller will stop it first."
+fi
 
 # ── Collect paths ─────────────────────────────────────────────────────────────
 # Each entry: "STATUS|PATH|SIZE"  (STATUS = FOUND | MISSING | PRESERVED)
@@ -298,6 +312,21 @@ cat > "$REPORT_FILE" << HTMLEOF
          removed from this Mac.</p>
     </div>
   </div>
+
+  <!-- App-running warning (only shown when app was running at scan time) -->
+  $(if [[ "$APP_RUNNING" == "true" ]]; then cat << 'WARN_HTML'
+  <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:14px 20px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;">
+    <span style="font-size:22px;">⚠️</span>
+    <div>
+      <strong style="color:#856404;font-size:14px;">Hoppscotch was running during this scan</strong>
+      <p style="color:#856404;font-size:13px;margin-top:4px;">
+        The real uninstaller will automatically quit Hoppscotch before removing files.
+        For best results, close the app manually before running the uninstaller.
+      </p>
+    </div>
+  </div>
+WARN_HTML
+fi)
 
   <!-- Header -->
   <div class="header">
