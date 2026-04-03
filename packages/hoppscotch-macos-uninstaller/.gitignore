@@ -1,6 +1,11 @@
 # Build output
 dist/
 
+# Intermediate artefact written by productbuild into the cwd during PKG builds.
+# Automatically deleted by build-pkg.sh / build-test-pkg.sh; listed here as a
+# safety net in case a build is interrupted before the cleanup line runs.
+shas/
+
 # macOS artefacts
 .DS_Store
 *.DS_Store

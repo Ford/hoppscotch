@@ -45,8 +45,8 @@ notarize: sign
 
 ## Remove build artefacts
 clean:
-	rm -rf dist/
-	@echo "dist/ removed."
+	rm -rf dist/ shas/
+	@echo "dist/ and shas/ removed."
 
 ## Show what the uninstaller WOULD remove (safe dry run — no changes made)
 test:

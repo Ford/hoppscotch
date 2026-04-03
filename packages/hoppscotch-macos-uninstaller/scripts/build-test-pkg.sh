@@ -62,6 +62,10 @@ productbuild \
   --resources    "$RESOURCES_DIR" \
   "$FINAL_PKG"
 
+# productbuild drops a 'shas/' folder in the cwd as a build intermediate.
+# It is not needed after the PKG is produced — remove it immediately.
+rm -rf "${ROOT_DIR}/shas"
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "════════════════════════════════════════════════════════════"

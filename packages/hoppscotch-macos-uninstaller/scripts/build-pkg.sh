@@ -84,6 +84,10 @@ productbuild \
   "$UNSIGNED_PKG"
 log "Unsigned PKG: $UNSIGNED_PKG"
 
+# productbuild drops a 'shas/' folder in the cwd as a build intermediate.
+# It is not needed after the PKG is produced — remove it immediately.
+rm -rf "${ROOT_DIR}/shas"
+
 # ── Sign (optional) ───────────────────────────────────────────────────────────
 FINAL_PKG="${OUTPUT_DIR}/${PKG_NAME}"
 if [[ -n "$SIGN_IDENTITY" ]]; then
