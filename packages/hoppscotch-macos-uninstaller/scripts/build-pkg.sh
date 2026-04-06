@@ -85,8 +85,9 @@ productbuild \
 log "Unsigned PKG: $UNSIGNED_PKG"
 
 # productbuild drops a 'shas/' folder in the cwd as a build intermediate.
-# It is not needed after the PKG is produced — remove it immediately.
-rm -rf "${ROOT_DIR}/shas"
+# Clean it from the package root and dist/ so it never leaks into the artifact.
+rm -rf "${ROOT_DIR}/shas" "${OUTPUT_DIR}/shas"
+log "Cleaned up shas/ intermediates."
 
 # ── Sign (optional) ───────────────────────────────────────────────────────────
 FINAL_PKG="${OUTPUT_DIR}/${PKG_NAME}"
@@ -98,6 +99,8 @@ if [[ -n "$SIGN_IDENTITY" ]]; then
     "$FINAL_PKG"
   log "Signed PKG: $FINAL_PKG"
   pkgutil --check-signature "$FINAL_PKG"
+  # productsign can also drop a shas/ folder — clean again.
+  rm -rf "${ROOT_DIR}/shas" "${OUTPUT_DIR}/shas"
 else
   cp "$UNSIGNED_PKG" "$FINAL_PKG"
   log "PKG is unsigned (set SIGN_IDENTITY to sign)."

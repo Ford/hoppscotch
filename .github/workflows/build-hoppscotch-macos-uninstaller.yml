@@ -134,13 +134,27 @@ jobs:
             pkgutil --check-signature "$file"
           done
 
-      # ── 8. Upload to GitHub Artifacts ────────────────────────────────────
+      # ── 8. Remove any shas/ build intermediates before upload ─────────────
+      # productbuild (and productsign) can drop a shas/ folder containing
+      # SHA-256 hashes of internal component packages in the working directory.
+      # build-pkg.sh already cleans these up, but this step guarantees they
+      # are gone so the artifact zip contains only the .pkg file.
+      - name: Remove shas/ build intermediates
+        working-directory: ${{ env.PACKAGE_PATH }}
+        run: |
+          rm -rf shas/ dist/shas/
+          echo "Contents of dist/ after cleanup:"
+          ls -lah dist/
+
+      # ── 9. Upload to GitHub Artifacts ────────────────────────────────────
       # Retains the signed .pkg for 30 days.
       # Download from: Actions → this run → Artifacts section.
+      # The downloaded zip will contain only the .pkg file — no shas/ folder.
       - name: Upload PKG artifact
         uses: actions/upload-artifact@v4
         with:
           name: HoppscotchUninstaller-macos
           path: ${{ env.PACKAGE_PATH }}/dist/*.pkg
+          if-no-files-found: error
           retention-days: 30
 
