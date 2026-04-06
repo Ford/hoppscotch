@@ -23,8 +23,12 @@
 #   5. Reports what was removed / skipped
 # =============================================================================
 
-
-set -euo pipefail
+# -e (errexit) is intentionally omitted.
+# With -e, any command that returns non-zero immediately kills the script, which
+# would propagate through the postinstall wrapper and trigger macOS Installer's
+# failure-cleanup path — showing the "Downloads folder" TCC permission popup.
+# Every error is handled explicitly with || true or if/else guards instead.
+set -uo pipefail   # -u: unset vars are errors  -o pipefail: broken pipes are caught
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 readonly APP_ID="io.hoppscotch.desktop"
@@ -164,11 +168,17 @@ remove_path "$APP_BUNDLE"
 section "3. Per-user data"
 
 # Build list of real user home directories (valid /Users/* home dirs)
+# dscl output is captured into a variable FIRST, then piped to awk via a
+# here-string.  This breaks the dscl|awk pipeline and prevents a SIGPIPE edge
+# case where awk closes its stdin early, making dscl exit non-zero, which
+# fires pipefail BEFORE the trailing || true can catch it — ultimately
+# causing the "Downloads folder" TCC permission popup on Close.
 user_homes=()
+_dscl_out="$(dscl . -list /Users NFSHomeDirectory 2>/dev/null || true)"
 while IFS=$'\t' read -r _username home; do
   [[ "$home" == /Users/* && -d "$home" ]] || continue
   user_homes+=("$home")
-done < <(dscl . -list /Users NFSHomeDirectory 2>/dev/null | awk '{print $1"\t"$2}' || true)
+done < <(awk '{print $1"\t"$2}' <<< "$_dscl_out")
 
 if [[ ${#user_homes[@]} -eq 0 ]]; then
   warn "No user home directories found via dscl."

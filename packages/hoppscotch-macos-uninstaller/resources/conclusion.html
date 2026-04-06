@@ -22,6 +22,15 @@
       font-size: 12px;
       color: #3a3a3c;
     }
+    .macos-popup-note {
+      background: #fff8e1;
+      border-left: 4px solid #f59e0b;
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin-top: 14px;
+      font-size: 12px;
+      color: #78350f;
+    }
     code {
       background: #e8e8ed;
       padding: 1px 5px;
@@ -30,19 +39,19 @@
       font-size: 11.5px;
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        color: #f5f5f7;
-      }
+      body { color: #f5f5f7; }
       h2 { color: #4ade80; }
       .tip {
         background: #1c1c1e;
         color: #d1d1d6;
         border-left-color: #636366;
       }
-      code {
-        background: #2c2c2e;
-        color: #f5f5f7;
+      .macos-popup-note {
+        background: #2d1f00;
+        color: #fde68a;
+        border-left-color: #f59e0b;
       }
+      code { background: #2c2c2e; color: #f5f5f7; }
       a { color: #38bdf8; }
     }
   </style>
@@ -63,7 +72,18 @@
     To permanently delete all data, remove that folder manually via Finder or run:
   </p>
   <p><code>sudo bash uninstall.sh --purge-data</code></p>
-  <p>
+
+  <div class="macos-popup-note">
+    <strong>⚠️ Seeing a "Downloads folder" permission popup?</strong><br/>
+    On macOS Ventura, Sonoma, and Sequoia, the system may show a dialog saying
+    <em>"Installer would like to access files in your Downloads folder"</em>
+    when you click <strong>Close</strong>. This is normal macOS behaviour — the
+    Installer app checks the location of the <code>.pkg</code> file you ran.
+    The uninstallation is <strong>already complete</strong>. You can safely click
+    <strong>Don't Allow</strong> — it has no effect on the result.
+  </div>
+
+  <p style="margin-top: 14px;">
     Thank you for using Hoppscotch. You can always reinstall it from
     <a href="https://azureford.sharepoint.com/sites/SDE/SitePages/Hoppscotch@Ford.aspx#download-hoppscotch">the Ford Hoppscotch download page</a>.
   </p>
