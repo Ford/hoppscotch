@@ -210,56 +210,6 @@ else
   done
 fi
 
-# ── 3b. Ensure collections store is in the path the app reads after reinstall ─
-# The app reads collections from:
-#   ~/Library/Application Support/io.hoppscotch.desktop/latest/store/hoppscotch-unified.store
-#
-# Older versions wrote the store directly to the configDir root:
-#   ~/Library/Application Support/io.hoppscotch.desktop/hoppscotch-unified.store
-#
-# The app's built-in migration only moves *.hoppscotch.store files and misses
-# hoppscotch-unified.store, so after a reinstall the app starts with an empty
-# store even though the data is still present.  We fix that here by copying the
-# file into the correct sub-directory so it is found immediately on first launch.
-section "3b. Preserving collections store path for reinstall"
-
-UNIFIED_STORE="hoppscotch-unified.store"
-
-if [[ ${#user_homes[@]} -eq 0 ]]; then
-  warn "No user home directories found — skipping store path fix."
-else
-  for home in "${user_homes[@]}"; do
-    app_support="$home/Library/Application Support/${APP_ID}"
-    store_src="${app_support}/${UNIFIED_STORE}"
-    store_dir="${app_support}/latest/store"
-    store_dst="${store_dir}/${UNIFIED_STORE}"
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-      if [[ -f "$store_src" && ! -f "$store_dst" ]]; then
-        dryrun "Would copy store for reinstall : $store_src → $store_dst"
-      elif [[ -f "$store_dst" ]]; then
-        dryrun "Store already in correct location : $store_dst"
-      else
-        dryrun "No store file found at root or latest/store — nothing to copy"
-      fi
-      continue
-    fi
-
-    if [[ -f "$store_src" && ! -f "$store_dst" ]]; then
-      # Destination directory may not exist yet if the app was never launched
-      # with the newer directory structure — create it first.
-      mkdir -p "$store_dir" || true
-      cp "$store_src" "$store_dst" && \
-        ok "Copied store to reinstall path : $store_dst" || \
-        warn "Could not copy store to $store_dst — collections may not appear after reinstall"
-    elif [[ -f "$store_dst" ]]; then
-      log "Store already in correct location : $store_dst"
-    else
-      log "No root-level store found for $home — nothing to migrate"
-    fi
-  done
-fi
-
 # ── 4. Remove LaunchAgents / LaunchDaemons ────────────────────────────────────
 section "4. LaunchAgents and LaunchDaemons"
 
