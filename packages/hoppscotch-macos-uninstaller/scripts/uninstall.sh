@@ -18,9 +18,13 @@
 #      for every local user account.
 #      ► Application Support (collections / environments / history) is KEPT
 #        by default — pass --purge-data to remove it too.
-#   3. Removes any LaunchAgents / LaunchDaemons the app may have installed
-#   4. Updates the Spotlight index
-#   5. Reports what was removed / skipped
+#   3. Migrates legacy store data — older versions stored *.hoppscotch.store
+#      directly inside the Application Support folder; newer versions expect it
+#      at <config_dir>/latest/store/.  If the legacy file is found and the new
+#      path does not yet exist, the file is copied into place automatically.
+#   4. Removes any LaunchAgents / LaunchDaemons the app may have installed
+#   5. Updates the Spotlight index
+#   6. Reports what was removed / skipped
 # =============================================================================
 
 # -e (errexit) is intentionally omitted.
@@ -116,6 +120,19 @@ else
   echo -e "${GREEN}User collections and app data will be preserved (pass --purge-data to remove them too).${RESET}"
 fi
 
+# ── Collect user home directories (shared by migration + cleanup steps) ───────
+# dscl output is captured into a variable FIRST, then piped to awk via a
+# here-string.  This breaks the dscl|awk pipeline and prevents a SIGPIPE edge
+# case where awk closes its stdin early, making dscl exit non-zero, which
+# fires pipefail BEFORE the trailing || true can catch it — ultimately
+# causing the "Downloads folder" TCC permission popup on Close.
+user_homes=()
+_dscl_out="$(dscl . -list /Users NFSHomeDirectory 2>/dev/null || true)"
+while IFS=$'\t' read -r _username home; do
+  [[ "$home" == /Users/* && -d "$home" ]] || continue
+  user_homes+=("$home")
+done < <(awk '{print $1"\t"$2}' <<< "$_dscl_out")
+
 # ── 1. Kill the app if it is running ─────────────────────────────────────────────────
 section "1. Stopping Hoppscotch (if running)"
 
@@ -164,21 +181,79 @@ fi
 section "2. Application bundle"
 remove_path "$APP_BUNDLE"
 
-# ── 3. Remove per-user Library data ──────────────────────────────────────────
-section "3. Per-user data"
+# ── 3. Migrate legacy store data ─────────────────────────────────────────────
+section "3. Migrate legacy store data (version compatibility)"
 
-# Build list of real user home directories (valid /Users/* home dirs)
-# dscl output is captured into a variable FIRST, then piped to awk via a
-# here-string.  This breaks the dscl|awk pipeline and prevents a SIGPIPE edge
-# case where awk closes its stdin early, making dscl exit non-zero, which
-# fires pipefail BEFORE the trailing || true can catch it — ultimately
-# causing the "Downloads folder" TCC permission popup on Close.
-user_homes=()
-_dscl_out="$(dscl . -list /Users NFSHomeDirectory 2>/dev/null || true)"
-while IFS=$'\t' read -r _username home; do
-  [[ "$home" == /Users/* && -d "$home" ]] || continue
-  user_homes+=("$home")
-done < <(awk '{print $1"\t"$2}' <<< "$_dscl_out")
+# Older versions of Hoppscotch stored the *.hoppscotch.store file directly
+# inside the Application Support folder (<config_dir>/*.hoppscotch.store).
+# Newer versions expect the file at: <config_dir>/latest/store/*.hoppscotch.store
+#
+# Migration logic (per user):
+#   • Find any *.hoppscotch.store file at the ROOT of the config dir (depth 1).
+#   • If latest/store/ already exists → already migrated, skip.
+#   • If latest/store/ does NOT exist  → create it and copy the file across.
+
+if [[ ${#user_homes[@]} -eq 0 ]]; then
+  warn "No user home directories found — skipping legacy store migration."
+else
+  for home in "${user_homes[@]}"; do
+    config_dir="$home/Library/Application Support/${APP_ID}"
+    target_dir="$config_dir/latest/store"
+
+    # Only proceed if the config dir exists at all
+    if [[ ! -d "$config_dir" ]]; then
+      log "Config dir absent, nothing to migrate for: $home"
+      continue
+    fi
+
+    # Find the first *.hoppscotch.store file sitting directly in config_dir
+    legacy_file=""
+    while IFS= read -r -d '' f; do
+      legacy_file="$f"
+      break   # there should only ever be one; take the first match
+    done < <(find "$config_dir" -maxdepth 1 -name "*.hoppscotch.store" -type f -print0 2>/dev/null || true)
+
+    if [[ -z "$legacy_file" ]]; then
+      log "No legacy store file found for: $home"
+      continue
+    fi
+
+    # Legacy file found — decide what to do
+    if [[ -d "$target_dir" ]]; then
+      log "Already migrated (latest/store exists) for: $home — skipping"
+    else
+      if [[ "$DRY_RUN" == "true" ]]; then
+        dryrun "Would create : $target_dir"
+        dryrun "Would copy   : $(basename "$legacy_file") → $target_dir/"
+      else
+        # Capture the uid:gid of the existing config dir BEFORE we touch
+        # anything.  mkdir + cp run as root (sudo), so without an explicit
+        # chown the new directory and file will be owned by root and the app
+        # will get "Permission denied" when it tries to read/write them as the
+        # regular user.
+        config_owner="$(stat -f '%u:%g' "$config_dir" 2>/dev/null || true)"
+
+        if mkdir -p "$target_dir" && cp "$legacy_file" "$target_dir/"; then
+          # Restore ownership so the user's app can access the migrated data
+          if [[ -n "$config_owner" ]]; then
+            chown -R "$config_owner" "$config_dir/latest" 2>/dev/null \
+              && ok "Ownership    : $config_dir/latest → $config_owner" \
+              || warn "chown failed for $config_dir/latest — user may need to fix permissions manually"
+          else
+            warn "Could not determine config dir owner — skipping chown (check permissions manually)"
+          fi
+          ok "Migrated     : $legacy_file"
+          ok "          → : $target_dir/"
+        else
+          warn "Migration failed for: $legacy_file — continuing uninstall"
+        fi
+      fi
+    fi
+  done
+fi
+
+# ── 4. Remove per-user Library data ──────────────────────────────────────────
+section "4. Per-user data"
 
 if [[ ${#user_homes[@]} -eq 0 ]]; then
   warn "No user home directories found via dscl."
@@ -210,8 +285,8 @@ else
   done
 fi
 
-# ── 4. Remove LaunchAgents / LaunchDaemons ────────────────────────────────────
-section "4. LaunchAgents and LaunchDaemons"
+# ── 5. Remove LaunchAgents / LaunchDaemons ────────────────────────────────────
+section "5. LaunchAgents and LaunchDaemons"
 
 for dir in \
   /Library/LaunchDaemons \
@@ -223,8 +298,8 @@ for dir in \
   done < <(find "$dir" -maxdepth 1 -name "*${APP_ID}*" -print0 2>/dev/null || true)
 done
 
-# ── 5. Update Spotlight index ─────────────────────────────────────────────────
-section "5. Updating Spotlight index"
+# ── 6. Update Spotlight index ─────────────────────────────────────────────────
+section "6. Updating Spotlight index"
 if [[ "$DRY_RUN" == "true" ]]; then
   dryrun "Would update Spotlight index (mdimport -r)"
 elif [[ -d "$APP_BUNDLE" ]]; then
