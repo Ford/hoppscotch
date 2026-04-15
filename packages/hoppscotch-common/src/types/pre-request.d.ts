@@ -829,6 +829,26 @@ declare namespace pm {
 
     // Auth - Mutable with proper type safety
     auth: HoppRESTAuth
+
+    /**
+     * Adds a header directly to the request.
+     * Convenience shortcut for `pm.request.headers.add()`.
+     * @param header - Object with `key` and optional `value` properties
+     * @example
+     * pm.request.addHeader({ key: "x-forwarded-authorization", value: "Bearer token" })
+     */
+    addHeader(header: { key: string; value?: string }): void
+
+    /**
+     * Removes a header from the request by name (case-insensitive).
+     * Convenience shortcut for `pm.request.headers.remove()`.
+     * Accepts a plain string name or an object with a `key` property.
+     * @param headerNameOrObject - Header name string or `{ key: string }` object
+     * @example
+     * pm.request.removeHeader("x-forwarded-authorization")
+     * pm.request.removeHeader({ key: "x-forwarded-authorization" })
+     */
+    removeHeader(headerNameOrObject: string | { key: string }): void
   }
 
   const info: Readonly<{

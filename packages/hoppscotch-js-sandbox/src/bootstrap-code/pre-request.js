@@ -1175,6 +1175,53 @@
         }
       },
 
+      // Direct header manipulation convenience methods (Postman compatibility)
+      // Shortcuts for pm.request.headers.add() and pm.request.headers.remove()
+
+      /**
+       * Adds a header to the request.
+       * @param {Object} header - Object with 'key' and 'value' properties
+       * @example pm.request.addHeader({ key: "x-forwarded-authorization", value: "Bearer token" })
+       */
+      addHeader: (header) => {
+        if (!header || typeof header !== "object") {
+          throw new Error(
+            "pm.request.addHeader() requires an object with 'key' and 'value' properties"
+          )
+        }
+        if (!header.key) {
+          throw new Error(
+            "pm.request.addHeader() requires a 'key' property"
+          )
+        }
+        globalThis.hopp.request.setHeader(header.key, header.value || "")
+      },
+
+      /**
+       * Removes a header from the request by name (case-insensitive).
+       * Accepts a plain string name or an object with a 'key' property.
+       * @param {string|Object} headerNameOrObject - Header name or {key} object
+       * @example pm.request.removeHeader("x-forwarded-authorization")
+       * @example pm.request.removeHeader({ key: "x-forwarded-authorization" })
+       */
+      removeHeader: (headerNameOrObject) => {
+        let headerName
+        if (typeof headerNameOrObject === "string") {
+          headerName = headerNameOrObject
+        } else if (
+          headerNameOrObject &&
+          typeof headerNameOrObject === "object"
+        ) {
+          headerName = headerNameOrObject.key
+        }
+        if (!headerName || typeof headerName !== "string") {
+          throw new Error(
+            "pm.request.removeHeader() requires a string header name or an object with a 'key' property"
+          )
+        }
+        globalThis.hopp.request.removeHeader(headerName)
+      },
+
       // Custom serialization for console.log to ensure consistent behavior
       // This method is called by faraday-cage's marshalling system
       toJSON() {

@@ -3097,6 +3097,32 @@
         return globalThis.hopp.request.auth
       },
 
+      // Direct header manipulation convenience methods (Postman compatibility)
+      // In post-request (test) scripts the request has already been sent, so
+      // mutations are not allowed. These throw a clear error to guide the user.
+
+      /**
+       * Not supported in post-request (test) scripts.
+       * Move this call to a pre-request script to modify headers before the request is sent.
+       */
+      addHeader: () => {
+        throw new Error(
+          "pm.request.addHeader() is not supported in post-request (test) scripts. " +
+            "Use a pre-request script to add headers before the request is sent."
+        )
+      },
+
+      /**
+       * Not supported in post-request (test) scripts.
+       * Move this call to a pre-request script to modify headers before the request is sent.
+       */
+      removeHeader: () => {
+        throw new Error(
+          "pm.request.removeHeader() is not supported in post-request (test) scripts. " +
+            "Use a pre-request script to remove headers before the request is sent."
+        )
+      },
+
       // Custom serialization for console.log to match pre-request behavior
       // This method is called by faraday-cage's marshalling system
       toJSON() {

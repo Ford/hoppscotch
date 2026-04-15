@@ -724,6 +724,18 @@ declare namespace pm {
     auth: any
     certificate: any
     proxy: any
+    /**
+     * Not supported in post-request (test) scripts.
+     * The request has already been sent — move header modifications to a pre-request script.
+     * @throws Error always
+     */
+    addHeader(header: { key: string; value?: string }): never
+    /**
+     * Not supported in post-request (test) scripts.
+     * The request has already been sent — move header modifications to a pre-request script.
+     * @throws Error always
+     */
+    removeHeader(headerNameOrObject: string | { key: string }): never
   }>
 
   const response: Readonly<{
@@ -818,6 +830,8 @@ declare namespace pm {
     clear(): void
   }>
 }
+
+declare namespace pm {
   const environment: Readonly<{
     readonly name: string
     get(key: string): any
@@ -1076,6 +1090,20 @@ declare namespace pm {
     }>
     readonly body: HoppRESTReqBody
     readonly auth: HoppRESTAuth
+
+    /**
+     * Not supported in post-request (test) scripts.
+     * The request has already been sent; move header mutations to pre-request scripts.
+     * @throws Error always
+     */
+    addHeader(header: { key: string; value?: string }): never
+
+    /**
+     * Not supported in post-request (test) scripts.
+     * The request has already been sent; move header mutations to pre-request scripts.
+     * @throws Error always
+     */
+    removeHeader(headerNameOrObject: string | { key: string }): never
   }>
 
   const response: Readonly<{
