@@ -3993,6 +3993,11 @@
       }
     },
 
+    // Backward-compatible alias for Postman flows
+    setNextRequest: (requestNameOrId) => {
+      return globalThis.pm.execution.setNextRequest(requestNameOrId)
+    },
+
     // Postman Vault (unsupported)
     vault: {
       get: () => {
