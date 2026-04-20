@@ -26,10 +26,12 @@ type PostRequestModuleConfig = {
     envs,
     testRunStack,
     cookies,
+    nextRequest,
   }: {
     envs: TestResult["envs"]
     testRunStack: TestDescriptor[]
     cookies: Cookie[] | null
+    nextRequest?: string | null
   }) => void
   onTestPromise?: (promise: Promise<void>) => void
 }
@@ -42,10 +44,12 @@ type PreRequestModuleConfig = {
     envs,
     request,
     cookies,
+    nextRequest,
   }: {
     envs: TestResult["envs"]
     request: HoppRESTRequest
     cookies: Cookie[] | null
+    nextRequest?: string | null
   }) => void
 }
 
@@ -449,6 +453,7 @@ const createScriptingModule = (
           envs: capturedEnvs,
           request: finalRequest,
           cookies: preInputs.getUpdatedCookies() || null,
+          nextRequest: preInputs.getNextRequest(),
         })
       }
     } else if (captureHook && type === "post") {
@@ -467,6 +472,7 @@ const createScriptingModule = (
           },
           testRunStack: cloneDeep(postConfig.testRunStack),
           cookies: postInputs.getUpdatedCookies() || null,
+          nextRequest: postInputs.getNextRequest(),
         })
       }
     }

@@ -60,6 +60,7 @@ const executeTestOnCage = async (
   let finalTestResults = testRunStack
   const consoleEntries: ConsoleEntry[] = []
   let finalCookies = cookies
+  let finalNextRequest: string | null | undefined = undefined
   const testPromises: Promise<void>[] = []
 
   const captureHook: { capture?: () => void; bootstrapError?: unknown } = {}
@@ -77,10 +78,11 @@ const executeTestOnCage = async (
         request: cloneDeep(request),
         response: cloneDeep(response),
         cookies: cookies ? cloneDeep(cookies) : null,
-        handleSandboxResults: ({ envs, testRunStack, cookies }) => {
+        handleSandboxResults: ({ envs, testRunStack, cookies, nextRequest }) => {
           finalEnvs = envs
           finalTestResults = testRunStack
           finalCookies = cookies
+          finalNextRequest = nextRequest
         },
         onTestPromise: (promise) => {
           testPromises.push(promise)
@@ -137,6 +139,7 @@ const executeTestOnCage = async (
     envs: safeEnvs,
     consoleEntries: safeConsoleEntries,
     updatedCookies: safeCookies,
+    nextRequest: finalNextRequest,
   } satisfies SandboxTestResult)
 }
 

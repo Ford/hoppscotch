@@ -30,6 +30,7 @@ const executeTestOnCage = async (
 
   let finalEnvs = envs
   let finalTestResults = testRunStack
+  let finalNextRequest: string | null | undefined = undefined
   const testPromises: Promise<void>[] = []
 
   const captureHook: { capture?: () => void; bootstrapError?: unknown } = {}
@@ -46,9 +47,10 @@ const executeTestOnCage = async (
         response: cloneDeep(response),
         // TODO: Post type update, accommodate for cookies although platform support is limited
         cookies: null,
-        handleSandboxResults: ({ envs, testRunStack }) => {
+        handleSandboxResults: ({ envs, testRunStack, nextRequest }) => {
           finalEnvs = envs
           finalTestResults = testRunStack
+          finalNextRequest = nextRequest
         },
         onTestPromise: (promise) => {
           testPromises.push(promise)
@@ -119,6 +121,7 @@ const executeTestOnCage = async (
   return E.right({
     tests: safeTestResults,
     envs: safeEnvs,
+    nextRequest: finalNextRequest,
   })
 }
 

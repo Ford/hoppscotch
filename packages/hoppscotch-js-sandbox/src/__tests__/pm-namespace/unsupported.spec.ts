@@ -112,18 +112,6 @@ const unsupportedApis = [
       "pm.iterationData.toJSON() is not supported in Hoppscotch (Collection Runner feature)",
   },
   {
-    api: "pm.execution.setNextRequest()",
-    script: 'pm.execution.setNextRequest("next-request")',
-    errorMessage:
-      "pm.execution.setNextRequest() is not supported in Hoppscotch (Collection Runner feature)",
-  },
-  {
-    api: "pm.setNextRequest()",
-    script: 'pm.setNextRequest("next-request")',
-    errorMessage:
-      "pm.execution.setNextRequest() is not supported in Hoppscotch (Collection Runner feature)",
-  },
-  {
     api: "pm.execution.skipRequest()",
     script: "pm.execution.skipRequest()",
     errorMessage:
@@ -220,27 +208,6 @@ describe("pm namespace - unsupported features", () => {
     )
   })
 
-  test("pm.execution.setNextRequest() throws error", async () => {
-    await expect(
-      runTest(`pm.execution.setNextRequest("next-request")`, {
-        global: [],
-        selected: [],
-      })()
-    ).resolves.toEqualLeft(
-      expect.stringContaining("pm.execution.setNextRequest() is not supported")
-    )
-  })
-
-  test("pm.setNextRequest() alias throws error", async () => {
-    await expect(
-      runTest(`pm.setNextRequest("next-request")`, {
-        global: [],
-        selected: [],
-      })()
-    ).resolves.toEqualLeft(
-      expect.stringContaining("pm.execution.setNextRequest() is not supported")
-    )
-  })
 
   test("pm.visualizer.set() throws error", async () => {
     await expect(

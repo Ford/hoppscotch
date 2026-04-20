@@ -74,6 +74,10 @@ const EXPERIMENTAL_SCRIPTING_SANDBOX = useSetting(
   "EXPERIMENTAL_SCRIPTING_SANDBOX"
 )
 
+type SandboxNextRequest = {
+  nextRequest?: string | null
+}
+
 export type InitialEnvironmentState = {
   initialGlobalEnvs: Environment["variables"]
   initialEnvID: string
@@ -376,6 +380,7 @@ const delegatePreRequestScriptRunner = (
       E.right({
         updatedEnvs: envs,
         updatedCookies: cookies,
+        nextRequest: undefined,
       })
     )
   }
@@ -804,6 +809,7 @@ export async function runTestRunnerRequest(
       response: HoppRESTResponse
       testResult: HoppTestResult
       updatedRequest: HoppRESTRequest
+      nextRequest?: string | null
     }>
   | undefined
 > {
@@ -835,7 +841,6 @@ export async function runTestRunnerRequest(
     initialSelectedEnvs,
     initialEnvironmentIndex,
     initialEnvName,
-    initialEnvs,
     initialEnvsForComparison,
   } = initialEnvironmentState
 
@@ -845,7 +850,6 @@ export async function runTestRunnerRequest(
 
   return delegatePreRequestScriptRunner(
     request,
-    initialEnvs,
     enrichedEnvs,
     cookieJarEntries
   ).then(async (preRequestScriptResult) => {
@@ -918,6 +922,19 @@ export async function runTestRunnerRequest(
           )
 
           if (E.isRight(postRequestScriptResult)) {
+            const preRequestResultWithNext = preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+
+            const postRequestResultWithNext = postRequestScriptResult.right as
+              | (SandboxTestResult & SandboxNextRequest)
+              | SandboxTestResult
+
+            const resolvedNextRequest =
+              postRequestResultWithNext.nextRequest !== undefined
+                ? postRequestResultWithNext.nextRequest
+                : preRequestResultWithNext.nextRequest
+
             // Combine console entries from pre and post request scripts
             const combinedResult = {
               ...postRequestScriptResult.right,
@@ -962,6 +979,7 @@ export async function runTestRunnerRequest(
               response: res,
               testResult: sandboxTestResult,
               updatedRequest: finalRequest,
+              nextRequest: resolvedNextRequest,
             })
           }
 
@@ -994,6 +1012,10 @@ export async function runTestRunnerRequest(
             response: res,
             testResult: sandboxTestResult,
             updatedRequest: finalRequest,
+            nextRequest: (preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+            ).nextRequest,
           })
         }
       })
