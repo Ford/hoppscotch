@@ -571,18 +571,33 @@ export class TestRunnerService extends Service {
     requestIndex: number
     inheritedAuth: HoppRESTRequest["auth"]
     inheritedHeaders: HoppRESTHeaders
+    inheritedPreRequestScripts: string[]
+    inheritedTestScripts: string[]
   } | null {
     const parts = pathStr.split("/")
     let current: HoppCollection = collection
     const parentPath: number[] = []
 
-    // Start with root-level auth/headers
+    // Start with root-level auth/headers/scripts
     let inheritedAuth: HoppRESTRequest["auth"] =
       collection.auth?.authType === "inherit"
         ? { authType: "none", authActive: false }
         : collection.auth || { authType: "none", authActive: false }
 
     let inheritedHeaders: HoppRESTHeaders = [...(collection.headers || [])]
+
+    // Collect root-level collection scripts
+    const inheritedPreRequestScripts: string[] = hasActualScript(
+      collection.preRequestScript
+    )
+      ? [collection.preRequestScript]
+      : []
+
+    const inheritedTestScripts: string[] = hasActualScript(
+      collection.testScript
+    )
+      ? [collection.testScript]
+      : []
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
@@ -603,6 +618,16 @@ export class TestRunnerService extends Service {
 
         inheritedHeaders = [...inheritedHeaders, ...(folder.headers || [])]
 
+        // Accumulate scripts from this folder (root → request order)
+        if (hasActualScript((folder as HoppCollection).preRequestScript)) {
+          inheritedPreRequestScripts.push(
+            (folder as HoppCollection).preRequestScript
+          )
+        }
+        if (hasActualScript((folder as HoppCollection).testScript)) {
+          inheritedTestScripts.push((folder as HoppCollection).testScript)
+        }
+
         parentPath.push(folderIdx)
         current = folder as HoppCollection
       } else if (part.startsWith("request_")) {
@@ -616,6 +641,8 @@ export class TestRunnerService extends Service {
           requestIndex: reqIdx,
           inheritedAuth,
           inheritedHeaders,
+          inheritedPreRequestScripts,
+          inheritedTestScripts,
         }
       } else {
         return null // unknown segment
@@ -690,7 +717,7 @@ export class TestRunnerService extends Service {
       const ctx = this.resolveRequestContext(collection, requestPath)
       if (!ctx) continue
 
-      const { request, parentPath, inheritedAuth, inheritedHeaders } = ctx
+      const { request, parentPath, inheritedAuth, inheritedHeaders, inheritedPreRequestScripts, inheritedTestScripts } = ctx
 
       // Use a sequential per-folder counter as the insertion index.
       // This keeps the result collection in custom order regardless of the
@@ -728,8 +755,8 @@ export class TestRunnerService extends Service {
         [], // inherited variables — simplified for custom order
         shouldResetFoldersAndRequests,
         iterationData,
-        [], // inheritedPreRequestScripts — not resolved in custom order mode
-        []  // inheritedTestScripts — not resolved in custom order mode
+        inheritedPreRequestScripts, // resolved from collection tree path
+        inheritedTestScripts        // resolved from collection tree path
       )
 
       if (options.delay && options.delay > 0) {
