@@ -36,7 +36,6 @@ const SettingsDefSchema = z.object({
   syncHistory: z.boolean(),
   syncEnvironments: z.boolean(),
   PROXY_URL: z.string(),
-  CURRENT_INTERCEPTOR_ID: z.string(),
   CURRENT_KERNEL_INTERCEPTOR_ID: z.string(),
   URL_EXCLUDES: z.object({
     auth: z.boolean(),
@@ -322,6 +321,16 @@ const HoppInheritedPropertySchema = z
           parentID: z.string(),
           parentName: z.string(),
           inheritedVariables: z.array(CollectionVariable),
+        })
+      )
+      .catch([]),
+    scripts: z
+      .array(
+        z.object({
+          parentID: z.string(),
+          parentName: z.string(),
+          preRequestScript: z.string(),
+          testScript: z.string(),
         })
       )
       .catch([]),

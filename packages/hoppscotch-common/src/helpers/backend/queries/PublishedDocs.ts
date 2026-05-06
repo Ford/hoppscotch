@@ -8,6 +8,7 @@ import {
   type TeamPublishedDocsListQuery,
   PublishedDocDocument,
   PublishedDocs,
+  type PublishedDocQuery as GqlPublishedDocQuery,
 } from "../graphql"
 import {
   HoppCollection,
@@ -27,6 +28,7 @@ export type PublishedDocListItem = {
   version: string
   autoSync: boolean
   url: string
+  environmentName?: string | null
   collection: {
     id: string
   }
@@ -47,6 +49,7 @@ export type PublishedDoc = PublishedDocListItem & {
     id: string
     title: string
   }
+  versions?: PublishedDocListItem[]
 }
 
 // Type for the GraphQL query response
@@ -63,6 +66,27 @@ export type CollectionFolder = {
   data?: string
 }
 
+// Type for the versions list in the REST response source of truth: packages/hoppscotch-backend/src/published-docs/published-docs.model.ts
+export type PublishedDocsVersion = {
+  id: string
+  slug: string
+  version: string
+  title: string
+  autoSync: boolean
+  url: string
+  workspaceID: string
+  workspaceType: string
+  createdOn: string
+  updatedOn: string
+  creatorUid: string
+  metadata: string
+  documentTree: string
+}
+
+export type PublishedDocREST = PublishedDocsVersion & {
+  versions?: PublishedDocsVersion[]
+}
+
 /**
  * Parses the data field (stringified JSON) to extract auth, headers, variables, and description
  * @param data The stringified JSON data from CollectionFolder
@@ -74,6 +98,8 @@ function parseCollectionDataFromString(data?: string): CollectionDataProps {
     headers: [],
     variables: [],
     description: null,
+    preRequestScript: "",
+    testScript: "",
   }
 
   if (!data) {
@@ -87,6 +113,9 @@ function parseCollectionDataFromString(data?: string): CollectionDataProps {
       headers: parsed.headers || defaultDataProps.headers,
       variables: parsed.variables || defaultDataProps.variables,
       description: parsed.description || defaultDataProps.description,
+      preRequestScript:
+        parsed.preRequestScript || defaultDataProps.preRequestScript,
+      testScript: parsed.testScript || defaultDataProps.testScript,
     }
   } catch (error) {
     console.error("Failed to parse collection data:", error)
@@ -103,8 +132,14 @@ export function collectionFolderToHoppCollection(
   folder: CollectionFolder
 ): HoppCollection {
   // Parse the data field to extract auth, headers, variables, and description
-  const { auth, headers, variables, description } =
-    parseCollectionDataFromString(folder.data)
+  const {
+    auth,
+    headers,
+    variables,
+    description,
+    preRequestScript,
+    testScript,
+  } = parseCollectionDataFromString(folder.data)
 
   return makeCollection({
     name: folder.name,
@@ -115,6 +150,8 @@ export function collectionFolderToHoppCollection(
     variables,
     description,
     id: folder.id,
+    preRequestScript: preRequestScript ?? "",
+    testScript: testScript ?? "",
   })
 }
 
@@ -218,7 +255,7 @@ export const getPublishedDocByID = (id: string) =>
         throw result.left
       }
 
-      const data = result.right as PublishedDocQuery
+      const data = result.right as GqlPublishedDocQuery
       return data.publishedDoc
     },
     (error) => {
@@ -229,18 +266,21 @@ export const getPublishedDocByID = (id: string) =>
 
 /**
  *
- * @param id - The ID of the published doc to fetch
- * @param tree - The tree level to fetch (FULL or MINIMAL) Default is FULL so we can skip it, keeping it for future use
- * @returns The published doc with the specified ID
+ * @param slug - The slug of the published doc to fetch
+ * @param version - The version of the published doc to fetch
+ * @returns The published doc with the specified slug
  */
-export const getPublishedDocByIDREST = (
-  id: string
-  //tree: "FULL" | "MINIMAL" = "FULL"
+export const getPublishedDocBySlugREST = (
+  slug: string,
+  version?: string
 ): TE.TaskEither<GetPublishedDocError, PublishedDocs> =>
   TE.tryCatch(
     async () => {
       const backendUrl = import.meta.env.VITE_BACKEND_API_URL || ""
-      const response = await fetch(`${backendUrl}/published-docs/${id}`)
+      const url = version
+        ? `${backendUrl}/published-docs/${slug}/${version}`
+        : `${backendUrl}/published-docs/${slug}`
+      const response = await fetch(url)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

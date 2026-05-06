@@ -3,7 +3,7 @@ import { Observable } from "rxjs"
 import { distinctUntilChanged, pluck } from "rxjs/operators"
 import type { KeysMatching } from "~/types/ts-utils"
 import DispatchingStore, { defineDispatchers } from "./DispatchingStore"
-import { DEFAULT_HOPP_PROXY_URL, getDefaultProxyUrl } from "~/helpers/proxyUrl"
+import { DEFAULT_HOPP_PROXY_URL } from "~/helpers/proxyUrl"
 
 export const HoppBgColors = ["system", "light", "dark", "black"] as const
 
@@ -55,7 +55,6 @@ export type SettingsDef = {
     multipartFormdata: boolean
   }
 
-  CURRENT_INTERCEPTOR_ID: string
   CURRENT_KERNEL_INTERCEPTOR_ID: string
 
   URL_EXCLUDES: {
@@ -88,12 +87,6 @@ export type SettingsDef = {
   ENABLE_EXPERIMENTAL_MOCK_SERVERS: boolean
 }
 
-let defaultProxyURL = DEFAULT_HOPP_PROXY_URL
-
-getDefaultProxyUrl().then((url) => {
-  defaultProxyURL = url
-})
-
 export const getDefaultSettings = (): SettingsDef => {
   return {
     syncCollections: true,
@@ -121,12 +114,13 @@ export const getDefaultSettings = (): SettingsDef => {
     },
 
     // Set empty because interceptor module will set the default value
-    CURRENT_INTERCEPTOR_ID: "",
     CURRENT_KERNEL_INTERCEPTOR_ID: "",
 
-    // TODO: Interceptor related settings should move under the interceptor systems
-    PROXY_URL: defaultProxyURL,
-    FOLLOW_REDIRECTS: true,
+      // Static fallback, the actual platform-aware proxy URL is managed by
+      // `KernelInterceptorProxyStore` which resolves it at runtime via
+      // `getDefaultProxyUrl()` (after the platform is initialised).
+      PROXY_URL: DEFAULT_HOPP_PROXY_URL,
+      FOLLOW_REDIRECTS: true,
     URL_EXCLUDES: {
       auth: true,
       httpUser: true,
@@ -317,17 +311,20 @@ export function performSettingsDataMigrations(data: any): SettingsDef {
   const source = cloneDeep(data)
 
   if (source["EXTENSIONS_ENABLED"]) {
-    const result = JSON.parse(source["EXTENSIONS_ENABLED"])
-
-    if (result) source["CURRENT_INTERCEPTOR_ID"] = "extension"
     delete source["EXTENSIONS_ENABLED"]
   }
 
   if (source["PROXY_ENABLED"]) {
-    const result = JSON.parse(source["PROXY_ENABLED"])
-
-    if (result) source["CURRENT_INTERCEPTOR_ID"] = "proxy"
     delete source["PROXY_ENABLED"]
+  }
+
+  // Remove legacy interceptor ID if present,
+  // NOTE: These are not for `kernel` interceptors,
+  // those now don't participate in global settings,
+  // rather each has its own `store.ts` that can be
+  // controlled independently.
+  if (has(source, "CURRENT_INTERCEPTOR_ID")) {
+    delete source["CURRENT_INTERCEPTOR_ID"]
   }
 
   const final = defaultsDeep(source, getDefaultSettings())

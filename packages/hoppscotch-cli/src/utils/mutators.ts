@@ -11,6 +11,9 @@ import { getResourceContents } from "./getters";
 import FormData from "form-data";
 import fsSync from "fs";
 
+// Re-export from the canonical implementation in scripting.ts
+export { stripModulePrefix } from "./scripting";
+
 const getValidRequests = (
   collections: HoppCollection[],
   collectionFilePath: string
@@ -149,19 +152,3 @@ export async function parseCollectionData(
 
   return getValidRequests(collectionSchemaParsedResult.data, pathOrId);
 }
-
-/**
- * Module prefix added by Monaco editor for TypeScript module mode.
- */
-const MODULE_PREFIX = "export {};\n" as const;
-
-/**
- * Strips `export {};\n` prefix from scripts before sandbox execution.
- * The prefix is added by the web app's Monaco editor for IntelliSense
- * and must be removed before execution.
- */
-export const stripModulePrefix = (script: string): string => {
-  return script.startsWith(MODULE_PREFIX)
-    ? script.slice(MODULE_PREFIX.length)
-    : script;
-};

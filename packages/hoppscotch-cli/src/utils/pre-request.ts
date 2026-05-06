@@ -36,13 +36,17 @@ import { arrayFlatMap, arraySort, tupleToRecord } from "./functions/array";
 import { getEffectiveFinalMetaData, getResolvedVariables } from "./getters";
 import { stripComments } from "./jsonc";
 import FormData from "form-data";
-import { stripModulePrefix, toFormData } from "./mutators";
+import { toFormData, stripModulePrefix } from "./mutators";
+import { combineScriptsWithIIFE, filterValidScripts } from "./scripting";
 
 /**
  * Runs pre-request-script runner over given request which extracts set ENVs and
  * applies them on current request to generate updated request.
  * @param request HoppRESTRequest to be converted to EffectiveHoppRESTRequest.
  * @param envs Environment variables related to request.
+ * @param legacySandbox Whether to use the legacy sandbox.
+ * @param collectionVariables Collection variables to use.
+ * @param inheritedPreRequestScripts Pre-request scripts inherited from parent collections.
  * @returns EffectiveHoppRESTRequest that includes parsed ENV variables with in
  * request OR HoppCLIError with error code and related information.
  */
@@ -50,7 +54,8 @@ export const preRequestScriptRunner = (
   request: HoppRESTRequest,
   envs: HoppEnvs,
   legacySandbox: boolean,
-  collectionVariables?: HoppCollectionVariable[]
+  collectionVariables?: HoppCollectionVariable[],
+  inheritedPreRequestScripts: string[] = []
 ): TE.TaskEither<
   HoppCLIError,
   { effectiveRequest: EffectiveHoppRESTRequest } & { updatedEnvs: HoppEnvs }
@@ -58,10 +63,19 @@ export const preRequestScriptRunner = (
   const experimentalScriptingSandbox = !legacySandbox;
   const hoppFetchHook = createHoppFetchHook();
 
+  // Pre-request order: root → request.
+  const combinedScript = combineScriptsWithIIFE(
+    filterValidScripts([
+      ...inheritedPreRequestScripts,
+      request.preRequestScript,
+    ]),
+    experimentalScriptingSandbox ? "experimental" : "legacy"
+  );
+
   return pipe(
     TE.of(request),
-    TE.chain(({ preRequestScript }) =>
-      runPreRequestScript(stripModulePrefix(preRequestScript), {
+    TE.chain(() =>
+      runPreRequestScript(combinedScript, {
         envs,
         experimentalScriptingSandbox,
         request,

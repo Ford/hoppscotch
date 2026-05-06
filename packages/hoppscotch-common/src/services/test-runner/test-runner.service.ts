@@ -5,6 +5,7 @@ import {
   HoppRESTRequest,
 } from "@hoppscotch/data"
 import { Service } from "dioc"
+import { hasActualScript } from "~/helpers/scripting"
 import * as E from "fp-ts/Either"
 import { cloneDeep } from "lodash-es"
 import { nextTick, Ref } from "vue"
@@ -52,7 +53,9 @@ export class TestRunnerService extends Service {
   public runTests(
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
     collection: HoppCollection,
-    options: TestRunnerOptions
+    options: TestRunnerOptions,
+    ancestorPreRequestScripts: string[] = [],
+    ancestorTestScripts: string[] = []
   ) {
     // Reset the result collection
     tab.value.document.status = "running"
@@ -66,6 +69,8 @@ export class TestRunnerService extends Service {
       requests: [],
       variables: [],
       description: collection.description ?? null,
+      preRequestScript: collection.preRequestScript ?? "",
+      testScript: collection.testScript ?? "",
     }
 
     this.runTestsWithIterations(tab, collection, options)
@@ -168,7 +173,9 @@ export class TestRunnerService extends Service {
     parentVariables: HoppCollection["variables"] = [],
     parentID?: string,
     shouldResetFoldersAndRequests: boolean = false,
-    iterationData?: any
+    iterationData?: any,
+    parentPreRequestScripts: string[] = [],
+    parentTestScripts: string[] = []
   ) {
     try {
       // Compute inherited auth and headers for this collection
@@ -191,6 +198,19 @@ export class TestRunnerService extends Service {
           collection.variables,
           collection._ref_id || collection.id
         ) || []),
+      ]
+
+      const inheritedPreRequestScripts = [
+        ...parentPreRequestScripts,
+        ...(hasActualScript(collection.preRequestScript)
+          ? [collection.preRequestScript]
+          : []),
+      ]
+      const inheritedTestScripts = [
+        ...parentTestScripts,
+        ...(hasActualScript(collection.testScript)
+          ? [collection.testScript]
+          : []),
       ]
 
       // Process folders progressively
@@ -216,7 +236,6 @@ export class TestRunnerService extends Service {
           )
         }
 
-        // Pass inherited headers and auth to the folder
         await this.runTestCollection(
           tab,
           folder,
@@ -227,7 +246,9 @@ export class TestRunnerService extends Service {
           inheritedVariables,
           collection._ref_id || collection.id,
           shouldResetFoldersAndRequests,
-          iterationData
+          iterationData,
+          inheritedPreRequestScripts,
+          inheritedTestScripts
         )
       }
 
@@ -278,7 +299,9 @@ export class TestRunnerService extends Service {
           currentPath,
           inheritedVariables,
           shouldResetFoldersAndRequests,
-          iterationData
+          iterationData,
+          inheritedPreRequestScripts,
+          inheritedTestScripts
         )
 
         if (options.delay && options.delay > 0) {
@@ -390,7 +413,9 @@ export class TestRunnerService extends Service {
     path: number[],
     inheritedVariables: HoppCollectionVariable[] = [],
     isFirstIteration: boolean = true,
-    iterationData?: any
+    iterationData?: any,
+    inheritedPreRequestScripts: string[] = [],
+    inheritedTestScripts: string[] = []
   ) {
     if (options.stopRef?.value) {
       throw new Error("Test execution stopped")
@@ -424,7 +449,9 @@ export class TestRunnerService extends Service {
         options.keepVariableValues,
         inheritedVariables,
         initialEnvironmentState,
-        iterationData
+        iterationData,
+        inheritedPreRequestScripts,
+        inheritedTestScripts
       )
 
       if (options.stopRef?.value) {
@@ -700,7 +727,9 @@ export class TestRunnerService extends Service {
         fullPath,
         [], // inherited variables — simplified for custom order
         shouldResetFoldersAndRequests,
-        iterationData
+        iterationData,
+        [], // inheritedPreRequestScripts — not resolved in custom order mode
+        []  // inheritedTestScripts — not resolved in custom order mode
       )
 
       if (options.delay && options.delay > 0) {

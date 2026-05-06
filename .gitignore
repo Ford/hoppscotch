@@ -183,5 +183,11 @@ devenv.local.nix
 # pre-commit
 .pre-commit-config.yaml
 
+# AI Coding Assistants
+.claude/
+.cursor/
+.aider*
+.windsurfrules
+
 # Local NPM configuration with credentials
 .npmrc
