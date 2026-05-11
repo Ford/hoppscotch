@@ -26,10 +26,12 @@ type PostRequestModuleConfig = {
     envs,
     testRunStack,
     cookies,
+    nextRequest,
   }: {
     envs: TestResult["envs"]
     testRunStack: TestDescriptor[]
     cookies: Cookie[] | null
+    nextRequest?: string | null
   }) => void
   onTestPromise?: (promise: Promise<void>) => void
 }
@@ -42,10 +44,12 @@ type PreRequestModuleConfig = {
     envs,
     request,
     cookies,
+    nextRequest,
   }: {
     envs: TestResult["envs"]
     request: HoppRESTRequest
     cookies: Cookie[] | null
+    nextRequest?: string | null
   }) => void
 }
 
@@ -386,7 +390,7 @@ const createScriptingModule = (
   type: ModuleType,
   bootstrapCode: string,
   config: ModuleConfig,
-  captureHook?: { capture?: () => void }
+  captureHook?: { capture?: () => void; bootstrapError?: unknown }
 ) => {
   return defineCageModule((ctx) => {
     // Track test promises for keepAlive (only for post-request scripts)
@@ -449,6 +453,7 @@ const createScriptingModule = (
           envs: capturedEnvs,
           request: finalRequest,
           cookies: preInputs.getUpdatedCookies() || null,
+          nextRequest: preInputs.getNextRequest(),
         })
       }
     } else if (captureHook && type === "post") {
@@ -467,6 +472,7 @@ const createScriptingModule = (
           },
           testRunStack: cloneDeep(postConfig.testRunStack),
           cookies: postInputs.getUpdatedCookies() || null,
+          nextRequest: postInputs.getNextRequest(),
         })
       }
     }
@@ -479,13 +485,15 @@ const createScriptingModule = (
       sandboxInputsObj
     )
 
-    // Extract the test execution chain promise from the bootstrap function's return value
+    // Track bootstrap state for error detection
     let testExecutionChainPromise: any = null
     if (bootstrapResult.error) {
-      console.error(
-        "[SCRIPTING] Bootstrap function error:",
-        ctx.vm.dump(bootstrapResult.error)
-      )
+      const bootstrapError = ctx.vm.dump(bootstrapResult.error)
+
+      if (captureHook) {
+        captureHook.bootstrapError = bootstrapError
+      }
+
       bootstrapResult.error.dispose()
     } else if (bootstrapResult.value) {
       testExecutionChainPromise = bootstrapResult.value
@@ -539,11 +547,11 @@ const createScriptingModule = (
 
 export const preRequestModule = (
   config: PreRequestModuleConfig,
-  captureHook?: { capture?: () => void }
+  captureHook?: { capture?: () => void; bootstrapError?: unknown }
 ) => createScriptingModule("pre", preRequestBootstrapCode, config, captureHook)
 
 export const postRequestModule = (
   config: PostRequestModuleConfig,
-  captureHook?: { capture?: () => void }
+  captureHook?: { capture?: () => void; bootstrapError?: unknown }
 ) =>
   createScriptingModule("post", postRequestBootstrapCode, config, captureHook)

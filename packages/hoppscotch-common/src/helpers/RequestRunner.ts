@@ -74,6 +74,10 @@ const EXPERIMENTAL_SCRIPTING_SANDBOX = useSetting(
   "EXPERIMENTAL_SCRIPTING_SANDBOX"
 )
 
+type SandboxNextRequest = {
+  nextRequest?: string | null
+}
+
 export type InitialEnvironmentState = {
   initialGlobalEnvs: Environment["variables"]
   initialEnvID: string
@@ -369,6 +373,18 @@ const delegatePreRequestScriptRunner = (
   const { preRequestScript } = request
 
   const cleanScript = stripModulePrefix(preRequestScript)
+
+  // Short-circuit empty scripts to avoid unnecessary WASM initialization
+  if (cleanScript.trim().length === 0) {
+    return Promise.resolve(
+      E.right({
+        updatedEnvs: envs,
+        updatedCookies: cookies,
+        nextRequest: undefined,
+      })
+    )
+  }
+
   if (!EXPERIMENTAL_SCRIPTING_SANDBOX.value) {
     // Strip `export {};\n` before executing in legacy sandbox to prevent syntax errors
 
@@ -399,6 +415,19 @@ const runPostRequestScript = (
   const { testScript } = request
 
   const cleanScript = stripModulePrefix(testScript)
+
+  // Short-circuit empty scripts to avoid unnecessary WASM initialization
+  if (cleanScript.trim().length === 0) {
+    return Promise.resolve(
+      E.right({
+        tests: { descriptor: "root", expectResults: [], children: [] },
+        envs,
+        consoleEntries: [],
+        updatedCookies: cookies,
+      } satisfies SandboxTestResult)
+    )
+  }
+
   if (!EXPERIMENTAL_SCRIPTING_SANDBOX.value) {
     // Strip `export {};\n` before executing in legacy sandbox to prevent syntax errors
 
@@ -481,7 +510,7 @@ export function runRESTRequest$(
     if (cancelCalled) return E.left("cancellation" as const)
 
     if (E.isLeft(preRequestScriptResult)) {
-      console.error(preRequestScriptResult.left)
+      console.error("[Pre-Request Script Error]", preRequestScriptResult.left)
       return E.left("script_fail" as const)
     }
 
@@ -613,6 +642,11 @@ export function runRESTRequest$(
               cookieJarService.cookieJar.value = newCookieMap
             }
           } else {
+            console.error(
+              "[Post-Request Script Error]",
+              postRequestScriptResult.left
+            )
+
             tab.value.document.testResults = {
               description: "",
               expectResults: [],
@@ -775,6 +809,7 @@ export async function runTestRunnerRequest(
       response: HoppRESTResponse
       testResult: HoppTestResult
       updatedRequest: HoppRESTRequest
+      nextRequest?: string | null
     }>
   | undefined
 > {
@@ -806,7 +841,6 @@ export async function runTestRunnerRequest(
     initialSelectedEnvs,
     initialEnvironmentIndex,
     initialEnvName,
-    initialEnvs,
     initialEnvsForComparison,
   } = initialEnvironmentState
 
@@ -816,12 +850,11 @@ export async function runTestRunnerRequest(
 
   return delegatePreRequestScriptRunner(
     request,
-    initialEnvs,
     enrichedEnvs,
     cookieJarEntries
   ).then(async (preRequestScriptResult) => {
     if (E.isLeft(preRequestScriptResult)) {
-      console.error(preRequestScriptResult.left)
+      console.error("[Pre-Request Script Error]", preRequestScriptResult.left)
       return E.left("script_fail" as const)
     }
 
@@ -889,6 +922,19 @@ export async function runTestRunnerRequest(
           )
 
           if (E.isRight(postRequestScriptResult)) {
+            const preRequestResultWithNext = preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+
+            const postRequestResultWithNext = postRequestScriptResult.right as
+              | (SandboxTestResult & SandboxNextRequest)
+              | SandboxTestResult
+
+            const resolvedNextRequest =
+              postRequestResultWithNext.nextRequest !== undefined
+                ? postRequestResultWithNext.nextRequest
+                : preRequestResultWithNext.nextRequest
+
             // Combine console entries from pre and post request scripts
             const combinedResult = {
               ...postRequestScriptResult.right,
@@ -933,8 +979,16 @@ export async function runTestRunnerRequest(
               response: res,
               testResult: sandboxTestResult,
               updatedRequest: finalRequest,
+              nextRequest: resolvedNextRequest,
             })
           }
+
+          // Post-request script failed
+          console.error(
+            "[Post-Request Script Error]",
+            postRequestScriptResult.left
+          )
+
           const sandboxTestResult = {
             description: "",
             expectResults: [],
@@ -958,6 +1012,10 @@ export async function runTestRunnerRequest(
             response: res,
             testResult: sandboxTestResult,
             updatedRequest: finalRequest,
+            nextRequest: (preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+            ).nextRequest,
           })
         }
       })

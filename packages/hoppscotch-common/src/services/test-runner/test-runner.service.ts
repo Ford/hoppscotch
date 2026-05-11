@@ -118,31 +118,19 @@ export class TestRunnerService extends Service {
         iterationData = dataset.data[dataIndex]
       }
 
-      // Run the collection for this iteration
-      if (options.requestOrder && options.requestOrder.length > 0) {
-        // Custom execution order: use flat order with resolved context
-        await this.runTestsInCustomOrder(
-          tab,
-          collection,
-          options,
-          shouldResetCollection,
-          iterationData
-        )
-      } else {
-        // Default: recursive traversal in natural collection order
-        await this.runTestCollection(
-          tab,
-          collection,
-          options,
-          [],
-          undefined,
-          undefined,
-          [],
-          undefined,
-          shouldResetCollection,
-          iterationData
-        )
-      }
+      const executionOrder =
+        options.requestOrder && options.requestOrder.length > 0
+          ? options.requestOrder
+          : this.collectRequestOrder(collection)
+
+      await this.runTestsInCustomOrder(
+        tab,
+        collection,
+        options,
+        shouldResetCollection,
+        executionOrder,
+        iterationData
+      )
 
       // Add delay between iterations (except after the last one)
       if (iteration < iterations - 1 && options.delay && options.delay > 0) {
@@ -158,152 +146,6 @@ export class TestRunnerService extends Service {
     }
   }
 
-  private async runTestCollection(
-    tab: Ref<HoppTab<HoppTestRunnerDocument>>,
-    collection: HoppCollection,
-    options: TestRunnerOptions,
-    parentPath: number[] = [],
-    parentHeaders?: HoppRESTHeaders,
-    parentAuth?: HoppRESTRequest["auth"],
-    parentVariables: HoppCollection["variables"] = [],
-    parentID?: string,
-    shouldResetFoldersAndRequests: boolean = false,
-    iterationData?: any
-  ) {
-    try {
-      // Compute inherited auth and headers for this collection
-      const inheritedAuth =
-        collection.auth?.authType === "inherit" && collection.auth.authActive
-          ? parentAuth || { authType: "none", authActive: false }
-          : collection.auth || { authType: "none", authActive: false }
-
-      const inheritedHeaders: HoppRESTHeaders = [
-        ...(parentHeaders || []),
-        ...collection.headers,
-      ]
-
-      const inheritedVariables = [
-        ...(populateValuesInInheritedCollectionVars(
-          parentVariables,
-          parentID || collection._ref_id || collection.id
-        ) || []),
-        ...(populateValuesInInheritedCollectionVars(
-          collection.variables,
-          collection._ref_id || collection.id
-        ) || []),
-      ]
-
-      // Process folders progressively
-      for (let i = 0; i < collection.folders.length; i++) {
-        if (options.stopRef?.value) {
-          tab.value.document.status = "stopped"
-          throw new Error("Test execution stopped")
-        }
-
-        const folder = collection.folders[i]
-        const currentPath = [...parentPath, i]
-
-        // Add folder to the result collection only on first iteration
-        if (shouldResetFoldersAndRequests) {
-          this.addFolderToPath(
-            tab.value.document.resultCollection!,
-            currentPath,
-            {
-              ...cloneDeep(folder),
-              folders: [],
-              requests: [],
-            }
-          )
-        }
-
-        // Pass inherited headers and auth to the folder
-        await this.runTestCollection(
-          tab,
-          folder,
-          options,
-          currentPath,
-          inheritedHeaders,
-          inheritedAuth,
-          inheritedVariables,
-          collection._ref_id || collection.id,
-          shouldResetFoldersAndRequests,
-          iterationData
-        )
-      }
-
-      // Process requests progressively
-      for (let i = 0; i < collection.requests.length; i++) {
-        if (options.stopRef?.value) {
-          tab.value.document.status = "stopped"
-          throw new Error("Test execution stopped")
-        }
-
-        // Check if this request should be executed based on selection state
-        const requestPath = this.buildRequestPath(parentPath, i)
-        const shouldExecute = this.shouldExecuteRequest(
-          requestPath,
-          options.requestSelection
-        )
-
-        if (!shouldExecute) {
-          continue // Skip this request if not selected
-        }
-
-        const request = collection.requests[i] as TestRunnerRequest
-        const currentPath = [...parentPath, i]
-
-        // Add request to the result collection - appending for iterations
-        this.appendRequestToPath(
-          tab.value.document.resultCollection!,
-          currentPath,
-          cloneDeep(request),
-          shouldResetFoldersAndRequests
-        )
-
-        // Update the request with inherited headers and auth before execution
-        const finalRequest = {
-          ...request,
-          auth:
-            request.auth.authType === "inherit" && request.auth.authActive
-              ? inheritedAuth
-              : request.auth,
-          headers: [...inheritedHeaders, ...request.headers],
-        }
-
-        await this.runTestRequest(
-          tab,
-          finalRequest,
-          collection,
-          options,
-          currentPath,
-          inheritedVariables,
-          shouldResetFoldersAndRequests,
-          iterationData
-        )
-
-        if (options.delay && options.delay > 0) {
-          try {
-            await delay(options.delay)
-          } catch (_error) {
-            if (options.stopRef?.value) {
-              tab.value.document.status = "stopped"
-              throw new Error("Test execution stopped")
-            }
-          }
-        }
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === "Test execution stopped"
-      ) {
-        throw error
-      }
-      tab.value.document.status = "error"
-      console.error("Collection execution failed:", error)
-      throw error
-    }
-  }
 
   private addFolderToPath(
     collection: HoppCollection,
@@ -391,7 +233,7 @@ export class TestRunnerService extends Service {
     inheritedVariables: HoppCollectionVariable[] = [],
     isFirstIteration: boolean = true,
     iterationData?: any
-  ) {
+  ): Promise<string | null | undefined> {
     if (options.stopRef?.value) {
       throw new Error("Test execution stopped")
     }
@@ -432,7 +274,7 @@ export class TestRunnerService extends Service {
       }
 
       if (results && E.isRight(results)) {
-        const { response, testResult, updatedRequest } = results.right
+        const { response, testResult, updatedRequest, nextRequest } = results.right
         const { passed, failed } = this.getTestResultInfo(testResult)
 
         tab.value.document.testRunnerMeta.totalTests += passed + failed
@@ -457,6 +299,8 @@ export class TestRunnerService extends Service {
             response.meta.responseDuration
           tab.value.document.testRunnerMeta.completedRequests += 1
         }
+
+        return nextRequest
       } else {
         const errorMsg = "Request execution failed"
 
@@ -480,6 +324,8 @@ export class TestRunnerService extends Service {
           tab.value.document.status = "stopped"
           throw new Error("Test execution stopped due to error")
         }
+
+        return undefined
       }
     } catch (error) {
       if (
@@ -507,6 +353,8 @@ export class TestRunnerService extends Service {
         tab.value.document.status = "stopped"
         throw new Error("Test execution stopped due to error")
       }
+
+      return undefined
     }
   }
 
@@ -544,6 +392,7 @@ export class TestRunnerService extends Service {
     requestIndex: number
     inheritedAuth: HoppRESTRequest["auth"]
     inheritedHeaders: HoppRESTHeaders
+    inheritedVariables: HoppCollectionVariable[]
   } | null {
     const parts = pathStr.split("/")
     let current: HoppCollection = collection
@@ -556,6 +405,12 @@ export class TestRunnerService extends Service {
         : collection.auth || { authType: "none", authActive: false }
 
     let inheritedHeaders: HoppRESTHeaders = [...(collection.headers || [])]
+    let inheritedVariables: HoppCollectionVariable[] = [
+      ...(populateValuesInInheritedCollectionVars(
+        collection.variables,
+        collection._ref_id || collection.id
+      ) || []),
+    ]
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
@@ -575,6 +430,13 @@ export class TestRunnerService extends Service {
             : folder.auth || { authType: "none", authActive: false }
 
         inheritedHeaders = [...inheritedHeaders, ...(folder.headers || [])]
+        inheritedVariables = [
+          ...inheritedVariables,
+          ...(populateValuesInInheritedCollectionVars(
+            folder.variables,
+            folder._ref_id || folder.id
+          ) || []),
+        ]
 
         parentPath.push(folderIdx)
         current = folder as HoppCollection
@@ -589,6 +451,7 @@ export class TestRunnerService extends Service {
           requestIndex: reqIdx,
           inheritedAuth,
           inheritedHeaders,
+          inheritedVariables,
         }
       } else {
         return null // unknown segment
@@ -632,6 +495,7 @@ export class TestRunnerService extends Service {
     collection: HoppCollection,
     options: TestRunnerOptions,
     shouldResetFoldersAndRequests: boolean,
+    executionOrder: string[],
     iterationData?: any
   ) {
     // On the first iteration, pre-populate the folder tree in the result collection
@@ -646,7 +510,11 @@ export class TestRunnerService extends Service {
     // request at its ORIGINAL index, recreating the default order on run 1.
     const folderRequestCounters = new Map<string, number>()
 
-    for (const requestPath of options.requestOrder!) {
+    let orderIndex = 0
+
+    while (orderIndex < executionOrder.length) {
+      const requestPath = executionOrder[orderIndex]
+
       if (options.stopRef?.value) {
         tab.value.document.status = "stopped"
         throw new Error("Test execution stopped")
@@ -657,13 +525,25 @@ export class TestRunnerService extends Service {
         requestPath,
         options.requestSelection
       )
-      if (!shouldExecute) continue
+      if (!shouldExecute) {
+        orderIndex++
+        continue
+      }
 
       // Resolve the request and its inherited context from the collection tree
       const ctx = this.resolveRequestContext(collection, requestPath)
-      if (!ctx) continue
+      if (!ctx) {
+        orderIndex++
+        continue
+      }
 
-      const { request, parentPath, inheritedAuth, inheritedHeaders } = ctx
+      const {
+        request,
+        parentPath,
+        inheritedAuth,
+        inheritedHeaders,
+        inheritedVariables,
+      } = ctx
 
       // Use a sequential per-folder counter as the insertion index.
       // This keeps the result collection in custom order regardless of the
@@ -692,13 +572,13 @@ export class TestRunnerService extends Service {
         headers: [...inheritedHeaders, ...request.headers],
       }
 
-      await this.runTestRequest(
+      const nextRequest = await this.runTestRequest(
         tab,
         finalRequest,
         collection,
         options,
         fullPath,
-        [], // inherited variables — simplified for custom order
+        inheritedVariables,
         shouldResetFoldersAndRequests,
         iterationData
       )
@@ -713,7 +593,84 @@ export class TestRunnerService extends Service {
           }
         }
       }
+
+      if (nextRequest === null) {
+        return
+      }
+
+      if (typeof nextRequest === "string") {
+        const nextRequestPath = this.resolveNextRequestPath(
+          collection,
+          nextRequest
+        )
+
+        if (nextRequestPath) {
+          const nextIndex = executionOrder.indexOf(nextRequestPath)
+
+          if (nextIndex !== -1) {
+            orderIndex = nextIndex
+            continue
+          }
+        }
+      }
+
+      orderIndex++
     }
+  }
+
+  private collectRequestOrder(
+    collection: HoppCollection,
+    parentPath: number[] = []
+  ): string[] {
+    const requestOrder: string[] = []
+
+    collection.folders.forEach((folder, folderIndex) => {
+      requestOrder.push(
+        ...this.collectRequestOrder(folder as HoppCollection, [
+          ...parentPath,
+          folderIndex,
+        ])
+      )
+    })
+
+    collection.requests.forEach((_, requestIndex) => {
+      requestOrder.push(this.buildRequestPath(parentPath, requestIndex))
+    })
+
+    return requestOrder
+  }
+
+  private resolveNextRequestPath(
+    collection: HoppCollection,
+    target: string,
+    parentPath: number[] = []
+  ): string | null {
+    for (let requestIndex = 0; requestIndex < collection.requests.length; requestIndex++) {
+      const request = collection.requests[requestIndex]
+
+      const requestRefId =
+        "_ref_id" in request && typeof request._ref_id === "string"
+          ? request._ref_id
+          : undefined
+
+      if (request.name === target || request.id === target || requestRefId === target) {
+        return this.buildRequestPath(parentPath, requestIndex)
+      }
+    }
+
+    for (let folderIndex = 0; folderIndex < collection.folders.length; folderIndex++) {
+      const resolvedPath = this.resolveNextRequestPath(
+        collection.folders[folderIndex] as HoppCollection,
+        target,
+        [...parentPath, folderIndex]
+      )
+
+      if (resolvedPath) {
+        return resolvedPath
+      }
+    }
+
+    return null
   }
 
   /**

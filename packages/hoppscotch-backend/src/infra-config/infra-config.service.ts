@@ -7,6 +7,7 @@ import { InfraConfigEnum } from 'src/types/InfraConfig';
 import {
   AUTH_PROVIDER_NOT_SPECIFIED,
   DATABASE_TABLE_NOT_EXIST,
+  INFRA_CONFIG_FETCH_FAILED,
   INFRA_CONFIG_INVALID_INPUT,
   INFRA_CONFIG_NOT_FOUND,
   INFRA_CONFIG_RESET_FAILED,
@@ -239,6 +240,10 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
     const isValidate = this.validateEnvValues(infraConfigs);
     if (E.isLeft(isValidate)) return E.left(isValidate.left);
 
+    // Validate SMTP credentials pair against effective post-update state
+    const smtpPairCheck = await this.validateSmtpCredentialPair(infraConfigs);
+    if (E.isLeft(smtpPairCheck)) return E.left(smtpPairCheck.left);
+
     try {
       const dbInfraConfig = await this.prisma.infraConfig.findMany({
         select: { name: true, isEncrypted: true },
@@ -309,8 +314,6 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
             configMap.MAILER_SMTP_HOST &&
             configMap.MAILER_SMTP_PORT &&
             configMap.MAILER_SMTP_SECURE &&
-            configMap.MAILER_SMTP_USER &&
-            configMap.MAILER_SMTP_PASSWORD &&
             configMap.MAILER_TLS_REJECT_UNAUTHORIZED &&
             configMap.MAILER_ADDRESS_FROM
           );
@@ -512,13 +515,17 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
    * @returns GetOnboardingStatusResponse
    */
   async getOnboardingStatus() {
-    const configMap = await this.getInfraConfigsMap();
-    const usersCount = await this.userService.getUsersCount();
+    try {
+      const configMap = await this.getInfraConfigsMap();
+      const usersCount = await this.userService.getUsersCount();
 
-    return E.right({
-      onboardingCompleted: configMap.ONBOARDING_COMPLETED === 'true',
-      canReRunOnboarding: usersCount === 0,
-    } as GetOnboardingStatusResponse);
+      return E.right({
+        onboardingCompleted: configMap.ONBOARDING_COMPLETED === 'true',
+        canReRunOnboarding: usersCount === 0,
+      } as GetOnboardingStatusResponse);
+    } catch {
+      return E.left(INFRA_CONFIG_FETCH_FAILED);
+    }
   }
 
   /**
@@ -652,6 +659,58 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Validate that SMTP user and password are both provided or both empty,
+   * checking the effective post-update state (incoming merged with DB).
+   */
+  private async validateSmtpCredentialPair(
+    infraConfigs: { name: InfraConfigEnum; value: string }[],
+  ) {
+    const incoming = new Map(infraConfigs.map((c) => [c.name, c.value]));
+    const smtpKeys = [
+      InfraConfigEnum.MAILER_SMTP_USER,
+      InfraConfigEnum.MAILER_SMTP_PASSWORD,
+    ];
+
+    if (!smtpKeys.some((key) => incoming.has(key))) {
+      return E.right(true);
+    }
+
+    const missingKeys = smtpKeys.filter((key) => !incoming.has(key));
+
+    const dbRows =
+      missingKeys.length === 0
+        ? []
+        : await this.prisma.infraConfig.findMany({
+            where: { name: { in: missingKeys } },
+            select: { name: true, value: true, isEncrypted: true },
+          });
+
+    const dbValues = new Map(
+      dbRows.map((row) => [
+        row.name,
+        row.value ? (row.isEncrypted ? decrypt(row.value) : row.value) : '',
+      ]),
+    );
+
+    const smtpUser =
+      incoming.get(InfraConfigEnum.MAILER_SMTP_USER) ??
+      dbValues.get(InfraConfigEnum.MAILER_SMTP_USER) ??
+      '';
+
+    const smtpPass =
+      incoming.get(InfraConfigEnum.MAILER_SMTP_PASSWORD) ??
+      dbValues.get(InfraConfigEnum.MAILER_SMTP_PASSWORD) ??
+      '';
+
+    const hasUser = smtpUser.trim() !== '';
+    const hasPass = smtpPass.trim() !== '';
+
+    return hasUser !== hasPass
+      ? E.left(INFRA_CONFIG_INVALID_INPUT)
+      : E.right(true);
+  }
+
+  /**
    * Validate the values of the InfraConfigs
    */
   validateEnvValues(
@@ -673,6 +732,7 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
         case InfraConfigEnum.MAILER_USE_CUSTOM_CONFIGS:
         case InfraConfigEnum.MAILER_SMTP_SECURE:
         case InfraConfigEnum.MAILER_TLS_REJECT_UNAUTHORIZED:
+        case InfraConfigEnum.MAILER_SMTP_IGNORE_TLS:
           if (value !== 'true' && value !== 'false') return fail();
           break;
 
@@ -697,8 +757,6 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
 
         case InfraConfigEnum.MAILER_SMTP_HOST:
         case InfraConfigEnum.MAILER_SMTP_PORT:
-        case InfraConfigEnum.MAILER_SMTP_USER:
-        case InfraConfigEnum.MAILER_SMTP_PASSWORD:
         case InfraConfigEnum.GOOGLE_CLIENT_ID:
         case InfraConfigEnum.GOOGLE_CLIENT_SECRET:
         case InfraConfigEnum.GOOGLE_SCOPE:
