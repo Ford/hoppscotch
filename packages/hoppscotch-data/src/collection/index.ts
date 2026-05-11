@@ -87,6 +87,8 @@ export function translateToNewRESTCollection(x: any): HoppCollection {
   const variables = x.variables ?? []
 
   const description = x.description ?? null
+  const preRequestScript = x.preRequestScript ?? ""
+  const testScript = x.testScript ?? ""
 
   const obj = makeCollection({
     name,
@@ -96,7 +98,9 @@ export function translateToNewRESTCollection(x: any): HoppCollection {
     headers,
     variables,
     description,
-  })
+    preRequestScript,
+    testScript,
+  } as Parameters<typeof makeCollection>[0])
 
   if (x.id) obj.id = x.id
   if (x._ref_id) {
@@ -122,6 +126,8 @@ export function translateToNewGQLCollection(x: any): HoppCollection {
   const variables = x.variables ?? []
 
   const description = x.description ?? null
+  const preRequestScript = x.preRequestScript ?? ""
+  const testScript = x.testScript ?? ""
 
   const obj = makeCollection({
     name,
@@ -131,7 +137,9 @@ export function translateToNewGQLCollection(x: any): HoppCollection {
     headers,
     variables,
     description,
-  })
+    preRequestScript,
+    testScript,
+  } as Parameters<typeof makeCollection>[0])
 
   if (x.id) obj.id = x.id
   if (x._ref_id) {

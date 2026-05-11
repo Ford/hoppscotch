@@ -64,6 +64,41 @@
           />
         </HoppSmartTab>
 
+        <!-- Collection scripts are only available for REST collections for now -->
+        <HoppSmartTab
+          v-if="source === 'REST'"
+          id="preRequestScript"
+          :label="`${t('tab.pre_request_script')}`"
+        >
+          <div class="collection-script-editor flex flex-col" style="height: 480px">
+            <HttpPreRequestScript
+              v-model="editableCollection.preRequestScript"
+              :is-active="activeTab === 'preRequestScript'"
+            />
+          </div>
+          <div class="bg-bannerInfo px-4 py-2 flex items-center">
+            <icon-lucide-info class="svg-icons mr-2 flex-shrink-0" />
+            {{ t("helpers.collection_properties_pre_request_script") }}
+          </div>
+        </HoppSmartTab>
+
+        <HoppSmartTab
+          v-if="source === 'REST'"
+          id="testScript"
+          :label="`${t('tab.post_request_script')}`"
+        >
+          <div class="collection-script-editor flex flex-col" style="height: 480px">
+            <HttpTests
+              v-model="editableCollection.testScript"
+              :is-active="activeTab === 'testScript'"
+            />
+          </div>
+          <div class="bg-bannerInfo px-4 py-2 flex items-center">
+            <icon-lucide-info class="svg-icons mr-2 flex-shrink-0" />
+            {{ t("helpers.collection_properties_test_script") }}
+          </div>
+        </HoppSmartTab>
+
         <HoppSmartTab
           v-if="showDetails"
           :id="'details'"
@@ -157,6 +192,9 @@ import {
 import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
 import { PersistenceService } from "~/services/persistence"
 
+import HttpPreRequestScript from "~/components/http/PreRequestScript.vue"
+import HttpTests from "~/components/http/Tests.vue"
+
 import IconCheck from "~icons/lucide/check"
 import IconCopy from "~icons/lucide/copy"
 import IconHelpCircle from "~icons/lucide/help-circle"
@@ -206,10 +244,14 @@ const editableCollection = ref<{
   headers: HoppCollectionHeaders
   auth: HoppCollectionAuth
   variables: HoppCollectionVariable[]
+  preRequestScript: string
+  testScript: string
 }>({
   headers: [],
   auth: { authType: "inherit", authActive: false },
   variables: [],
+  preRequestScript: "",
+  testScript: "",
 })
 
 const copyIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
@@ -261,12 +303,13 @@ const enforceTabAccessRules = () => {
 }
 
 const loadEditableCollection = () => {
+  const col = props.editingProperties.collection! as any
   editableCollection.value = {
-    auth: clone(props.editingProperties.collection!.auth as HoppCollectionAuth),
-    headers: clone(
-      props.editingProperties.collection!.headers as HoppCollectionHeaders
-    ),
-    variables: clone(props.editingProperties.collection!.variables || []),
+    auth: clone(col.auth as HoppCollectionAuth),
+    headers: clone(col.headers as HoppCollectionHeaders),
+    variables: clone(col.variables || []),
+    preRequestScript: col.preRequestScript ?? "",
+    testScript: col.testScript ?? "",
   }
 }
 
@@ -275,6 +318,8 @@ const resetEditableCollection = () => {
     headers: [],
     auth: { authType: "inherit", authActive: false },
     variables: [],
+    preRequestScript: "",
+    testScript: "",
   }
 }
 
@@ -309,3 +354,16 @@ const copyCollectionID = () => {
   toast.success(t("state.copied_to_clipboard"))
 }
 </script>
+
+<style lang="scss" scoped>
+/* Override sticky positioning from PreRequestScript/Tests components
+   so their toolbar header sticks to the top of the fixed-height wrapper
+   inside the modal, not to page-level scroll offsets */
+.collection-script-editor {
+  :deep(.sticky) {
+    position: sticky;
+    top: 0 !important;
+  }
+}
+</style>
+

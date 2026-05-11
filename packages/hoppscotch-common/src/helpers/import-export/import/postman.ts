@@ -524,6 +524,61 @@ const extractScriptFromEvent = (event: any): string => {
   return ""
 }
 
+/**
+ * Extracts prerequest and test scripts from a Postman ItemGroup (collection or folder).
+ *
+ * Postman stores scripts in an `event` array at the collection/folder level.
+ * Each event has a `listen` field ("prerequest" or "test") and a `script` object.
+ *
+ * @param ig - The Postman ItemGroup (collection or folder)
+ * @returns Object with preRequestScript and testScript strings (empty string if none)
+ */
+/**
+ * Extracts prerequest and test scripts from a Postman ItemGroup (collection or folder).
+ * Used by getHoppFolder() and getHoppCollections() to pass inherited scripts down.
+ */
+const getItemGroupScripts = (
+  ig: ItemGroup<Item>
+): { preRequestScript: string; testScript: string } => {
+  let preRequestScript = ""
+  let testScript = ""
+
+  // `events` is the SDK accessor for the event array on ItemGroup
+  if (ig.events) {
+    const events = ig.events.all()
+    events.forEach((event: any) => {
+      if (event.listen === "prerequest") {
+        preRequestScript = extractScriptFromEvent(event)
+      } else if (event.listen === "test") {
+        testScript = extractScriptFromEvent(event)
+      }
+    })
+  }
+
+  return { preRequestScript, testScript }
+}
+
+/**
+ * Merges a parent (inherited) script with a child (own) script.
+ *
+ * Rules:
+ * - Both exist  → parent + "\n\n" + child
+ * - Only parent → parent
+ * - Only child  → child
+ * - Neither     → ""
+ *
+ * Ensures inherited scripts always run BEFORE the request's own script,
+ * matching Postman execution order: collection → folder → request.
+ */
+const mergeScripts = (parent: string, child: string): string => {
+  const p = parent.trim()
+  const c = child.trim()
+  if (p && c) return `${p}\n\n${c}`
+  if (p) return p
+  if (c) return c
+  return ""
+}
+
 const getHoppScripts = (
   item: Item,
   importScripts: boolean
@@ -584,9 +639,20 @@ const getRequestDescription = (
 
 const getHoppRequest = (
   item: Item,
-  importScripts: boolean
+  importScripts: boolean,
+  inheritedPreRequest = "",
+  inheritedTest = ""
 ): HoppRESTRequest => {
-  const { preRequestScript, testScript } = getHoppScripts(item, importScripts)
+  const { preRequestScript: ownPre, testScript: ownTest } = getHoppScripts(
+    item,
+    importScripts
+  )
+
+  // Merge: collectionScript + "\n\n" + folderScript + "\n\n" + requestScript
+  // inheritedPreRequest already contains the merged collection+folder scripts (done in getHoppFolder)
+  const preRequestScript = mergeScripts(inheritedPreRequest, ownPre)
+  const testScript = mergeScripts(inheritedTest, ownTest)
+
   return makeRESTRequest({
     name: item.name,
     endpoint: getHoppReqURL(item.request.url),
@@ -608,33 +674,120 @@ const getHoppRequest = (
 
 const getHoppFolder = (
   ig: ItemGroup<Item>,
-  importScripts: boolean
-): HoppCollection =>
-  makeCollection({
+  importScripts: boolean,
+  inheritedPreRequest = "",
+  inheritedTest = ""
+): HoppCollection => {
+  // Extract this folder's own scripts
+  const { preRequestScript: folderPre, testScript: folderTest } = importScripts
+    ? getItemGroupScripts(ig)
+    : { preRequestScript: "", testScript: "" }
+
+  // Emit lint warnings if folder-level scripts are being merged
+  if (importScripts && folderPre) {
+    console.warn(
+      `[PM201] Postman folder-level pre-request script found in folder "${ig.name}" — merged into child requests. Review imported scripts.`
+    )
+  }
+  if (importScripts && folderTest) {
+    console.warn(
+      `[PM202] Postman folder-level test script found in folder "${ig.name}" — merged into child requests. Review imported scripts.`
+    )
+  }
+
+  // Build the full inherited scripts for children: collection-inherited + folder-own
+  const childInheritedPre = mergeScripts(inheritedPreRequest, folderPre)
+  const childInheritedTest = mergeScripts(inheritedTest, folderTest)
+
+  return makeCollection({
     name: ig.name,
     folders: pipe(
       ig.items.all(),
       A.filter(isPMItemGroup),
-      A.map((folder) => getHoppFolder(folder, importScripts))
+      A.map((folder) =>
+        getHoppFolder(
+          folder,
+          importScripts,
+          childInheritedPre,
+          childInheritedTest
+        )
+      )
     ),
     requests: pipe(
       ig.items.all(),
       A.filter(isPMItem),
-      A.map((item) => getHoppRequest(item, importScripts))
+      A.map((item) =>
+        getHoppRequest(
+          item,
+          importScripts,
+          childInheritedPre,
+          childInheritedTest
+        )
+      )
     ),
     auth: getHoppReqAuth(ig.auth),
     headers: [],
     variables: getHoppCollVariables(ig),
     description: getCollectionDescription(ig.description),
-  })
+    // Store the folder's OWN scripts on the folder object so the Properties
+    // dialog can display and edit them.
+    preRequestScript: importScripts ? folderPre : "",
+    testScript: importScripts ? folderTest : "",
+  } as Parameters<typeof makeCollection>[0])
+}
 
 export const getHoppCollections = (
   collections: PMCollection[],
   importScripts: boolean
 ) => {
-  return collections.map((collection) =>
-    getHoppFolder(collection, importScripts)
-  )
+  return collections.map((collection) => {
+    // Extract collection-level scripts
+    const { preRequestScript: collPre, testScript: collTest } = importScripts
+      ? getItemGroupScripts(collection as unknown as ItemGroup<Item>)
+      : { preRequestScript: "", testScript: "" }
+
+    // Emit lint warnings if collection-level scripts are being merged
+    if (importScripts && collPre) {
+      console.warn(
+        `[PM201] Postman collection-level pre-request script found in "${collection.name}" — merged into all requests. Review imported scripts.`
+      )
+    }
+    if (importScripts && collTest) {
+      console.warn(
+        `[PM202] Postman collection-level test script found in "${collection.name}" — merged into all requests. Review imported scripts.`
+      )
+    }
+
+    // Build the top-level HoppCollection directly here.
+    // We intentionally do NOT call getHoppFolder(collection, ...) because PMCollection
+    // IS an ItemGroup — calling getHoppFolder on it would re-extract its own scripts
+    // a second time, causing collection-level scripts to be applied twice.
+    return makeCollection({
+      name: collection.name,
+      folders: pipe(
+        collection.items.all(),
+        A.filter(isPMItemGroup),
+        A.map((folder) =>
+          getHoppFolder(folder, importScripts, collPre, collTest)
+        )
+      ),
+      requests: pipe(
+        collection.items.all(),
+        A.filter(isPMItem),
+        A.map((item) =>
+          getHoppRequest(item, importScripts, collPre, collTest)
+        )
+      ),
+      auth: getHoppReqAuth(collection.auth),
+      headers: [],
+      variables: getHoppCollVariables(collection),
+      description: getCollectionDescription(collection.description),
+      // Store the collection's OWN scripts on the collection object so the
+      // Properties dialog can display and edit them.
+      preRequestScript: importScripts ? collPre : "",
+      testScript: importScripts ? collTest : "",
+    } as Parameters<typeof makeCollection>[0])
+  })
 }
 
 export const hoppPostmanImporter = (
