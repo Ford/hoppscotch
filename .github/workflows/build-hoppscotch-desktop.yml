@@ -36,7 +36,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
@@ -46,16 +46,13 @@ jobs:
         run: |
           echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.28.1
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Download trusted-signing-cli
         if: ${{ inputs.disable_signing != true }}
         shell: pwsh
@@ -143,21 +140,18 @@ jobs:
   build-macos-x64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.28.1
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add x86_64-apple-darwin
       - name: Install additional tools
@@ -240,21 +234,18 @@ jobs:
   build-macos-arm64:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.28.1
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add aarch64-apple-darwin
       - name: Install additional tools
@@ -353,21 +344,15 @@ jobs:
             "notes": "${{ inputs.release_notes }}",
             "pub_date": "${CURRENT_DATE}",
             "platforms": {
-              "linux-x86_64": {
-                "signature": "$(cat artifacts/linux/Hoppscotch_SelfHost_linux_x64.AppImage.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_linux_x64.AppImage"
-              },
               "windows-x86_64": {
                 "signature": "$(cat artifacts/windows/Hoppscotch_SelfHost_win_x64.msi.sig)",
                 "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_win_x64.msi"
               },
               "darwin-x86_64": {
-                "signature": "$(cat artifacts/macos-x64/Hoppscotch_SelfHost_mac_x64.tar.gz.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_x64.tar.gz"
+                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_x64.dmg"
               },
               "darwin-aarch64": {
-                "signature": "$(cat artifacts/macos-aarch64/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_aarch64.tar.gz"
+                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_aarch64.dmg"
               }
             }
           }
