@@ -1,7 +1,7 @@
 {
   "name": "@hoppscotch/selfhost-web",
   "private": true,
-  "version": "2026.1.2",
+  "version": "2026.3.0",
   "type": "module",
   "scripts": {
     "dev:vite": "vite",
@@ -42,6 +42,7 @@
     "dioc": "3.0.2",
     "fp-ts": "2.16.11",
     "process": "0.11.10",
+    "qs": "6.15.0",
     "rxjs": "7.8.2",
     "stream-browserify": "3.0.0",
     "util": "0.12.5",

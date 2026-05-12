@@ -94,7 +94,8 @@ export default defineConfig({
       // Node.js polyfills
       stream: "stream-browserify",
       util: "util",
-      querystring: "qs",
+      querystring: path.resolve(__dirname, "node_modules/qs"),
+      qs: path.resolve(__dirname, "node_modules/qs"),
     },
     dedupe: ["vue"],
   },
