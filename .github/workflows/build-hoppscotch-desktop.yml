@@ -41,6 +41,27 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+      - name: Normalize version for WiX compatibility
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          MAJOR=$(echo "$VERSION" | cut -d'.' -f1)
+          if [ "$MAJOR" -gt 255 ] 2>/dev/null; then
+            MAJOR=$((MAJOR % 100))
+            MINOR=$(echo "$VERSION" | cut -d'.' -f2)
+            PATCH=$(echo "$VERSION" | cut -d'.' -f3)
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          echo "WIX_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using WiX-compatible version: $VERSION"
+          cat "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json" | \
+            jq --arg v "$VERSION" '.version = $v' > \
+            "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" && \
+            mv "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" \
+               "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json"
+          sed -i "0,/^version = /s/^version = \"[^\"]*\"/version = \"$VERSION\"/" \
+            "${{ env.DESKTOP_PATH }}/src-tauri/Cargo.toml"
       - name: Set Perl environment variables
         shell: pwsh
         run: |
@@ -148,6 +169,25 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+      - name: Normalize version for WiX compatibility
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          MAJOR=$(echo "$VERSION" | cut -d'.' -f1)
+          if [ "$MAJOR" -gt 255 ] 2>/dev/null; then
+            MAJOR=$((MAJOR % 100))
+            MINOR=$(echo "$VERSION" | cut -d'.' -f2)
+            PATCH=$(echo "$VERSION" | cut -d'.' -f3)
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          echo "Using normalized version: $VERSION"
+          cat "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json" | \
+            jq --arg v "$VERSION" '.version = $v' > \
+            "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" && \
+            mv "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" \
+               "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json"
+          sed -i '' "1,/^version = /s/^version = \"[^\"]*\"/version = \"$VERSION\"/" \
+            "${{ env.DESKTOP_PATH }}/src-tauri/Cargo.toml"
       - uses: actions/setup-node@v3
         with:
           node-version: 22.12.0
@@ -245,6 +285,25 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+      - name: Normalize version for WiX compatibility
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          MAJOR=$(echo "$VERSION" | cut -d'.' -f1)
+          if [ "$MAJOR" -gt 255 ] 2>/dev/null; then
+            MAJOR=$((MAJOR % 100))
+            MINOR=$(echo "$VERSION" | cut -d'.' -f2)
+            PATCH=$(echo "$VERSION" | cut -d'.' -f3)
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          echo "Using normalized version: $VERSION"
+          cat "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json" | \
+            jq --arg v "$VERSION" '.version = $v' > \
+            "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" && \
+            mv "${{ env.DESKTOP_PATH }}/src-tauri/temp.json" \
+               "${{ env.DESKTOP_PATH }}/src-tauri/tauri.conf.json"
+          sed -i '' "1,/^version = /s/^version = \"[^\"]*\"/version = \"$VERSION\"/" \
+            "${{ env.DESKTOP_PATH }}/src-tauri/Cargo.toml"
       - uses: actions/setup-node@v3
         with:
           node-version: 22.12.0
@@ -353,20 +412,16 @@ jobs:
             "notes": "${{ inputs.release_notes }}",
             "pub_date": "${CURRENT_DATE}",
             "platforms": {
-              "linux-x86_64": {
-                "signature": "$(cat artifacts/linux/Hoppscotch_SelfHost_linux_x64.AppImage.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_linux_x64.AppImage"
-              },
               "windows-x86_64": {
                 "signature": "$(cat artifacts/windows/Hoppscotch_SelfHost_win_x64.msi.sig)",
                 "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_win_x64.msi"
               },
               "darwin-x86_64": {
-                "signature": "$(cat artifacts/macos-x64/Hoppscotch_SelfHost_mac_x64.tar.gz.sig)",
+                "signature": "$(cat artifacts/macos-x64/Hoppscotch_SelfHost_mac_x64.tar.gz.sig 2>/dev/null || echo '')",
                 "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_x64.tar.gz"
               },
               "darwin-aarch64": {
-                "signature": "$(cat artifacts/macos-aarch64/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig)",
+                "signature": "$(cat artifacts/macos-aarch64/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig 2>/dev/null || echo '')",
                 "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_aarch64.tar.gz"
               }
             }
