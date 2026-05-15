@@ -343,6 +343,19 @@ declare namespace hopp {
     getAll(domain: string): Cookie[]
     delete(domain: string, name: string): void
     clear(domain: string): void
+    /**
+     * Returns a Postman-compatible CookieJar backed by hopp.cookies.
+     * URL inputs are normalized to hostname. Callbacks are Node.js-style (err, result).
+     * Only available on the Desktop App — returns a no-op jar on Web/CLI.
+     */
+    jar(): Readonly<{
+      set(url: string, name: string, value: string, callback?: (err: Error | null) => void): void
+      set(url: string, cookie: Partial<Cookie> & { name: string; value: string }, callback?: (err: Error | null) => void): void
+      get(url: string, name: string, callback: (err: Error | null, value: string | undefined) => void): void
+      getAll(url: string, callback: (err: Error | null, cookies: Cookie[]) => void): void
+      unset(url: string, name: string, callback?: (err: Error | null) => void): void
+      clear(url: string, callback?: (err: Error | null) => void): void
+    }>
   }>
 
   /**

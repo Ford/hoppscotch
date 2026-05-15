@@ -17,6 +17,9 @@ import * as path from "path"
 import Unfonts from "unplugin-fonts/vite"
 import legacy from "@vitejs/plugin-legacy"
 import ImportMetaEnv from "@import-meta-env/unplugin"
+import { createRequire } from "module"
+
+const _require = createRequire(import.meta.url)
 
 const ENV = loadEnv("development", path.resolve(__dirname, "../../"), ["VITE_"])
 
@@ -94,7 +97,7 @@ export default defineConfig({
       // Node.js polyfills
       stream: "stream-browserify",
       util: "util",
-      querystring: "qs",
+      querystring: _require.resolve("qs"),
     },
     dedupe: ["vue"],
   },
