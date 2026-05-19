@@ -265,7 +265,7 @@ import {
   makeCollection,
 } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
-import { MODULE_PREFIX_REGEX_JSON_SERIALIZED } from "~/helpers/scripting"
+import { stripJsonSerializedModulePrefix } from "@hoppscotch/js-sandbox/scripting"
 
 import * as TE from "fp-ts/TaskEither"
 import { pipe } from "fp-ts/function"
@@ -2884,10 +2884,8 @@ const exportData = async (collection: HoppCollection | TeamCollection) => {
     const collectionJSON = JSON.stringify(collection, stripRefIdReplacer, 2)
 
     // Strip `export {};\n` from `testScript` and `preRequestScript` fields
-    const cleanedCollectionJSON = collectionJSON.replace(
-      MODULE_PREFIX_REGEX_JSON_SERIALIZED,
-      ""
-    )
+    const cleanedCollectionJSON =
+      stripJsonSerializedModulePrefix(collectionJSON)
 
     const name = (collection as HoppCollection).name
 
@@ -2913,10 +2911,8 @@ const exportData = async (collection: HoppCollection | TeamCollection) => {
           )
 
           // Strip `export {};\n` from `testScript` and `preRequestScript` fields
-          const cleanedCollectionJSON = collectionJSONString.replace(
-            MODULE_PREFIX_REGEX_JSON_SERIALIZED,
-            ""
-          )
+          const cleanedCollectionJSON =
+            stripJsonSerializedModulePrefix(collectionJSONString)
 
           await initializeDownloadCollection(
             cleanedCollectionJSON,

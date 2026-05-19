@@ -11,9 +11,6 @@ import { getResourceContents } from "./getters";
 import FormData from "form-data";
 import fsSync from "fs";
 
-// Re-export from the canonical implementation in scripting.ts
-export { stripModulePrefix } from "./scripting";
-
 const getValidRequests = (
   collections: HoppCollection[],
   collectionFilePath: string
