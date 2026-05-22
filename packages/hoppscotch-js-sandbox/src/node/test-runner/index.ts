@@ -26,7 +26,18 @@ export const runTestScript = (
     return TE.left(`Script execution failed: ${reason}`)
   }
 
-  const responseObjHandle = preventCyclicObjects<TestResponse>(options.response)
+  // Normalize headers: axios can return headers as a plain object { key: value }
+  // but the sandbox expects the array format [{ key, value }]. Convert if needed.
+  const headersArray = Array.isArray(options.response.headers)
+    ? options.response.headers
+    : Object.entries(options.response.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
+  const responseObjHandle = preventCyclicObjects<TestResponse>({
+    ...options.response,
+    headers: headersArray,
+  })
 
   if (E.isLeft(responseObjHandle)) {
     return TE.left(`Response marshalling failed: ${responseObjHandle.left}`)
