@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { runTest, runPreRequest } from "~/utils/test-helpers"
 
-// APIs that still throw — Group 7 (pm.vault, pm.require) not yet implemented this sprint
+// APIs that still throw — Group 7 (pm.vault) not yet implemented
 const unsupportedApis = [
   {
     api: "pm.info.iteration",
@@ -33,11 +33,12 @@ const unsupportedApis = [
     errorMessage:
       "pm.vault.unset() is not supported in Hoppscotch (Postman Vault feature)",
   },
+  // pm.require() with an UNKNOWN package still throws
   {
-    api: "pm.require()",
+    api: "pm.require() with unknown package",
     script: 'pm.require("@team/package")',
     errorMessage:
-      "pm.require('@team/package') is not supported in Hoppscotch (Package Library feature)",
+      "pm.require('@team/package') is not supported. Available libraries:",
   },
 ]
 
@@ -47,7 +48,7 @@ describe("pm namespace - unsupported features", () => {
     ({ script, errorMessage }) => {
       return expect(
         runPreRequest(script, { global: [], selected: [] })()
-      ).resolves.toEqualLeft(`Script execution failed: Error: ${errorMessage}`)
+      ).resolves.toEqualLeft(expect.stringContaining(errorMessage))
     }
   )
 
@@ -56,9 +57,7 @@ describe("pm namespace - unsupported features", () => {
     async ({ script, errorMessage }) => {
       const result = await runTest(script, { global: [], selected: [] })()
       expect(result).toEqualLeft(
-        expect.stringContaining(
-          `Script execution failed: Error: ${errorMessage}`
-        )
+        expect.stringContaining(errorMessage)
       )
     }
   )
