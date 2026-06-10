@@ -10,6 +10,12 @@ import {
   InputDomainSetting,
   convertDomainSetting,
 } from "~/helpers/functional/domain-settings"
+import {
+  ClientCertEntry,
+  findMatchingCert,
+  certEntryToInputClient,
+} from "~/helpers/functional/cert-registry"
+import { decryptPassphrase } from "~/helpers/functional/cert-crypto"
 
 const STORE_NAMESPACE = "interceptors.agent.v1"
 
@@ -24,6 +30,8 @@ interface StoredData {
     sharedSecret: string | null
   }
   domains: Record<string, InputDomainSetting>
+  /** Multi-certificate registry — each entry maps a hostname pattern to one cert */
+  clientCerts: ClientCertEntry[]
   lastUpdated: string
 }
 
@@ -48,6 +56,9 @@ export class KernelInterceptorAgentStore extends Service {
   }
 
   private domainSettings = new Map<string, InputDomainSetting>()
+
+  /** In-memory multi-certificate registry */
+  private clientCertsRegistry: ClientCertEntry[] = []
 
   public isAgentRunning = ref(false)
   public authKey = ref<string | null>(null)
@@ -82,6 +93,7 @@ export class KernelInterceptorAgentStore extends Service {
       this.domainSettings = new Map(Object.entries(store.domains))
       this.authKey.value = store.auth.key
       this.sharedSecretB16.value = store.auth.sharedSecret
+      this.clientCertsRegistry = store.clientCerts ?? []
     }
 
     if (!this.domainSettings.has(KernelInterceptorAgentStore.GLOBAL_DOMAIN)) {
@@ -101,6 +113,7 @@ export class KernelInterceptorAgentStore extends Service {
         this.domainSettings = new Map(Object.entries(store.domains))
         this.authKey.value = store.auth.key
         this.sharedSecretB16.value = store.auth.sharedSecret
+        this.clientCertsRegistry = store.clientCerts ?? []
       }
     })
   }
@@ -113,6 +126,7 @@ export class KernelInterceptorAgentStore extends Service {
         sharedSecret: this.sharedSecretB16.value,
       },
       domains: Object.fromEntries(this.domainSettings),
+      clientCerts: this.clientCertsRegistry,
       lastUpdated: new Date().toISOString(),
     }
 
@@ -181,11 +195,39 @@ export class KernelInterceptorAgentStore extends Service {
     return { version: "v1", ...result }
   }
 
-  public completeRequest(
+  public async completeRequest(
     request: Omit<PluginRequest, "proxy" | "security" | "meta">
-  ): PluginRequest {
+  ): Promise<PluginRequest> {
     const host = new URL(request.url).host
     const settings = this.getMergedSettings(host)
+
+    // --- Multi-cert registry lookup (longest-match hostname wins) ---
+    const matchingCert = findMatchingCert(host, this.clientCertsRegistry)
+    if (matchingCert) {
+      const certFile =
+        matchingCert.kind === "pem"
+          ? matchingCert.cert?.name ?? "unknown"
+          : matchingCert.data?.name ?? "unknown"
+      console.debug(
+        `[CertManager/Agent] 🔐 "${host}" → matched cert for pattern "${matchingCert.hostname}" (${matchingCert.kind.toUpperCase()}: ${certFile})`
+      )
+      const decryptedPassphrase =
+        matchingCert.kind === "pfx" && matchingCert.passphrase
+          ? await decryptPassphrase(matchingCert.passphrase)
+          : ""
+      const clientCert = certEntryToInputClient(matchingCert, decryptedPassphrase)
+      if (clientCert) {
+        settings.security = settings.security ?? {}
+        settings.security.certificates = settings.security.certificates ?? {}
+        settings.security.certificates.client = clientCert
+      }
+    } else {
+      console.debug(
+        `[CertManager/Agent] ℹ️ "${host}" → no matching client certificate`
+      )
+    }
+    // ----------------------------------------------------------------
+
     const effective = convertDomainSetting(settings)
 
     if (E.isLeft(effective)) {
@@ -356,6 +398,40 @@ export class KernelInterceptorAgentStore extends Service {
       console.error("Error cancelling request:", error)
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Client Certificate Registry — public CRUD API
+  // ---------------------------------------------------------------------------
+
+  public getClientCerts(): ClientCertEntry[] {
+    return [...this.clientCertsRegistry]
+  }
+
+  public async addClientCert(entry: ClientCertEntry): Promise<void> {
+    this.clientCertsRegistry = [...this.clientCertsRegistry, entry]
+    await this.persistStore()
+  }
+
+  public async updateClientCert(
+    id: string,
+    updated: ClientCertEntry
+  ): Promise<void> {
+    this.clientCertsRegistry = this.clientCertsRegistry.map((e) =>
+      e.id === id ? updated : e
+    )
+    await this.persistStore()
+  }
+
+  public async deleteClientCert(id: string): Promise<void> {
+    this.clientCertsRegistry = this.clientCertsRegistry.filter(
+      (e) => e.id !== id
+    )
+    await this.persistStore()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Domain Settings
+  // ---------------------------------------------------------------------------
 
   public getDomainSettings(domain: string): InputDomainSetting {
     return (
