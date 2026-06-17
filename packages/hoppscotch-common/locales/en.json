@@ -1339,6 +1339,7 @@
     "system_mode": "System",
     "telemetry": "Telemetry",
     "telemetry_helps_us": "Telemetry helps us to personalize our operations and deliver the best experience to you.",
+    "follow_redirects": "Follow Redirects",
     "theme": "Theme",
     "theme_description": "Customize your application theme.",
     "use_experimental_url_bar": "Use experimental URL bar with environment highlighting",

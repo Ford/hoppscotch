@@ -17,6 +17,7 @@ export const fakeResponse: TestResponse = {
   status: 200,
   statusText: "OK",
   responseTime: 0,
+  duration: 0,
   body: "hoi",
   headers: [],
 }
