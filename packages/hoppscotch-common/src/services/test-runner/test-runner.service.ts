@@ -127,6 +127,7 @@ export class TestRunnerService extends Service {
       if (options.stopRef?.value) {
         tab.value.document.status = "stopped"
         throw new Error("Test execution stopped")
+      }
 
       // For iterations after the first, we don't reset the result collection
       // This allows us to accumulate results across iterations
@@ -162,7 +163,11 @@ export class TestRunnerService extends Service {
           if (options.stopRef?.value) {
             tab.value.document.status = "stopped"
             throw new Error("Test execution stopped")
-
+          }
+        }
+      }
+    }
+  }
 
   private addFolderToPath(
     collection: HoppCollection,
