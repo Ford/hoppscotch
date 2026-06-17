@@ -27,6 +27,7 @@ import {
   MAIL_CONFIGS,
   MICROSOFT_CONFIGS,
   MOCK_SERVER_CONFIGS,
+  PROXY_URL_CONFIGS,
   ServerConfigs,
   TOKEN_VALIDATION_CONFIGS,
   UpdatedConfigs,
@@ -144,6 +145,23 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
             'true',
           mailer_use_custom_configs:
             getFieldValue(InfraConfigEnum.MailerUseCustomConfigs) === 'true',
+          mailer_smtp_auth_type:
+            getFieldValue(InfraConfigEnum.MailerSmtpAuthType) || 'login',
+          mailer_smtp_oauth2_user: getFieldValue(
+            InfraConfigEnum.MailerSmtpOauth2User
+          ),
+          mailer_smtp_oauth2_client_id: getFieldValue(
+            InfraConfigEnum.MailerSmtpOauth2ClientId
+          ),
+          mailer_smtp_oauth2_client_secret: getFieldValue(
+            InfraConfigEnum.MailerSmtpOauth2ClientSecret
+          ),
+          mailer_smtp_oauth2_refresh_token: getFieldValue(
+            InfraConfigEnum.MailerSmtpOauth2RefreshToken
+          ),
+          mailer_smtp_oauth2_access_url: getFieldValue(
+            InfraConfigEnum.MailerSmtpOauth2AccessUrl
+          ),
         },
       },
       tokenConfigs: {
@@ -193,6 +211,12 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
           mock_server_wildcard_domain: getFieldValue(
             InfraConfigEnum.MockServerWildcardDomain
           ),
+        },
+      },
+      proxyUrlConfigs: {
+        name: 'proxy_app_url',
+        fields: {
+          proxy_app_url: getFieldValue(InfraConfigEnum.ProxyAppUrl),
         },
       },
     };
@@ -269,6 +293,7 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
       config.mailConfigs,
       config.rateLimitConfigs,
       config.tokenConfigs,
+      config.proxyUrlConfigs,
     ];
 
     const hasSectionWithEmptyFields = sections.some((section) => {
@@ -277,13 +302,23 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
 
         // SMTP user and password are optional as a pair (both or neither)
         const optionalMailerKeys = ['mailer_smtp_user', 'mailer_smtp_password'];
+        // OAuth2 fields are always optional and auth_type has a default
+        const oauth2Keys = [
+          'mailer_smtp_auth_type',
+          'mailer_smtp_oauth2_user',
+          'mailer_smtp_oauth2_client_id',
+          'mailer_smtp_oauth2_client_secret',
+          'mailer_smtp_oauth2_refresh_token',
+          'mailer_smtp_oauth2_access_url',
+        ];
         const excludeKeys = mailer_use_custom_configs
-          ? ['mailer_smtp_url', ...optionalMailerKeys]
+          ? ['mailer_smtp_url', ...optionalMailerKeys, ...oauth2Keys]
           : [
               'mailer_smtp_host',
               'mailer_smtp_port',
               'mailer_smtp_user',
               'mailer_smtp_password',
+              ...oauth2Keys,
             ];
 
         return (
@@ -309,6 +344,10 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
       if (section.name === 'rate_limit')
         return Object.values(section.fields).some(isNotValidNumber);
 
+      // Proxy URL section has no enabled toggle; ensure it isn't left empty
+      if (section.name === 'proxy_app_url')
+        return Object.values(section.fields).some(isFieldEmpty);
+
       return (
         section.enabled && Object.values(section.fields).some(isFieldEmpty)
       );
@@ -323,6 +362,10 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
     const fields = config.mailConfigs.fields;
     if (!fields.mailer_use_custom_configs) return false;
 
+    // Enforced regardless of auth_type: the backend validates the pair
+    // on every save, so stale login values left behind after switching
+    // to the OAuth2 tab would still be rejected. Surface this in the FE
+    // toast so users know to clear those fields before saving.
     const hasUser = fields.mailer_smtp_user.trim() !== '';
     const hasPass = fields.mailer_smtp_password.trim() !== '';
 
@@ -386,6 +429,11 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
         enabled: true,
         fields: updatedConfigs?.mockServerConfigs?.fields ?? {},
       },
+      {
+        config: PROXY_URL_CONFIGS,
+        enabled: true,
+        fields: updatedConfigs?.proxyUrlConfigs?.fields,
+      },
     ];
 
     const transformedConfigs: UpdatedConfigs[] = [];
@@ -398,6 +446,10 @@ export function useConfigHandler(updatedConfigs?: ServerConfigs) {
         else if (enabled && fields) {
           const value =
             typeof fields === 'string' ? fields : String(fields[key]);
+          // BE rejects empty PROXY_APP_URL and would fail the whole batch.
+          // The form-level guard already blocks the save, but skip here too
+          // so a stray empty value can't blackhole unrelated settings.
+          if (name === InfraConfigEnum.ProxyAppUrl && !value.trim()) return;
           transformedConfigs.push({ name, value });
         }
       });

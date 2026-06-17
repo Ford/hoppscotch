@@ -1,18 +1,18 @@
 # Base Go builder with Go lang installation
 # This stage is used to build both Caddy and the webapp server,
 # preventing vulnerable packages on the dependency chain
-FROM alpine:3.23.3 AS go_builder
+FROM alpine:3.23.4 AS go_builder
 RUN apk add --no-cache curl git openssh-client
 
 ARG TARGETARCH
-ENV GOLANG_VERSION=1.26.1
+ENV GOLANG_VERSION=1.26.3
 # Download Go tarball
 RUN case "${TARGETARCH}" in amd64) GOARCH=amd64 ;; arm64) GOARCH=arm64 ;; *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; esac && \
   curl -fsSL "https://go.dev/dl/go${GOLANG_VERSION}.linux-${GOARCH}.tar.gz" -o go.tar.gz
 # Checksum verification of Go tarball
 RUN case "${TARGETARCH}" in \
-  amd64) expected="031f088e5d955bab8657ede27ad4e3bc5b7c1ba281f05f245bcc304f327c987a" ;; \
-  arm64) expected="a290581cfe4fe28ddd737dde3095f3dbeb7f2e4065cab4eae44dfc53b760c2f7" ;; \
+  amd64) expected="2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556" ;; \
+  arm64) expected="9d89a3ea57d141c2b22d70083f2c8459ba3890f2d9e818e7e933b75614936565" ;; \
   esac && \
   actual=$(sha256sum go.tar.gz | cut -d' ' -f1) && \
   [ "$actual" = "$expected" ] && \
@@ -30,19 +30,17 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 # Build Caddy from the Go base
 FROM go_builder AS caddy_builder
 RUN mkdir -p /tmp/caddy-build && \
-  curl -L -o /tmp/caddy-build/src.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_src.tar.gz
+  curl -fsSL -o /tmp/caddy-build/src.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.3/caddy_2.11.3_src.tar.gz
 # Checksum verification of caddy source
-RUN expected="40cb9dc5e0b005bba635e830ba2354450248831fca3b58f5c49892a4747d0e76" && \
+RUN expected="ea407ab88e3d2b1fae216fbdeec98186dad09a22f0dd51c9859f398b7fc82486" && \
   actual=$(sha256sum /tmp/caddy-build/src.tar.gz | cut -d' ' -f1) && \
   [ "$actual" = "$expected" ] && \
   echo "✅ Caddy Source Checksum OK" || \
   (echo "❌ Caddy Source Checksum failed!" && exit 1)
 WORKDIR /tmp/caddy-build
 RUN tar -xzf /tmp/caddy-build/src.tar.gz && \
-  # Fix CVE: upgrade google.golang.org/grpc to 1.79.3 (CVSS 9.1)
-  go get google.golang.org/grpc@v1.79.3 && \
-  # Fix CVE: upgrade github.com/smallstep/certificates to 0.30.0 (CVSS 10)
-  go get github.com/smallstep/certificates@v0.30.0 && \
+  # Fix CVE-2026-34986: upgrade go-jose v3 (HIGH - DoS via crafted JWE)
+  go get github.com/go-jose/go-jose/v3@v3.0.5 && \
   # Clean up any existing vendor directory and regenerate with updated deps
   rm -rf vendor && \
   go mod tidy && \
@@ -65,7 +63,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o webapp-server .
 
 
 # Shared Node.js base with optimized NPM installation
-FROM alpine:3.23.3 AS node_base
+FROM alpine:3.23.4 AS node_base
 # Install dependencies
 RUN apk upgrade --no-cache && \
   apk add --no-cache nodejs curl bash tini ca-certificates
@@ -73,9 +71,9 @@ RUN apk upgrade --no-cache && \
 RUN mkdir -p /tmp/npm-install
 WORKDIR /tmp/npm-install
 # Download NPM tarball
-RUN curl -fsSL https://registry.npmjs.org/npm/-/npm-11.11.1.tgz -o npm.tgz
+RUN curl -fsSL https://registry.npmjs.org/npm/-/npm-11.14.1.tgz -o npm.tgz
 # Verify checksum
-RUN expected="a3b2dbeb2544809a75f186cbae27adc5ceb5adc1ee696e17dfed689d7f46fcf2" \
+RUN expected="bddc8ec2a698d283674cf0a798ef444ba7332497f330dd166056281fcafaca7a" \
   && actual=$(sha256sum npm.tgz | cut -d' ' -f1) \
   && [ "$actual" = "$expected" ] \
   && echo "✅ NPM Tarball Checksum OK" \
@@ -83,10 +81,16 @@ RUN expected="a3b2dbeb2544809a75f186cbae27adc5ceb5adc1ee696e17dfed689d7f46fcf2" 
 # Install NPM from verified tarball and global packages
 RUN tar -xzf npm.tgz && \
   cd package && \
-  node bin/npm-cli.js install -g npm@11.11.1 && \
+  node bin/npm-cli.js install -g /tmp/npm-install/npm.tgz && \
   cd / && \
   rm -rf /tmp/npm-install
-RUN npm install -g pnpm@10.32.1 @import-meta-env/cli@0.7.4
+RUN mkdir -p /tmp/pnpm-install && cd /tmp/pnpm-install && \
+  curl -fsSL https://registry.npmjs.org/pnpm/-/pnpm-10.33.4.tgz -o pnpm.tgz && \
+  curl -fsSL https://registry.npmjs.org/@import-meta-env/cli/-/cli-0.7.4.tgz -o cli.tgz && \
+  echo "8e70ddc6649b18bc3d895cf3a908c0291ea4c38039ad8722c47e018daf1e9cfc  pnpm.tgz" | sha256sum -c - && \
+  echo "9edada700b616b4224ba69ce713e68c36e22cb2548be9134dd3af00c164d8ca0  cli.tgz" | sha256sum -c - && \
+  npm install -g ./pnpm.tgz ./cli.tgz && \
+  cd / && rm -rf /tmp/pnpm-install
 
 # Fix CVE-2025-64756 by replacing vulnerable glob in @import-meta-env/cli (ships glob@11.0.2, fix requires >=11.1.0)
 RUN mkdir -p /tmp/glob-fix && \
@@ -103,16 +107,6 @@ RUN mkdir -p /tmp/serialize-fix && \
   rm -rf /usr/lib/node_modules/@import-meta-env/cli/node_modules/serialize-javascript && \
   cp -r node_modules/serialize-javascript /usr/lib/node_modules/@import-meta-env/cli/node_modules/ && \
   rm -rf /tmp/serialize-fix
-
-# Fix CVE: upgrade picomatch in npm and pnpm (ships 4.0.3, fix requires >=4.0.4)
-RUN mkdir -p /tmp/picomatch-fix && \
-  cd /tmp/picomatch-fix && \
-  npm install picomatch@4.0.4 && \
-  rm -rf /usr/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch && \
-  cp -r node_modules/picomatch /usr/lib/node_modules/npm/node_modules/tinyglobby/node_modules/ && \
-  rm -rf /usr/lib/node_modules/pnpm/dist/node_modules/picomatch && \
-  cp -r node_modules/picomatch /usr/lib/node_modules/pnpm/dist/node_modules/ && \
-  rm -rf /tmp/picomatch-fix
 
 
 
@@ -133,6 +127,7 @@ RUN pnpm install -f --prefer-offline
 
 
 FROM base_builder AS backend_builder
+
 WORKDIR /usr/src/app/packages/hoppscotch-backend
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN pnpm exec prisma generate

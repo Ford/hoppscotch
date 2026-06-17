@@ -54,7 +54,11 @@ const executePreRequestOnCage = async (
   let finalCookies = cookies
   let finalNextRequest: string | null | undefined = undefined
 
-  const captureHook: { capture?: () => void; bootstrapError?: unknown } = {}
+  const captureHook: {
+    capture?: () => void
+    bootstrapError?: unknown
+    scriptExecutionError?: { name: string; message: string; stack: string }
+  } = {}
 
   const result = await cage.runCode(preRequestScript, [
     ...defaultModules({
@@ -103,6 +107,16 @@ const executePreRequestOnCage = async (
     }
 
     return E.left(`Script execution failed: ${String(result.err)}`)
+  }
+
+  // Check for errors reported via the generated try/catch wrapper.
+  // faraday-cage's keepAlive loop swallows rejected promises and does not
+  // await afterScriptExecutionHooks, so async-boundary errors reach us
+  // only via this synchronous host reporter.
+  if (captureHook.scriptExecutionError) {
+    const { name, message } = captureHook.scriptExecutionError
+    const prefix = name ? `${name}: ` : ""
+    return E.left(`Script execution failed: ${prefix}${message}`)
   }
 
   if (captureHook.capture) {

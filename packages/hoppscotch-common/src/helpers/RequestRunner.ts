@@ -27,7 +27,10 @@ import { map } from "fp-ts/Either"
 import { runPreRequestScript, runTestScript } from "@hoppscotch/js-sandbox/web"
 import { useSetting } from "~/composables/settings"
 import { getService } from "~/modules/dioc"
-import { stripModulePrefix } from "~/helpers/scripting"
+import {
+  combineScriptsWithIIFE,
+  hasActualScript,
+} from "@hoppscotch/js-sandbox/scripting"
 import { createHoppFetchHook } from "~/helpers/hopp-fetch"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 import {
@@ -135,7 +138,9 @@ export const captureInitialEnvironmentState = (): InitialEnvironmentState => {
   // Capture the initial environment name
   const initialEnvName = getCurrentEnvironment().name
 
-  // Capture the initial script environment state (the environment passed to scripts)
+  // Snapshot for the post-script diff. Both this and the sandbox receive
+  // secret-hydrated values from `getCombinedEnvVariables`, so reading a
+  // secret doesn't show up as a change in `hasScopeChanges`.
   const initialEnvs = getCombinedEnvVariables()
   const initialEnvsForComparison: TestResult["envs"] = {
     global: initialEnvs.global,
@@ -240,11 +245,14 @@ const updateEnvironments = (
           initialValue: e.initialValue ?? "",
         })
 
-        // For secret variables, keep the initialValue but clear currentValue for storage
+        // Secret values stay client-side only (they were saved into the
+        // local secret service above). Both `initialValue` and
+        // `currentValue` are cleared on the wire payload so the secret
+        // never leaves the device.
         return {
           key: e.key,
           secret: e.secret,
-          initialValue: e.initialValue ?? "",
+          initialValue: "",
           currentValue: "",
         }
       }
@@ -256,12 +264,16 @@ const updateEnvironments = (
         currentValue: e.currentValue ?? "",
       })
 
-      // For non-secret variables, preserve both initialValue and currentValue
+      // `currentValue` is per-user/per-session by Hoppscotch convention and
+      // is never persisted server-side. The actual value lives in the local
+      // `currentEnvironmentValueService` (populated above); the wire payload
+      // gets it cleared so test-script env updates can't leak per-user state
+      // into the team backend.
       return {
         key: e.key,
         secret: e.secret ?? false,
         initialValue: e.initialValue ?? "",
-        currentValue: e.currentValue ?? "",
+        currentValue: "",
       }
     })
   )
@@ -368,14 +380,21 @@ const delegatePreRequestScriptRunner = (
     selected: Environment["variables"]
     temp: Environment["variables"]
   },
-  cookies: Cookie[] | null
+  cookies: Cookie[] | null,
+  inheritedPreRequestScripts: string[] = []
 ): Promise<E.Either<string, SandboxPreRequestResult>> => {
   const { preRequestScript } = request
+  const experimentalScriptingSandbox = EXPERIMENTAL_SCRIPTING_SANDBOX.value
+  const target = experimentalScriptingSandbox ? "experimental" : "legacy"
 
-  const cleanScript = stripModulePrefix(preRequestScript)
+  // Pre-request order: root → request.
+  const combinedScript = combineScriptsWithIIFE(
+    [...inheritedPreRequestScripts, preRequestScript],
+    target
+  )
 
   // Short-circuit empty scripts to avoid unnecessary WASM initialization
-  if (cleanScript.trim().length === 0) {
+  if (combinedScript.length === 0) {
     return Promise.resolve(
       E.right({
         updatedEnvs: envs,
@@ -385,19 +404,16 @@ const delegatePreRequestScriptRunner = (
     )
   }
 
-  if (!EXPERIMENTAL_SCRIPTING_SANDBOX.value) {
-    // Strip `export {};\n` before executing in legacy sandbox to prevent syntax errors
-
-    return runPreRequestScript(cleanScript, {
+  if (!experimentalScriptingSandbox) {
+    return runPreRequestScript(combinedScript, {
       envs,
       experimentalScriptingSandbox: false,
     })
   }
 
-  // Experimental sandbox enabled - use faraday-cage with hook
   const hoppFetchHook = createHoppFetchHook(kernelInterceptorService)
 
-  return runPreRequestScript(cleanScript, {
+  return runPreRequestScript(combinedScript, {
     envs,
     request,
     cookies,
@@ -410,14 +426,21 @@ const runPostRequestScript = (
   envs: TestResult["envs"],
   request: HoppRESTRequest,
   response: HoppRESTResponse,
-  cookies: Cookie[] | null
+  cookies: Cookie[] | null,
+  inheritedTestScripts: string[] = []
 ): Promise<E.Either<string, SandboxTestResult>> => {
   const { testScript } = request
+  const experimentalScriptingSandbox = EXPERIMENTAL_SCRIPTING_SANDBOX.value
+  const target = experimentalScriptingSandbox ? "experimental" : "legacy"
 
-  const cleanScript = stripModulePrefix(testScript)
+  // Test order: request → root (reverse of pre-request).
+  const combinedScript = combineScriptsWithIIFE(
+    [testScript, ...inheritedTestScripts.slice().reverse()],
+    target
+  )
 
   // Short-circuit empty scripts to avoid unnecessary WASM initialization
-  if (cleanScript.trim().length === 0) {
+  if (combinedScript.length === 0) {
     return Promise.resolve(
       E.right({
         tests: { descriptor: "root", expectResults: [], children: [] },
@@ -428,20 +451,17 @@ const runPostRequestScript = (
     )
   }
 
-  if (!EXPERIMENTAL_SCRIPTING_SANDBOX.value) {
-    // Strip `export {};\n` before executing in legacy sandbox to prevent syntax errors
-
-    return runTestScript(cleanScript, {
+  if (!experimentalScriptingSandbox) {
+    return runTestScript(combinedScript, {
       envs,
       response,
       experimentalScriptingSandbox: false,
     })
   }
 
-  // Experimental sandbox enabled - use faraday-cage with hook
   const hoppFetchHook = createHoppFetchHook(kernelInterceptorService)
 
-  return runTestScript(cleanScript, {
+  return runTestScript(combinedScript, {
     envs,
     request,
     response,
@@ -502,10 +522,20 @@ export function runRESTRequest$(
     initialEnvsForComparison,
   } = captureInitialEnvironmentState()
 
+  // Extract inherited scripts from collection hierarchy, filtering out empty/module-prefix-only scripts
+  const inheritedScripts = inheritedProperties?.scripts ?? []
+  const inheritedPreRequestScripts = inheritedScripts
+    .map((s) => s.preRequestScript)
+    .filter(hasActualScript)
+  const inheritedTestScripts = inheritedScripts
+    .map((s) => s.testScript)
+    .filter(hasActualScript)
+
   const res = delegatePreRequestScriptRunner(
     resolvedRequest,
     initialEnvs,
-    cookieJarEntries
+    cookieJarEntries,
+    inheritedPreRequestScripts
   ).then(async (preRequestScriptResult) => {
     if (cancelCalled) return E.left("cancellation" as const)
 
@@ -584,7 +614,8 @@ export function runRESTRequest$(
               statusText: res.statusText,
               responseTime: res.meta.responseDuration,
             },
-            preRequestScriptResult.right.updatedCookies ?? null
+            preRequestScriptResult.right.updatedCookies ?? null,
+            inheritedTestScripts
           )
 
           if (E.isRight(postRequestScriptResult)) {
@@ -620,6 +651,7 @@ export function runRESTRequest$(
                 combinedResult,
                 initialEnvironmentIndex,
                 initialEnvName,
+                initialEnvsForComparison,
                 initialEnvID
               )
             }
@@ -639,13 +671,13 @@ export function runRESTRequest$(
                 }
 
                 const domainCookies = newCookieMap.get(domain)!
-                
+
                 // Remove existing cookie with same name and path if it exists
                 const filteredCookies = domainCookies.filter(
                   (existingCookie) =>
                     !(existingCookie.name === cookie.name && existingCookie.path === cookie.path)
                 )
-                
+
                 // Add the updated cookie
                 filteredCookies.push(cookie)
                 newCookieMap.set(domain, filteredCookies)
@@ -695,97 +727,83 @@ function updateEnvsAfterTestScript(
   runResult: E.Right<SandboxTestResult>,
   initialEnvironmentIndex: SelectedEnvironmentIndex,
   initialEnvName: string,
+  initialEnvsForComparison: TestResult["envs"],
   initialEnvID?: string
 ) {
-  const globalEnvVariables = updateEnvironments(
-    runResult.right.envs.global,
-    "global"
+  // Gate each writeback on whether its own scope actually changed. The outer
+  // `hasEnvironmentChanges` guard is an OR across both scopes, so without
+  // these per-scope checks a script that touched only the selected env would
+  // still trigger an `updateUserEnvironment` round-trip for the unchanged
+  // globals (and the same happens the other way for TEAM_ENV).
+  const globalChanged = hasScopeChanges(
+    initialEnvsForComparison.global,
+    runResult.right.envs.global
+  )
+  const selectedChanged = hasScopeChanges(
+    initialEnvsForComparison.selected,
+    runResult.right.envs.selected
   )
 
-  setGlobalEnvVariables({
-    v: 2,
-    variables: globalEnvVariables,
-  })
+  if (globalChanged) {
+    const globalEnvVariables = updateEnvironments(
+      runResult.right.envs.global,
+      "global"
+    )
 
-  const selectedEnvVariables = updateEnvironments(
-    cloneDeep(runResult.right.envs.selected),
-    "selected",
-    initialEnvID
-  )
-
-  if (initialEnvironmentIndex.type === "MY_ENV") {
-    const env = getEnvironment({
-      type: "MY_ENV",
-      index: initialEnvironmentIndex.index,
-    })
-    updateEnvironment(initialEnvironmentIndex.index, {
-      name: env.name,
+    setGlobalEnvVariables({
       v: 2,
-      id: "id" in env ? env.id : "",
-      variables: selectedEnvVariables,
+      variables: globalEnvVariables,
     })
-  } else if (initialEnvironmentIndex.type === "TEAM_ENV") {
-    // Use the initial environment name to avoid issues when environment changes during request execution
-    // adding a fallback to current environment name just in case so it's not null
-    const envName = initialEnvName ?? getCurrentEnvironment().name
-    pipe(
-      updateTeamEnvironment(
-        JSON.stringify(selectedEnvVariables),
-        initialEnvironmentIndex.teamEnvID,
-        envName
-      )
-    )()
+  }
+
+  if (selectedChanged) {
+    const selectedEnvVariables = updateEnvironments(
+      cloneDeep(runResult.right.envs.selected),
+      "selected",
+      initialEnvID
+    )
+
+    if (initialEnvironmentIndex.type === "MY_ENV") {
+      const env = getEnvironment({
+        type: "MY_ENV",
+        index: initialEnvironmentIndex.index,
+      })
+      updateEnvironment(initialEnvironmentIndex.index, {
+        name: env.name,
+        v: 2,
+        id: "id" in env ? env.id : "",
+        variables: selectedEnvVariables,
+      })
+    } else if (initialEnvironmentIndex.type === "TEAM_ENV") {
+      // Use the initial environment name to avoid issues when environment changes during request execution
+      // adding a fallback to current environment name just in case so it's not null
+      const envName = initialEnvName ?? getCurrentEnvironment().name
+      // `updateEnvironments` above already returns wire-shaped variables
+      pipe(
+        updateTeamEnvironment(
+          JSON.stringify(selectedEnvVariables),
+          initialEnvironmentIndex.teamEnvID,
+          envName
+        )
+      )()
+    }
   }
 }
 
-/**
- * Checks if there are any changes between two environment states by comparing
- * the initial environment state with the final environment state.
- * @param initialEnvs The environment state at the start
- * @param finalEnvs The environment state after changes
- * @returns true if there are any environment changes, false otherwise
- */
+const hasScopeChanges = (
+  initial: Environment["variables"],
+  final: Environment["variables"]
+): boolean =>
+  getAddedEnvVariables(initial, final).length > 0 ||
+  getRemovedEnvVariables(initial, final).length > 0 ||
+  getUpdatedEnvVariables(initial, final).length > 0
+
 const hasEnvironmentChanges = (
   initialEnvs: TestResult["envs"],
   finalEnvs: TestResult["envs"]
-): boolean => {
-  // Check global environment changes
-  const globalAdditions = getAddedEnvVariables(
-    initialEnvs.global,
-    finalEnvs.global
-  )
-  const globalDeletions = getRemovedEnvVariables(
-    initialEnvs.global,
-    finalEnvs.global
-  )
-  const globalUpdations = getUpdatedEnvVariables(
-    initialEnvs.global,
-    finalEnvs.global
-  )
-
-  // Check selected environment changes
-  const selectedAdditions = getAddedEnvVariables(
-    initialEnvs.selected,
-    finalEnvs.selected
-  )
-  const selectedDeletions = getRemovedEnvVariables(
-    initialEnvs.selected,
-    finalEnvs.selected
-  )
-  const selectedUpdations = getUpdatedEnvVariables(
-    initialEnvs.selected,
-    finalEnvs.selected
-  )
-
-  return (
-    globalAdditions.length > 0 ||
-    globalDeletions.length > 0 ||
-    globalUpdations.length > 0 ||
-    selectedAdditions.length > 0 ||
-    selectedDeletions.length > 0 ||
-    selectedUpdations.length > 0
-  )
-}
+): boolean =>
+  hasScopeChanges(initialEnvs.global, finalEnvs.global) ||
+  hasScopeChanges(initialEnvs.selected, finalEnvs.selected)
 
 const getCookieJarEntries = () => {
   // Exclusive to the Desktop App
@@ -815,7 +833,9 @@ export async function runTestRunnerRequest(
   persistEnv = true,
   inheritedVariables: HoppCollectionVariable[] = [],
   initialEnvironmentState: InitialEnvironmentState,
-  iterationData?: Record<string, any>
+  iterationData?: Record<string, any>,
+  inheritedPreRequestScripts: string[] = [],
+  inheritedTestScripts: string[] = []
 ): Promise<
   | E.Left<"script_fail">
   | E.Right<{
@@ -864,7 +884,8 @@ export async function runTestRunnerRequest(
   return delegatePreRequestScriptRunner(
     request,
     enrichedEnvs,
-    cookieJarEntries
+    cookieJarEntries,
+    inheritedPreRequestScripts
   ).then(async (preRequestScriptResult) => {
     if (E.isLeft(preRequestScriptResult)) {
       console.error("[Pre-Request Script Error]", preRequestScriptResult.left)
@@ -931,7 +952,8 @@ export async function runTestRunnerRequest(
               statusText: res.statusText,
               responseTime: res.meta.responseDuration,
             },
-            preRequestScriptResult.right.updatedCookies ?? null
+            preRequestScriptResult.right.updatedCookies ?? null,
+            inheritedTestScripts
           )
 
           if (E.isRight(postRequestScriptResult)) {
@@ -975,6 +997,7 @@ export async function runTestRunnerRequest(
                   postRequestScriptResult,
                   initialEnvironmentIndex,
                   initialEnvName,
+                  initialEnvsForComparison,
                   initialEnvID
                 )
               }
