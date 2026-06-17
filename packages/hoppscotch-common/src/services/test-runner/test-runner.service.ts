@@ -104,7 +104,7 @@ export class TestRunnerService extends Service {
       })
   }
 
-  private async runTestsWithIterations(
+  private async runTestCollection(
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
     collection: HoppCollection,
     options: TestRunnerOptions,
@@ -152,7 +152,9 @@ export class TestRunnerService extends Service {
         options,
         shouldResetCollection,
         executionOrder,
-        iterationData
+        iterationData,
+        parentPreRequestScripts,
+        parentTestScripts
       )
 
       // Add delay between iterations (except after the last one)
@@ -522,7 +524,9 @@ export class TestRunnerService extends Service {
     options: TestRunnerOptions,
     shouldResetFoldersAndRequests: boolean,
     executionOrder: string[],
-    iterationData?: any
+    iterationData?: any,
+    inheritedPreRequestScripts: string[] = [],
+    inheritedTestScripts: string[] = []
   ) {
     // On the first iteration, pre-populate the folder tree in the result collection
     // so that appendRequestToPath can navigate into sub-folders safely.
@@ -606,7 +610,9 @@ export class TestRunnerService extends Service {
         fullPath,
         inheritedVariables,
         shouldResetFoldersAndRequests,
-        iterationData
+        iterationData,
+        inheritedPreRequestScripts,
+        inheritedTestScripts
       )
 
       if (options.delay && options.delay > 0) {
