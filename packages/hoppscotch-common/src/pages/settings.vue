@@ -33,18 +33,6 @@
           </section>
 
           <section>
-            <h4 class="font-semibold text-secondaryDark">
-              {{ t("settings.experiments") }}
-            </h4>
-            <div class="my-1 text-secondaryLight">
-              {{ t("settings.experiments_notice") }}
-              <HoppSmartAnchor
-                class="link"
-                to="https://github.com/hoppscotch/hoppscotch/issues/new/choose"
-                blank
-                :label="t('app.contact_us')"
-              />.
-            </div>
             <div class="space-y-4 py-4">
               <div class="flex items-center">
                 <HoppSmartToggle
