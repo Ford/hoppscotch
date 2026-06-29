@@ -12,66 +12,6 @@
       </p>
     </div>
     <div class="space-y-8 p-8 md:col-span-2">
-      <section>
-        <h4 class="font-semibold text-secondaryDark">
-          {{ t("settings.desktop_updates") }}
-        </h4>
-
-        <!-- Manual update check control. The button's label, icon,
-             disabled-ness, and click behavior all come from one view
-             descriptor computed from the update state, so adding or
-             renaming a state means touching one `case` instead of five
-             parallel switches. A fixed `min-width` holds the button
-             size stable across label changes. Download progress rides
-             inline in the label rather than in a separate progress bar,
-             so the control stays the same size across every state. -->
-        <div class="mt-4">
-          <div class="flex items-center space-x-3">
-            <HoppButtonSecondary
-              class="!min-w-[15rem] !justify-start"
-              :icon="view.icon"
-              :label="view.label"
-              :disabled="view.disabled"
-              outline
-              @click="view.action"
-            />
-            <HoppButtonSecondary
-              v-if="view.showCancel"
-              :label="t('action.cancel')"
-              outline
-              @click="updateCheck.cancel()"
-            />
-          </div>
-          <div class="mt-3 min-h-[1.25rem]">
-            <Transition name="helper-fade" mode="out-in">
-              <p :key="helperText" :class="helperTextClasses">
-                {{ helperText }}
-              </p>
-            </Transition>
-          </div>
-        </div>
-
-        <!-- Auto-check toggle with its own description. The inner
-             `flex items-center` wrapper matches the convention used by
-             other toggles on the shared settings page (see
-             `settings/Native.vue`), so the toggle sits at the same left
-             edge as the check button above instead of stretching to fill
-             the `flex-col` parent. -->
-        <div class="mt-6">
-          <div class="flex items-center">
-            <HoppSmartToggle
-              :on="desktopSettings.settings.disableUpdateChecks"
-              @change="toggleDisableUpdateChecks"
-            >
-              {{ t("settings.disable_update_checks") }}
-            </HoppSmartToggle>
-          </div>
-          <p class="mt-3 text-xs text-secondaryLight">
-            {{ t("settings.disable_update_checks_description") }}
-          </p>
-        </div>
-      </section>
-
       <!-- Keyboard layout strategy. Three radios, each with a one-line
            description so the user can pick without trial and error.
            Selection writes to `keyboardLayoutStrategy` through the
