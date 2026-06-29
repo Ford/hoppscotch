@@ -4,6 +4,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { InfraConfig as DBInfraConfig } from 'src/generated/prisma/client';
 import * as E from 'fp-ts/Either';
 import { InfraConfigEnum } from 'src/types/InfraConfig';
+import { SMTPAuthType } from 'src/mailer/helper';
 import {
   AUTH_PROVIDER_NOT_SPECIFIED,
   DATABASE_TABLE_NOT_EXIST,
@@ -32,6 +33,7 @@ import {
   getEncryptionRequiredInfraConfigEntries,
   getMissingInfraConfigEntries,
   stopApp,
+  syncInfraConfigWithEnvFile,
 } from './helper';
 import { EnableAndDisableSSOArgs, InfraConfigArgs } from './input-args';
 import { AuthProvider } from 'src/auth/helper';
@@ -122,11 +124,30 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
         await Promise.allSettled(dbOperations);
       }
 
-      // Restart the app if needed
+      // Sync the InfraConfigs with the .env file, if .env file updates later on
+      const envFileChangesRequired = await syncInfraConfigWithEnvFile();
+      if (envFileChangesRequired.length > 0) {
+        const dbOperations = envFileChangesRequired.map((dbConfig) => {
+          const { id, ...dataObj } = dbConfig;
+          return this.prisma.infraConfig.update({
+            where: { id: dbConfig.id },
+            data: dataObj,
+          });
+        });
+        await Promise.allSettled(dbOperations);
+      }
+
+      // Restart the app if needed. Metadata-only sync writes (where `value`
+      // is undefined because only `lastSyncedEnvFileValue` is being persisted)
+      // don't change runtime config, so they shouldn't trigger a restart.
+      const envValueChanged = envFileChangesRequired.some(
+        (c) => c.value !== undefined,
+      );
       if (
         propsToInsert.length > 0 ||
         encryptionRequiredEntries.length > 0 ||
-        Object.keys(derivedEnv).length > 0
+        Object.keys(derivedEnv).length > 0 ||
+        envValueChanged
       ) {
         stopApp();
       }
@@ -537,7 +558,11 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
 
     const configEntries: InfraConfigArgs[] = [
       ...Object.entries(dto)
-        .filter(([_, value]) => value !== undefined)
+        .filter(
+          ([key, value]) =>
+            value !== undefined &&
+            Object.keys(new SaveOnboardingConfigRequest()).includes(key),
+        )
         .map(([key, value]) => ({
           name: key as InfraConfigEnum,
           value,
@@ -607,7 +632,11 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
     const recoveryToken = configs.right.find(
       (config) => config.name === InfraConfigEnum.ONBOARDING_RECOVERY_TOKEN,
     )?.value;
-    const tokenIsValid = token === recoveryToken;
+
+    const tokenIsValid =
+      typeof token === 'string' &&
+      token.trim().length > 0 &&
+      token === recoveryToken;
 
     const onboardingConfig = configs.right.reduce((acc, config) => {
       acc[config.name] = tokenIsValid ? config.value : null;
@@ -736,6 +765,18 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
           if (value !== 'true' && value !== 'false') return fail();
           break;
 
+        case InfraConfigEnum.MAILER_SMTP_AUTH_TYPE:
+          if (
+            value &&
+            !Object.values(SMTPAuthType).includes(value as SMTPAuthType)
+          )
+            return fail();
+          break;
+
+        case InfraConfigEnum.MAILER_SMTP_OAUTH2_ACCESS_URL:
+          if (value && !validateUrl(value)) return fail();
+          break;
+
         case InfraConfigEnum.MAILER_SMTP_URL:
           if (!validateSMTPUrl(value)) return fail();
           break;
@@ -773,6 +814,7 @@ export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
         case InfraConfigEnum.GOOGLE_CALLBACK_URL:
         case InfraConfigEnum.GITHUB_CALLBACK_URL:
         case InfraConfigEnum.MICROSOFT_CALLBACK_URL:
+        case InfraConfigEnum.PROXY_APP_URL:
           if (!validateUrl(value)) return fail();
           break;
 

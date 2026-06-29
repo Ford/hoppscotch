@@ -5,6 +5,7 @@ import {
   HoppRESTRequest,
 } from "@hoppscotch/data"
 import { Service } from "dioc"
+import { hasActualScript } from "@hoppscotch/js-sandbox/scripting"
 import * as E from "fp-ts/Either"
 import { cloneDeep } from "lodash-es"
 import { nextTick, Ref } from "vue"
@@ -52,7 +53,9 @@ export class TestRunnerService extends Service {
   public runTests(
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
     collection: HoppCollection,
-    options: TestRunnerOptions
+    options: TestRunnerOptions,
+    ancestorPreRequestScripts: string[] = [],
+    ancestorTestScripts: string[] = []
   ) {
     // Reset the result collection
     tab.value.document.status = "running"
@@ -66,9 +69,22 @@ export class TestRunnerService extends Service {
       requests: [],
       variables: [],
       description: collection.description ?? null,
+      preRequestScript: collection.preRequestScript ?? "",
+      testScript: collection.testScript ?? "",
     }
 
-    this.runTestsWithIterations(tab, collection, options)
+    this.runTestCollection(
+      tab,
+      collection,
+      options,
+      [],
+      undefined,
+      undefined,
+      [],
+      undefined,
+      ancestorPreRequestScripts,
+      ancestorTestScripts
+    )
       .then(() => {
         tab.value.document.status = "stopped"
       })
@@ -88,10 +104,17 @@ export class TestRunnerService extends Service {
       })
   }
 
-  private async runTestsWithIterations(
+  private async runTestCollection(
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
     collection: HoppCollection,
-    options: TestRunnerOptions
+    options: TestRunnerOptions,
+    parentPath: number[] = [],
+    parentHeaders?: HoppRESTHeaders,
+    parentAuth?: HoppRESTRequest["auth"],
+    parentVariables: HoppCollection["variables"] = [],
+    parentID?: string,
+    parentPreRequestScripts: string[] = [],
+    parentTestScripts: string[] = []
   ) {
     const dataset = options.dataset
     const hasDataset =
@@ -129,7 +152,9 @@ export class TestRunnerService extends Service {
         options,
         shouldResetCollection,
         executionOrder,
-        iterationData
+        iterationData,
+        parentPreRequestScripts,
+        parentTestScripts
       )
 
       // Add delay between iterations (except after the last one)
@@ -145,7 +170,6 @@ export class TestRunnerService extends Service {
       }
     }
   }
-
 
   private addFolderToPath(
     collection: HoppCollection,
@@ -232,7 +256,9 @@ export class TestRunnerService extends Service {
     path: number[],
     inheritedVariables: HoppCollectionVariable[] = [],
     isFirstIteration: boolean = true,
-    iterationData?: any
+    iterationData?: any,
+    inheritedPreRequestScripts: string[] = [],
+    inheritedTestScripts: string[] = []
   ): Promise<string | null | undefined> {
     if (options.stopRef?.value) {
       throw new Error("Test execution stopped")
@@ -266,7 +292,9 @@ export class TestRunnerService extends Service {
         options.keepVariableValues,
         inheritedVariables,
         initialEnvironmentState,
-        iterationData
+        iterationData,
+        inheritedPreRequestScripts,
+        inheritedTestScripts
       )
 
       if (options.stopRef?.value) {
@@ -496,7 +524,9 @@ export class TestRunnerService extends Service {
     options: TestRunnerOptions,
     shouldResetFoldersAndRequests: boolean,
     executionOrder: string[],
-    iterationData?: any
+    iterationData?: any,
+    inheritedPreRequestScripts: string[] = [],
+    inheritedTestScripts: string[] = []
   ) {
     // On the first iteration, pre-populate the folder tree in the result collection
     // so that appendRequestToPath can navigate into sub-folders safely.
@@ -580,7 +610,9 @@ export class TestRunnerService extends Service {
         fullPath,
         inheritedVariables,
         shouldResetFoldersAndRequests,
-        iterationData
+        iterationData,
+        inheritedPreRequestScripts,
+        inheritedTestScripts
       )
 
       if (options.delay && options.delay > 0) {

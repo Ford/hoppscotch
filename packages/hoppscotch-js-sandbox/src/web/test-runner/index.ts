@@ -12,6 +12,7 @@ import {
   TestResult,
 } from "~/types"
 import { acquireCage, resetCage, isInfraError } from "~/utils/cage"
+import { parseScriptForSyntax } from "~/utils/scripting"
 import { preventCyclicObjects } from "~/utils/shared"
 
 import { Cookie, HoppRESTRequest } from "@hoppscotch/data"
@@ -63,7 +64,11 @@ const executeTestOnCage = async (
   let finalNextRequest: string | null | undefined = undefined
   const testPromises: Promise<void>[] = []
 
-  const captureHook: { capture?: () => void; bootstrapError?: unknown } = {}
+  const captureHook: {
+    capture?: () => void
+    bootstrapError?: unknown
+    scriptExecutionError?: { name: string; message: string; stack: string }
+  } = {}
 
   const result = await cage.runCode(testScript, [
     ...defaultModules({
@@ -122,6 +127,16 @@ const executeTestOnCage = async (
   // Wait for async test functions before capturing results.
   if (testPromises.length > 0) {
     await Promise.all(testPromises)
+  }
+
+  // Check for errors reported via the generated try/catch wrapper.
+  // faraday-cage's keepAlive loop swallows rejected promises and does not
+  // await afterScriptExecutionHooks, so async-boundary errors reach us
+  // only via this synchronous host reporter.
+  if (captureHook.scriptExecutionError) {
+    const { name, message } = captureHook.scriptExecutionError
+    const prefix = name ? `${name}: ` : ""
+    return E.left(`Script execution failed: ${prefix}${message}`)
   }
 
   if (captureHook.capture) {
@@ -198,20 +213,6 @@ export const runTestScript = async (
   testScript: string,
   options: RunPostRequestScriptOptions
 ): Promise<E.Either<string, SandboxTestResult>> => {
-  // Pre-parse the script to catch syntax errors before execution
-  // Use AsyncFunction to support top-level await (required for hopp.fetch, etc.)
-  try {
-    // eslint-disable-next-line no-new-func
-    const AsyncFunction = Object.getPrototypeOf(
-      async function () {}
-    ).constructor
-    new (AsyncFunction as any)(testScript)
-  } catch (e) {
-    const err = e as Error
-    const reason = `${"name" in err ? (err as any).name : "SyntaxError"}: ${err.message}`
-    return E.left(`Script execution failed: ${reason}`)
-  }
-
   const responseObjHandle = preventCyclicObjects<TestResponse>(options.response)
 
   if (E.isLeft(responseObjHandle)) {
@@ -221,6 +222,21 @@ export const runTestScript = async (
   const resolvedResponse = responseObjHandle.right
 
   const { envs, experimentalScriptingSandbox = true } = options
+
+  // Pre-parse before sandbox spin-up so syntax errors surface as a friendly
+  // host-side message. Each target uses the grammar that matches its eventual
+  // executor: experimental → ESM module (top-level imports + await accepted);
+  // legacy → script mode (top-level imports + await rejected).
+  try {
+    parseScriptForSyntax(
+      testScript,
+      experimentalScriptingSandbox ? "experimental" : "legacy"
+    )
+  } catch (e) {
+    const err = e as Error
+    const reason = `${"name" in err ? (err as any).name : "SyntaxError"}: ${err.message}`
+    return E.left(`Script execution failed: ${reason}`)
+  }
 
   if (experimentalScriptingSandbox) {
     const { request, cookies, hoppFetchHook } = options as Extract<

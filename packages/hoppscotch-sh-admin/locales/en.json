@@ -89,6 +89,15 @@
       "tls_reject_unauthorized": "TLS Reject Unauthorized",
       "title": "SMTP Configurations",
       "smtp_auth_incomplete": "SMTP username and password must both be provided or both left empty",
+      "auth_switch_description": "Switching will clear the credentials entered in the current authentication type. Any unsaved data will be lost and cannot be undone.",
+      "auth_type": "Authentication Type",
+      "auth_type_login": "Basic Auth (Login)",
+      "auth_type_oauth2": "OAuth 2.0",
+      "oauth2_user": "OAuth 2.0 User",
+      "oauth2_client_id": "OAuth 2.0 Client ID",
+      "oauth2_client_secret": "OAuth 2.0 Client Secret",
+      "oauth2_refresh_token": "OAuth 2.0 Refresh Token",
+      "oauth2_access_url": "OAuth 2.0 Access Token URL",
       "toggle_failure": "Failed to toggle smtp!!",
       "update_failure": "Failed to update smtp configurations!!",
       "user": "SMTP User"
@@ -111,6 +120,13 @@
       "update_failure": "Failed to update rate limit configurations!!",
       "input_validation_error": "Please enter valid values for rate limit configurations"
     },
+    "proxy_url_configs": {
+      "description": "Configure proxy URL for the app",
+      "input_validation": "Proxy URL must start with http(s):// and contain no spaces",
+      "title": "Proxy URL Configurations",
+      "update_failure": "Failed to update proxy URL configurations!!",
+      "url_placeholder": "Enter the Proxy URL"
+    },
     "reset": {
       "confirm_reset": "Hoppscotch server must restart to reflect the new changes. Confirm the reset of server configurations?",
       "description": "Default configurations will be loaded as specified in the environment file",
@@ -128,6 +144,7 @@
       "auth": "Authentication",
       "activity": "Activity",
       "infra_tokens": "Infra Tokens",
+      "proxy": "Proxy",
       "rate_limit": "Rate Limit",
       "smtp": "SMTP",
       "miscellaneous": "Miscellaneous",
