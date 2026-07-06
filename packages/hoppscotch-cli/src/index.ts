@@ -79,6 +79,28 @@ program
     "path to a CSV file for data-driven testing"
   )
   .option("--legacy-sandbox", "Opt out from the experimental scripting sandbox")
+  .option(
+    "--timeout <ms>",
+    "request timeout in milliseconds (0 = no timeout, default: 30000)",
+    parseInt
+  )
+  .option(
+    "--retries <n>",
+    "number of retries on transient socket errors (default: 0)",
+    parseInt
+  )
+  .option(
+    "--insecure",
+    "disable TLS certificate validation (equivalent to NODE_TLS_REJECT_UNAUTHORIZED=0)"
+  )
+  .option(
+    "--ca-cert <path>",
+    "path to a custom CA certificate bundle (PEM) for TLS verification"
+  )
+  .option(
+    "--proxy <url>",
+    "force all requests through this proxy URL, ignoring NO_PROXY (e.g. http://corporate-proxy:8080)"
+  )
   .allowExcessArguments(false)
   .allowUnknownOption(false)
   .description("running hoppscotch collection.json file")

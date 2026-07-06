@@ -46,4 +46,16 @@ export type ProcessRequestParams = {
   collectionVariables?: HoppCollectionVariable[];
   inheritedPreRequestScripts?: string[];
   inheritedTestScripts?: string[];
+  /** Request timeout in milliseconds. 0 = no timeout. Default: 30000 */
+  timeout?: number;
+  /** Number of retries on transient socket errors. Default: 0 */
+  retries?: number;
+  /** Disable TLS certificate validation */
+  insecure?: boolean;
+  /** Path to a custom CA certificate bundle (PEM file) */
+  caCert?: string;
+  /**
+   * Force a specific proxy URL, bypassing NO_PROXY (equivalent to curl --proxy).
+   */
+  proxy?: string;
 };

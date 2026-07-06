@@ -34,8 +34,6 @@ import {
   processRequest,
 } from "./request";
 import { getTestMetrics } from "./test";
-import {ProxyAgent} from "proxy-agent";
-import axios from "axios";
 import { filterValidScripts } from "@hoppscotch/js-sandbox/scripting";
 
 const { WARN, FAIL, INFO } = exceptionColors;
@@ -57,6 +55,11 @@ export const collectionsRunner = async (
     iterationCount,
     iterationData,
     legacySandbox,
+    timeout,
+    retries,
+    insecure,
+    caCert,
+    proxy,
   } = param;
 
   const resolvedDelay = delay ?? 0;
@@ -86,7 +89,9 @@ export const collectionsRunner = async (
       envs.selected = envs.selected
         .filter(
           (envPair) =>
-            !iterationDataItem.some((dataPair) => dataPair.key === envPair.key)
+            !iterationDataItem.some(
+              (dataPair) => (dataPair as { key?: string }).key === envPair.key
+            )
         )
         .concat(iterationDataItem);
     }
@@ -98,12 +103,23 @@ export const collectionsRunner = async (
         envs,
         resolvedDelay,
         requestsReport,
-        legacySandbox
+        legacySandbox,
+        [],
+        [],
+        { timeout, retries, insecure, caCert, proxy }
       );
     }
   }
 
   return requestsReport;
+};
+
+type TransportOpts = {
+  timeout?: number;
+  retries?: number;
+  insecure?: boolean;
+  caCert?: string;
+  proxy?: string;
 };
 
 const processCollection = async (
@@ -114,7 +130,8 @@ const processCollection = async (
   requestsReport: RequestReport[],
   legacySandbox?: boolean,
   ancestorPreRequestScripts: string[] = [],
-  ancestorTestScripts: string[] = []
+  ancestorTestScripts: string[] = [],
+  transportOpts: TransportOpts = {}
 ) => {
   // Accumulate scripts from root -> current collection for inheritance
   // filterValidScripts strips empty, whitespace-only, and module-prefix-only scripts
@@ -145,20 +162,14 @@ const processCollection = async (
       collectionVariables,
       inheritedPreRequestScripts,
       inheritedTestScripts,
+      ...transportOpts,
     };
 
     // Request processing initiated message.
     log(WARN(`\nRunning: ${chalk.bold(requestPath)}`));
 
-    const agent = new ProxyAgent();
-    const axiosInstance = axios.create({
-      httpsAgent : agent,
-      httpAgent : agent,
-      proxy: false, // Disable axios's default proxy handling
-    });
-
     // Processing current request.
-    const result = await processRequest(processRequestParams,axiosInstance)();
+    const result = await processRequest(processRequestParams)();
 
     // Updating global & selected envs with new envs from processed-request output.
     const { global, selected } = result.envs;
@@ -215,7 +226,8 @@ const processCollection = async (
       requestsReport,
       legacySandbox,
       inheritedPreRequestScripts,
-      inheritedTestScripts
+      inheritedTestScripts,
+      transportOpts
     );
   }
 };

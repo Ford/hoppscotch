@@ -2,6 +2,7 @@ import axios, { Method } from "axios";
 import type { HoppFetchHook } from "@hoppscotch/js-sandbox";
 import { wrapper as axiosCookieJarSupport } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
+import { createAxiosAgents } from "./http-agent";
 
 /**
  * Creates a hopp.fetch() hook implementation for CLI.
@@ -59,6 +60,7 @@ export const createHoppFetchHook = (): HoppFetchHook => {
     // Convert Fetch API options to axios config
     // Note: Using 'any' for config because axios-cookiejar-support extends AxiosRequestConfig
     // with 'jar' property that isn't in standard types
+    const { httpAgent, httpsAgent } = createAxiosAgents(urlStr);
     const config: any = {
       url: urlStr,
       method,
@@ -68,6 +70,9 @@ export const createHoppFetchHook = (): HoppFetchHook => {
       validateStatus: () => true, // Don't throw on any status code
       jar,
       withCredentials: true, // Required for cookie jar
+      httpAgent,
+      httpsAgent,
+      proxy: false, // Disable axios's own proxy handling — our agent handles it
     };
 
     // Handle AbortController signal if provided

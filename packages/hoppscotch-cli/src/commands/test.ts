@@ -27,6 +27,11 @@ export const test = (pathOrId: string, options: TestCmdOptions) => async () => {
       iterationData,
       reporterJunit,
       legacySandbox,
+      timeout,
+      retries,
+      insecure,
+      caCert,
+      proxy,
     } = options;
 
     if (
@@ -101,6 +106,11 @@ export const test = (pathOrId: string, options: TestCmdOptions) => async () => {
       iterationData: transformedIterationData,
       iterationCount,
       legacySandbox: resolvedLegacySandbox,
+      timeout,
+      retries,
+      insecure,
+      caCert,
+      proxy,
     });
     const hasSucceeded = collectionsRunnerResult(report, reporterJunit);
 

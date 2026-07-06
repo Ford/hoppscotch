@@ -22,13 +22,18 @@ import {
   RequestReport,
 } from "../types/request";
 import { RequestMetrics } from "../types/response";
-import { responseErrors } from "./constants";
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_REQUEST_RETRIES,
+  RETRYABLE_ERROR_CODES,
+} from "./constants";
 import {
   printPreRequestRunner,
   printRequestRunner,
   printTestRunner,
 } from "./display";
 import { getDurationInSeconds, getMetaDataPairs } from "./getters";
+import { createAxiosAgents, getNetworkErrorHint } from "./http-agent";
 import { preRequestScriptRunner } from "./pre-request";
 import { getTestScriptParams, hasAllTestsPassed, testRunner } from "./test";
 
@@ -94,104 +99,186 @@ export const createRequest = (req: EffectiveHoppRESTRequest): RequestConfig => {
 };
 
 /**
- * Performs http request using axios with given requestConfig axios
- * parameters.
+ * Options that control transport behaviour for a single request execution.
+ */
+export interface RequestRunnerOptions {
+  /** Timeout in ms. 0 = no timeout. Default: DEFAULT_REQUEST_TIMEOUT_MS */
+  timeout?: number;
+  /** Number of retries on transient socket errors. Default: 0 */
+  retries?: number;
+  /** Disable TLS certificate validation (equivalent to NODE_TLS_REJECT_UNAUTHORIZED=0) */
+  insecure?: boolean;
+  /** Path to a custom CA certificate bundle (PEM file) */
+  caCert?: string;
+  /**
+   * Force a specific proxy URL for all requests, ignoring NO_PROXY.
+   * Equivalent to curl --proxy.  Use this when the target host is listed
+   * in NO_PROXY but is only reachable through the proxy.
+   */
+  proxy?: string;
+}
+
+/**
+ * Performs a single axios request attempt, returning either a RunnerResponse
+ * (Right) or a structured error (Left).  Network-level socket errors are
+ * distinguished from HTTP-level error responses so callers can decide whether
+ * to retry or skip dependent scripts.
+ */
+const attemptRequest = async (
+  requestConfig: RequestConfig,
+  opts: RequestRunnerOptions,
+  start: ReturnType<typeof hrtime>
+): Promise<E.Either<{ err: HoppCLIError; isSocketError: boolean }, RequestRunnerResponse>> => {
+  try {
+    // NOTE: Temporary parsing check for request endpoint.
+    requestConfig.url = new URL(requestConfig.url ?? "").toString();
+
+    // Wire up proxy agent and TLS options
+    const { httpAgent, httpsAgent } = createAxiosAgents(
+      requestConfig.url,
+      opts.insecure,
+      opts.caCert,
+      opts.proxy
+    );
+
+    const effectiveTimeout =
+      opts.timeout !== undefined ? opts.timeout : DEFAULT_REQUEST_TIMEOUT_MS;
+
+    const axiosConfig = {
+      ...requestConfig,
+      httpAgent,
+      httpsAgent,
+      // Disable axios's own proxy handling – our agent already handles it
+      proxy: false as const,
+      ...(effectiveTimeout > 0 ? { timeout: effectiveTimeout } : {}),
+    };
+
+    const baseResponse = await axios(axiosConfig);
+    const { config } = baseResponse;
+
+    const end = hrtime(start);
+    const duration = getDurationInSeconds(end);
+    const responseTime = duration * 1000;
+
+    const transformedHeaders: { key: string; value: string }[] = [];
+    if (baseResponse.headers) {
+      for (const [key, value] of Object.entries(baseResponse.headers)) {
+        if (value !== undefined) {
+          transformedHeaders.push({
+            key,
+            value: Array.isArray(value) ? value.join(", ") : String(value),
+          });
+        }
+      }
+    }
+
+    const runnerResponse: RequestRunnerResponse = {
+      endpoint: getRequest.endpoint(config.url),
+      method: getRequest.method(config.method),
+      body: baseResponse.data,
+      responseTime,
+      duration,
+      status: baseResponse.status,
+      statusText: baseResponse.statusText,
+      headers: transformedHeaders,
+    };
+
+    return E.right(runnerResponse);
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      // HTTP-level error (server sent a response with an error status)
+      if (e.response) {
+        const { data, status, statusText, headers } = e.response;
+        const transformedHeaders: { key: string; value: string }[] = [];
+        if (headers) {
+          for (const [key, value] of Object.entries(headers)) {
+            if (value !== undefined) {
+              transformedHeaders.push({
+                key,
+                value: Array.isArray(value) ? value.join(", ") : String(value),
+              });
+            }
+          }
+        }
+        const end = hrtime(start);
+        const duration = getDurationInSeconds(end);
+        return E.right(<RequestRunnerResponse>{
+          endpoint: e.config?.url ?? "",
+          method: getRequest.method(e.config?.method),
+          body: data,
+          statusText,
+          status,
+          headers: transformedHeaders,
+          duration,
+          responseTime: duration * 1000,
+        });
+      }
+
+      // Network / socket-level error — no HTTP response received
+      if (e.request) {
+        const code = (e.cause as NodeJS.ErrnoException | undefined)?.code ?? e.code;
+        const hint = getNetworkErrorHint(code);
+        const baseMsg = e.message ?? "socket hang up";
+        const fullMsg = hint ? `${baseMsg} — ${hint}` : baseMsg;
+        const enrichedError = new Error(fullMsg);
+        return E.left({
+          err: error({ code: "REQUEST_ERROR", data: enrichedError }),
+          isSocketError: true,
+        });
+      }
+    }
+
+    // Unknown error
+    return E.left({
+      err: error({ code: "REQUEST_ERROR", data: E.toError(e) }),
+      isSocketError: false,
+    });
+  }
+};
+
+/**
+ * Performs http request using axios with given requestConfig axios parameters.
+ * Supports proxy agents (HTTP_PROXY/HTTPS_PROXY), TLS options and retry logic.
+ *
  * @param requestConfig The axios request config.
+ * @param opts          Transport behaviour options (timeout, retries, insecure, caCert).
  * @returns If successfully ran, we get runner-response including HTTP response data.
  * Else, HoppCLIError with appropriate error code & data.
  */
 export const requestRunner =
   (
-    requestConfig: RequestConfig
+    requestConfig: RequestConfig,
+    opts: RequestRunnerOptions = {}
   ): TE.TaskEither<HoppCLIError, RequestRunnerResponse> =>
   async () => {
+    const maxRetries = opts.retries ?? DEFAULT_REQUEST_RETRIES;
     const start = hrtime();
+    let lastLeft: { err: HoppCLIError; isSocketError: boolean } | null = null;
 
-    try {
-      // NOTE: Temporary parsing check for request endpoint.
-      requestConfig.url = new URL(requestConfig.url ?? "").toString();
-
-      const baseResponse = await axios(requestConfig);
-      const { config } = baseResponse;
-
-      const end = hrtime(start);
-      const duration = getDurationInSeconds(end);
-      const responseTime = duration * 1000; // Convert seconds to milliseconds
-
-      // Transform axios headers to required format
-      const transformedHeaders: { key: string; value: string }[] = [];
-      if (baseResponse.headers) {
-        for (const [key, value] of Object.entries(baseResponse.headers)) {
-          if (value !== undefined) {
-            transformedHeaders.push({
-              key,
-              value: Array.isArray(value) ? value.join(", ") : String(value),
-            });
-          }
-        }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        // Brief back-off before retry
+        await new Promise<void>((res) => setTimeout(res, 500));
       }
 
-      const runnerResponse: RequestRunnerResponse = {
-        endpoint: getRequest.endpoint(config.url),
-        method: getRequest.method(config.method),
-        body: baseResponse.data,
-        responseTime,
-        duration: duration,
-        status: baseResponse.status,
-        statusText: baseResponse.statusText,
-        headers: transformedHeaders,
-      };
+      const result = await attemptRequest(requestConfig, opts, start);
 
-      return E.right(runnerResponse);
-    } catch (e) {
-      const runnerResponse: RequestRunnerResponse = {
-        endpoint: "",
-        method: "GET",
-        body: {},
-        statusText: responseErrors[400],
-        status: 400,
-        headers: [],
-        duration: 0,
-        responseTime: 0,
-      };
-
-      if (axios.isAxiosError(e)) {
-        runnerResponse.endpoint = e.config?.url ?? "";
-
-        if (e.response) {
-          const { data, status, statusText, headers } = e.response;
-          runnerResponse.body = data;
-          runnerResponse.statusText = statusText;
-          runnerResponse.status = status;
-
-          // Transform axios headers to required format
-          const transformedHeaders: { key: string; value: string }[] = [];
-          if (headers) {
-            for (const [key, value] of Object.entries(headers)) {
-              if (value !== undefined) {
-                transformedHeaders.push({
-                  key,
-                  value: Array.isArray(value)
-                    ? value.join(", ")
-                    : String(value),
-                });
-              }
-            }
-          }
-          runnerResponse.headers = transformedHeaders;
-        } else if (e.request) {
-          return E.left(error({ code: "REQUEST_ERROR", data: E.toError(e) }));
-        }
-
-        const end = hrtime(start);
-        const duration = getDurationInSeconds(end);
-        runnerResponse.duration = duration;
-
-        return E.right(runnerResponse);
+      if (E.isRight(result)) {
+        return result;
       }
 
-      return E.left(error({ code: "REQUEST_ERROR", data: E.toError(e) }));
+      lastLeft = result.left;
+
+      // Only retry on socket-level / transient errors
+      const errData = (result.left.err as { code: string; data?: unknown }).data as NodeJS.ErrnoException | Error | undefined;
+      const errCode = (errData as NodeJS.ErrnoException | undefined)?.code;
+      const isRetryable =
+        result.left.isSocketError && errCode !== undefined && RETRYABLE_ERROR_CODES.has(errCode);
+
+      if (!isRetryable) break;
     }
+
+    return E.left(lastLeft!.err);
   };
 
 /**
@@ -241,6 +328,11 @@ export const processRequest =
       collectionVariables,
       inheritedPreRequestScripts = [],
       inheritedTestScripts = [],
+      timeout,
+      retries,
+      insecure,
+      caCert,
+      proxy,
     } = params;
 
     // Initialising updatedEnvs with given parameter envs, will eventually get updated.
@@ -311,10 +403,19 @@ export const processRequest =
       body: Object(null),
       duration: 0,
     };
+
+    // RC-1/RC-2/RC-3/RC-5: pass transport options (proxy, timeout, retries, TLS)
+    const runnerOpts: RequestRunnerOptions = { timeout, retries, insecure, caCert, proxy };
+
     // Executing request-runner.
     const requestRunnerRes = await delayPromiseFunction<
       E.Either<HoppCLIError, RequestRunnerResponse>
-    >(requestRunner(requestConfig), delay);
+    >(requestRunner(requestConfig, runnerOpts), delay);
+
+    // RC-4: track whether this was a network/socket-level failure so we can
+    // skip running the test script against an empty stub response.
+    let isNetworkLevelFailure = false;
+
     if (E.isLeft(requestRunnerRes)) {
       // Updating report for errors & current result
       report.errors.push(requestRunnerRes.left);
@@ -323,10 +424,23 @@ export const processRequest =
       report.result = false;
 
       printRequestRunner.fail();
+
+      // Determine if this is a socket/network failure (no HTTP response was received)
+      isNetworkLevelFailure = true;
     } else {
       _requestRunnerRes = requestRunnerRes.right;
       report.duration.request = _requestRunnerRes.duration;
       printRequestRunner.success(_requestRunnerRes);
+    }
+
+    // RC-4: Skip the test runner when the request never got a response.
+    // Running scripts against an empty stub body always produces misleading
+    // "TypeError: not a function" cascades that obscure the real REQUEST_ERROR.
+    // The test script will still run for HTTP-level errors (4xx / 5xx) because
+    // those do have a real response body for assertions.
+    if (isNetworkLevelFailure) {
+      result.report = report;
+      return result;
     }
 
     const testScriptParams = getTestScriptParams(
