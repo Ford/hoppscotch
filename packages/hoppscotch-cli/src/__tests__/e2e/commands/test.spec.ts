@@ -1514,4 +1514,80 @@ describe("hopp test [options] <file_path_or_id>", { timeout: 100000 }, () => {
       expect(result.error).toBeNull();
     });
   });
+
+  // ── --timeout flag ──────────────────────────────────────────────────────────
+
+  describe("Test `hopp test <file_path_or_id> --timeout <ms>` command:", () => {
+    describe("Argument parsing", () => {
+      test("Errors with the code `INVALID_ARGUMENT` on not supplying a timeout value", async () => {
+        const args = `${VALID_TEST_ARGS} --timeout`;
+        const { stderr } = await runCLI(args);
+        expect(getErrorCode(stderr)).toBe<HoppErrorCode>("INVALID_ARGUMENT");
+      });
+    });
+
+    test("Fails with REQUEST_ERROR when --timeout 1ms is too short for any real HTTP connection", async () => {
+      // 1ms is shorter than any real TCP connection setup — guaranteed ECONNABORTED
+      const args = `${VALID_TEST_ARGS} --timeout 1`;
+      const { error, stdout, stderr } = await runCLI(args);
+
+      // CLI must exit with code 1
+      expect(error).not.toBeNull();
+      expect(error?.code).toBe(1);
+
+      // OUTPUT must contain REQUEST_ERROR (timeout fires before response)
+      const combined = stdout + stderr;
+      expect(combined).toMatch(/REQUEST_ERROR/);
+
+      // RC-4 regression guard: timeout must NOT cascade into TEST_SCRIPT_ERROR
+      expect(combined).not.toMatch(/TEST_SCRIPT_ERROR/);
+    });
+
+    test("Succeeds with a generous timeout (--timeout 10000)", async () => {
+      const args = `${VALID_TEST_ARGS} --timeout 10000`;
+      const result = await runCLIWithNetworkRetry(args);
+      if (result === null) return;
+      expect(result.error).toBeNull();
+    });
+
+    test("Succeeds with --timeout 0 (no timeout — unlimited wait)", async () => {
+      const args = `${VALID_TEST_ARGS} --timeout 0`;
+      const result = await runCLIWithNetworkRetry(args);
+      if (result === null) return;
+      expect(result.error).toBeNull();
+    });
+  });
+
+  // ── --retries flag ──────────────────────────────────────────────────────────
+
+  describe("Test `hopp test <file_path_or_id> --retries <n>` command:", () => {
+    describe("Argument parsing", () => {
+      test("Errors with the code `INVALID_ARGUMENT` on not supplying a retries value", async () => {
+        const args = `${VALID_TEST_ARGS} --retries`;
+        const { stderr } = await runCLI(args);
+        expect(getErrorCode(stderr)).toBe<HoppErrorCode>("INVALID_ARGUMENT");
+      });
+    });
+
+    test("Succeeds with --retries 0 (retries disabled — one attempt only)", async () => {
+      const args = `${VALID_TEST_ARGS} --retries 0`;
+      const result = await runCLIWithNetworkRetry(args);
+      if (result === null) return;
+      expect(result.error).toBeNull();
+    });
+
+    test("Succeeds with --retries 1 (one automatic retry on transient errors)", async () => {
+      const args = `${VALID_TEST_ARGS} --retries 1`;
+      const result = await runCLIWithNetworkRetry(args);
+      if (result === null) return;
+      expect(result.error).toBeNull();
+    });
+
+    test("Succeeds with --retries 3 (up to three retries on transient errors)", async () => {
+      const args = `${VALID_TEST_ARGS} --retries 3`;
+      const result = await runCLIWithNetworkRetry(args);
+      if (result === null) return;
+      expect(result.error).toBeNull();
+    });
+  });
 });

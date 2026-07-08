@@ -18,10 +18,11 @@ export const DEFAULT_DURATION_PRECISION: number = 3;
 export const DEFAULT_REQUEST_TIMEOUT_MS: number = 30_000;
 
 /**
- * Default number of retries on transient network errors (ECONNRESET, etc.).
- * Can be overridden via the --retries CLI option.
+ * Default number of retries on transient network errors (ECONNRESET, ECONNABORTED, etc.).
+ * The default of 1 means each request gets one automatic retry before failing.
+ * Can be overridden via the --retries CLI option (use --retries 0 to disable).
  */
-export const DEFAULT_REQUEST_RETRIES: number = 0;
+export const DEFAULT_REQUEST_RETRIES: number = 1;
 
 /**
  * Node.js error codes that are considered transient and safe to retry.

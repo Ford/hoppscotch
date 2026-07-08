@@ -161,6 +161,11 @@ export const getNetworkErrorHint = (code: string | undefined): string => {
         "(HTTP_PROXY / HTTPS_PROXY env vars). If the host is in NO_PROXY but " +
         "requires a proxy, remove it from NO_PROXY."
       );
+    case "ECONNABORTED":
+      return (
+        "request timed out — the server did not respond within the allowed time. " +
+        "Use --timeout <ms> to increase it, or --timeout 0 to disable the timeout."
+      );
     case "ECONNREFUSED":
       return "connection refused — is the target server running and reachable?";
     case "ETIMEDOUT":

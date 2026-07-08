@@ -86,7 +86,7 @@ program
   )
   .option(
     "--retries <n>",
-    "number of retries on transient socket errors (default: 0)",
+    "number of retries on transient socket errors (default: 1, use 0 to disable)",
     parseInt
   )
   .option(

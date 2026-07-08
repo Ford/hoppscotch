@@ -23,6 +23,8 @@ vi.mock("../../utils/http-agent", () => ({
   getNetworkErrorHint: vi.fn((code: string | undefined) => {
     if (code === "ECONNRESET")
       return "socket hang up — check proxy settings (HTTP_PROXY / HTTPS_PROXY env vars). If the host is in NO_PROXY but requires a proxy, remove it from NO_PROXY.";
+    if (code === "ECONNABORTED")
+      return "request timed out — the server did not respond within the allowed time. Use --timeout <ms> to increase it, or --timeout 0 to disable the timeout.";
     return "";
   }),
 }));
@@ -197,12 +199,36 @@ describe("requestRunner", () => {
     mockAxiosFn.isAxiosError.mockReturnValue(true);
     mockAxiosFn.mockRejectedValueOnce(makeSocketError("ECONNRESET"));
 
-    const result = await requestRunner(SAMPLE_CONFIG)();
+    // retries: 0 so the FIRST (and only) attempt's error message is preserved in lastLeft
+    const result = await requestRunner(SAMPLE_CONFIG, { retries: 0, retryDelay: 0 })();
 
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       const msg = (result.left as any).data?.message ?? "";
       expect(msg).toMatch(/proxy/i);
+    }
+  });
+
+  it("returns Left with REQUEST_ERROR for ECONNABORTED (request timeout)", async () => {
+    mockAxiosFn.isAxiosError.mockReturnValue(true);
+    mockAxiosFn.mockRejectedValueOnce(makeSocketError("ECONNABORTED"));
+
+    const result = await requestRunner(SAMPLE_CONFIG, { retries: 0, retryDelay: 0 })();
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left.code).toBe("REQUEST_ERROR");
+  });
+
+  it("enriches the ECONNABORTED error message with a timeout hint", async () => {
+    mockAxiosFn.isAxiosError.mockReturnValue(true);
+    mockAxiosFn.mockRejectedValueOnce(makeSocketError("ECONNABORTED"));
+
+    const result = await requestRunner(SAMPLE_CONFIG, { retries: 0, retryDelay: 0 })();
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      const msg = (result.left as any).data?.message ?? "";
+      expect(msg).toMatch(/timed out|timeout/i);
     }
   });
 

@@ -14,7 +14,7 @@ vi.mock("proxy-agent", () => ({
 
 // Import mocked module AFTER vi.mock() to get the typed mock reference
 import { ProxyAgent } from "proxy-agent";
-import { isNoProxy, createAxiosAgents } from "../../utils/http-agent";
+import { isNoProxy, createAxiosAgents, getNetworkErrorHint } from "../../utils/http-agent";
 
 // Cast to vi mock type so we can call .mockClear(), inspect .mock.calls, etc.
 const MockProxyAgent = ProxyAgent as unknown as ReturnType<typeof vi.fn>;
@@ -223,6 +223,55 @@ describe("createAxiosAgents", () => {
   it("sets rejectUnauthorized=true by default (secure)", () => {
     const { httpsAgent } = createAxiosAgents("https://example.com");
     expect((httpsAgent as any).options?.rejectUnauthorized).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("getNetworkErrorHint", () => {
+  it("returns a proxy hint for ECONNRESET (socket hang up)", () => {
+    const hint = getNetworkErrorHint("ECONNRESET");
+    expect(hint).toMatch(/proxy/i);
+    expect(hint.length).toBeGreaterThan(0);
+  });
+
+  it("returns a timeout hint for ECONNABORTED (request timed out)", () => {
+    const hint = getNetworkErrorHint("ECONNABORTED");
+    expect(hint).toMatch(/timed out|timeout/i);
+    expect(hint).toMatch(/--timeout/);
+    expect(hint.length).toBeGreaterThan(0);
+  });
+
+  it("returns a refused hint for ECONNREFUSED", () => {
+    const hint = getNetworkErrorHint("ECONNREFUSED");
+    expect(hint).toMatch(/refused/i);
+  });
+
+  it("returns a timeout hint for ETIMEDOUT", () => {
+    const hint = getNetworkErrorHint("ETIMEDOUT");
+    expect(hint).toMatch(/timed out/i);
+  });
+
+  it("returns a DNS hint for ENOTFOUND", () => {
+    const hint = getNetworkErrorHint("ENOTFOUND");
+    expect(hint).toMatch(/dns|hostname/i);
+  });
+
+  it("returns a TLS hint for EPROTO", () => {
+    const hint = getNetworkErrorHint("EPROTO");
+    expect(hint).toMatch(/tls|ssl|certificate/i);
+  });
+
+  it("returns a TLS hint for CERT_HAS_EXPIRED", () => {
+    const hint = getNetworkErrorHint("CERT_HAS_EXPIRED");
+    expect(hint).toMatch(/--insecure|--ca-cert/i);
+  });
+
+  it("returns an empty string for an unknown error code", () => {
+    expect(getNetworkErrorHint("SOME_UNKNOWN_CODE")).toBe("");
+  });
+
+  it("returns an empty string for undefined", () => {
+    expect(getNetworkErrorHint(undefined)).toBe("");
   });
 });
 
