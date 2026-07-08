@@ -116,6 +116,11 @@ export interface RequestRunnerOptions {
    * in NO_PROXY but is only reachable through the proxy.
    */
   proxy?: string;
+  /**
+   * Delay in milliseconds between retry attempts. Default: 500.
+   * Set to 0 in tests to avoid real waits.
+   */
+  retryDelay?: number;
 }
 
 /**
@@ -220,7 +225,8 @@ const attemptRequest = async (
         const hint = getNetworkErrorHint(code);
         const baseMsg = e.message ?? "socket hang up";
         const fullMsg = hint ? `${baseMsg} — ${hint}` : baseMsg;
-        const enrichedError = new Error(fullMsg);
+        // Preserve the error code so the retry logic can inspect it
+        const enrichedError = Object.assign(new Error(fullMsg), { code });
         return E.left({
           err: error({ code: "REQUEST_ERROR", data: enrichedError }),
           isSocketError: true,
@@ -257,8 +263,11 @@ export const requestRunner =
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
-        // Brief back-off before retry
-        await new Promise<void>((res) => setTimeout(res, 500));
+        // Back-off between retries (0ms in tests via retryDelay option)
+        const delay = opts.retryDelay !== undefined ? opts.retryDelay : 500;
+        if (delay > 0) {
+          await new Promise<void>((res) => setTimeout(res, delay));
+        }
       }
 
       const result = await attemptRequest(requestConfig, opts, start);
