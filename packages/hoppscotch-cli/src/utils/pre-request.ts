@@ -11,6 +11,7 @@ import {
   parseTemplateStringE,
 } from "@hoppscotch/data";
 import { runPreRequestScript } from "@hoppscotch/js-sandbox/node";
+import type { HoppFetchHook } from "@hoppscotch/js-sandbox";
 import { AwsV4Signer } from "aws4fetch";
 import * as A from "fp-ts/Array";
 import * as E from "fp-ts/Either";
@@ -47,6 +48,10 @@ import { combineScriptsWithIIFE, filterValidScripts } from "@hoppscotch/js-sandb
  * @param legacySandbox Whether to use the legacy sandbox.
  * @param collectionVariables Collection variables to use.
  * @param inheritedPreRequestScripts Pre-request scripts inherited from parent collections.
+ * @param hoppFetchHook Optional shared HoppFetchHook instance.  When provided (injected by
+ *   collectionsRunner), the same axios instance and CookieJar are reused across all requests in
+ *   the run instead of creating a new socket pool per request.  If omitted, a new hook is created
+ *   for this request (legacy per-request behaviour).
  * @returns EffectiveHoppRESTRequest that includes parsed ENV variables with in
  * request OR HoppCLIError with error code and related information.
  */
@@ -55,13 +60,16 @@ export const preRequestScriptRunner = (
   envs: HoppEnvs,
   legacySandbox: boolean,
   collectionVariables?: HoppCollectionVariable[],
-  inheritedPreRequestScripts: string[] = []
+  inheritedPreRequestScripts: string[] = [],
+  hoppFetchHook?: HoppFetchHook
 ): TE.TaskEither<
   HoppCLIError,
   { effectiveRequest: EffectiveHoppRESTRequest } & { updatedEnvs: HoppEnvs }
 > => {
   const experimentalScriptingSandbox = !legacySandbox;
-  const hoppFetchHook = createHoppFetchHook();
+  // Use the provided shared hook or fall back to creating a new one.
+  // The shared hook avoids allocating a fresh axios.create() + CookieJar per request.
+  const resolvedHoppFetchHook = hoppFetchHook ?? createHoppFetchHook();
 
   // Pre-request order: root → request.
   const combinedScript = combineScriptsWithIIFE(
@@ -80,7 +88,7 @@ export const preRequestScriptRunner = (
         experimentalScriptingSandbox,
         request,
         cookies: null,
-        hoppFetchHook,
+        hoppFetchHook: resolvedHoppFetchHook,
       })
     ),
     TE.map(({ updatedEnvs, updatedRequest }) => {

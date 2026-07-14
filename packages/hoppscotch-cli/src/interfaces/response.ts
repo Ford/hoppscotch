@@ -47,6 +47,12 @@ export interface TestScriptParams {
   envs: HoppEnvs;
   legacySandbox: boolean;
   inheritedTestScripts?: string[];
+  /**
+   * Shared HoppFetchHook created once per collection run.
+   * When provided, testRunner uses this instead of creating a new axios instance
+   * per test-script execution, preventing per-request socket pool accumulation.
+   */
+  sharedHoppFetchHook?: import("@hoppscotch/js-sandbox").HoppFetchHook;
 }
 
 /**

@@ -1,0 +1,28 @@
+{
+  "v": 6,
+  "name": "Timeout Demo — times out immediately",
+  "folders": [],
+  "requests": [
+    {
+      "v": "3",
+      "name": "GET /delay/5 (will timeout in 500 ms)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/delay/5",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    }
+  ],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}
+

@@ -1,4 +1,5 @@
 import { HoppCollection, HoppRESTRequest } from "@hoppscotch/data";
+import type { HoppFetchHook } from "@hoppscotch/js-sandbox";
 import chalk from "chalk";
 import { log } from "console";
 import * as A from "fp-ts/Array";
@@ -35,6 +36,8 @@ import {
 } from "./request";
 import { getTestMetrics } from "./test";
 import { filterValidScripts } from "@hoppscotch/js-sandbox/scripting";
+import { createHoppFetchHook } from "./hopp-fetch";
+import { createAxiosAgents } from "./http-agent";
 
 const { WARN, FAIL, INFO } = exceptionColors;
 
@@ -72,6 +75,14 @@ export const collectionsRunner = async (
 
   const originalSelectedEnvs = [...envs.selected];
 
+  // ── Story 1 fix: create shared instances ONCE per run ──────────────────────
+  // A single HoppFetchHook means one axios.create() + CookieJar for the whole run.
+  // A single set of agents means one ProxyAgent/http.Agent socket pool for the whole run.
+  // Both prevent the abandoned socket pool accumulation and RST-driven hangups.
+  const sharedHoppFetchHook = createHoppFetchHook();
+  const sharedAgents = createAxiosAgents(undefined, insecure, caCert, proxy);
+  // ───────────────────────────────────────────────────────────────────────────
+
   for (let count = 0; count < resolvedIterationCount; count++) {
     if (resolvedIterationCount > 1) {
       log(INFO(`\nIteration: ${count + 1}/${resolvedIterationCount}`));
@@ -106,7 +117,7 @@ export const collectionsRunner = async (
         legacySandbox,
         [],
         [],
-        { timeout, retries, insecure, caCert, proxy }
+        { timeout, retries, insecure, caCert, proxy, sharedHoppFetchHook, sharedAgents }
       );
     }
   }
@@ -120,6 +131,10 @@ type TransportOpts = {
   insecure?: boolean;
   caCert?: string;
   proxy?: string;
+  /** Shared HoppFetchHook instance created once per run (Story 1 fix). */
+  sharedHoppFetchHook?: HoppFetchHook;
+  /** Shared HTTP/HTTPS agents created once per run (Story 1 fix). */
+  sharedAgents?: ReturnType<typeof createAxiosAgents>;
 };
 
 const processCollection = async (
@@ -162,7 +177,13 @@ const processCollection = async (
       collectionVariables,
       inheritedPreRequestScripts,
       inheritedTestScripts,
-      ...transportOpts,
+      timeout: transportOpts.timeout,
+      retries: transportOpts.retries,
+      insecure: transportOpts.insecure,
+      caCert: transportOpts.caCert,
+      proxy: transportOpts.proxy,
+      sharedHoppFetchHook: transportOpts.sharedHoppFetchHook,
+      sharedAgents: transportOpts.sharedAgents,
     };
 
     // Request processing initiated message.

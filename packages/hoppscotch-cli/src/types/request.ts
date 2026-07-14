@@ -4,6 +4,7 @@ import {
   HoppCollectionVariable,
   HoppRESTRequest,
 } from "@hoppscotch/data";
+import type { HoppFetchHook } from "@hoppscotch/js-sandbox";
 import { z } from "zod";
 
 import { TestReport } from "../interfaces/response";
@@ -58,4 +59,16 @@ export type ProcessRequestParams = {
    * Force a specific proxy URL, bypassing NO_PROXY (equivalent to curl --proxy).
    */
   proxy?: string;
+  /**
+   * Shared HoppFetchHook instance created once per collection run.
+   * Prevents a new axios.create() + CookieJar from being allocated for every
+   * pre-request script execution, which would create abandoned socket pools.
+   */
+  sharedHoppFetchHook?: HoppFetchHook;
+  /**
+   * Shared HTTP/HTTPS agents created once per collection run.
+   * Prevents a new ProxyAgent from being created on every request (and every
+   * retry attempt), which would create abandoned socket pools causing RST hangups.
+   */
+  sharedAgents?: { httpAgent: import("http").Agent; httpsAgent: import("https").Agent };
 };

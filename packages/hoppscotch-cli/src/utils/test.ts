@@ -59,7 +59,10 @@ export const testRunner = (
             };
 
             const experimentalScriptingSandbox = !legacySandbox;
-            const hoppFetchHook = createHoppFetchHook();
+            // Use the provided shared hook or fall back to creating a new one.
+            // The shared hook avoids a fresh axios.create() + CookieJar per test-script execution.
+            const hoppFetchHook =
+              testScriptData.sharedHoppFetchHook ?? createHoppFetchHook();
 
             // Test order: request → root (reverse of pre-request).
             const combinedScript = combineScriptsWithIIFE(
@@ -172,6 +175,9 @@ export const testDescriptorParser = (
  * @param reqRunnerRes Provides response data.
  * @param request Provides test-script data.
  * @param envs Current ENVs state with-in collections-runner.
+ * @param legacySandbox Whether to use the legacy sandbox.
+ * @param inheritedTestScripts Inherited test scripts from parent collections.
+ * @param sharedHoppFetchHook Optional shared HoppFetchHook for the collection run.
  * @returns Object to be passed as parameter for test-runner
  */
 export const getTestScriptParams = (
@@ -179,7 +185,8 @@ export const getTestScriptParams = (
   request: HoppRESTRequest,
   envs: HoppEnvs,
   legacySandbox: boolean,
-  inheritedTestScripts: string[] = []
+  inheritedTestScripts: string[] = [],
+  sharedHoppFetchHook?: import("@hoppscotch/js-sandbox").HoppFetchHook
 ) => {
   const testScriptParams: TestScriptParams = {
     request,
@@ -193,6 +200,7 @@ export const getTestScriptParams = (
     envs,
     legacySandbox,
     inheritedTestScripts,
+    sharedHoppFetchHook,
   };
   return testScriptParams;
 };

@@ -121,6 +121,13 @@ export interface RequestRunnerOptions {
    * Set to 0 in tests to avoid real waits.
    */
   retryDelay?: number;
+  /**
+   * Pre-created HTTP/HTTPS agents shared across all requests in a collection run.
+   * When provided, agent creation is skipped inside the retry loop, preventing
+   * per-attempt ProxyAgent socket pool accumulation.
+   * Created once by collectionsRunner and threaded through processRequest.
+   */
+  sharedAgents?: ReturnType<typeof createAxiosAgents>;
 }
 
 /**
@@ -128,31 +135,28 @@ export interface RequestRunnerOptions {
  * (Right) or a structured error (Left).  Network-level socket errors are
  * distinguished from HTTP-level error responses so callers can decide whether
  * to retry or skip dependent scripts.
+ *
+ * Agents are created once per request in requestRunner (outside the retry loop)
+ * and passed in here so that each retry re-uses the same socket pool rather than
+ * creating a new one that is immediately abandoned.
  */
 const attemptRequest = async (
   requestConfig: RequestConfig,
   opts: RequestRunnerOptions,
-  start: ReturnType<typeof hrtime>
+  start: ReturnType<typeof hrtime>,
+  agents: ReturnType<typeof createAxiosAgents>
 ): Promise<E.Either<{ err: HoppCLIError; isSocketError: boolean }, RequestRunnerResponse>> => {
   try {
     // NOTE: Temporary parsing check for request endpoint.
     requestConfig.url = new URL(requestConfig.url ?? "").toString();
-
-    // Wire up proxy agent and TLS options
-    const { httpAgent, httpsAgent } = createAxiosAgents(
-      requestConfig.url,
-      opts.insecure,
-      opts.caCert,
-      opts.proxy
-    );
 
     const effectiveTimeout =
       opts.timeout !== undefined ? opts.timeout : DEFAULT_REQUEST_TIMEOUT_MS;
 
     const axiosConfig = {
       ...requestConfig,
-      httpAgent,
-      httpsAgent,
+      httpAgent: agents.httpAgent,
+      httpsAgent: agents.httpsAgent,
       // Disable axios's own proxy handling – our agent already handles it
       proxy: false as const,
       ...(effectiveTimeout > 0 ? { timeout: effectiveTimeout } : {}),
@@ -246,6 +250,11 @@ const attemptRequest = async (
  * Performs http request using axios with given requestConfig axios parameters.
  * Supports proxy agents (HTTP_PROXY/HTTPS_PROXY), TLS options and retry logic.
  *
+ * Agents (ProxyAgent / http.Agent / https.Agent) are created ONCE per request,
+ * before the retry loop, to prevent per-attempt socket pool accumulation.
+ * Callers may pass `opts.sharedAgents` (created once per collection run in
+ * collectionsRunner) to further reduce agent churn across requests.
+ *
  * @param requestConfig The axios request config.
  * @param opts          Transport behaviour options (timeout, retries, insecure, caCert).
  * @returns If successfully ran, we get runner-response including HTTP response data.
@@ -261,6 +270,22 @@ export const requestRunner =
     const start = hrtime();
     let lastLeft: { err: HoppCLIError; isSocketError: boolean } | null = null;
 
+    // Resolve URL once so agent creation uses the correct hostname for NO_PROXY checks.
+    // An invalid URL will be caught by attemptRequest's own try/catch.
+    let resolvedUrl: string | undefined;
+    try {
+      resolvedUrl = new URL(requestConfig.url ?? "").toString();
+    } catch {
+      resolvedUrl = undefined;
+    }
+
+    // Create agents ONCE per request — outside the retry loop — to avoid
+    // creating an abandoned ProxyAgent socket pool on every attempt.
+    // sharedAgents (injected by collectionsRunner) are reused across all requests.
+    const agents: ReturnType<typeof createAxiosAgents> =
+      opts.sharedAgents ??
+      createAxiosAgents(resolvedUrl, opts.insecure, opts.caCert, opts.proxy);
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
         // Back-off between retries (0ms in tests via retryDelay option)
@@ -270,7 +295,7 @@ export const requestRunner =
         }
       }
 
-      const result = await attemptRequest(requestConfig, opts, start);
+      const result = await attemptRequest(requestConfig, opts, start, agents);
 
       if (E.isRight(result)) {
         return result;
@@ -342,6 +367,8 @@ export const processRequest =
       insecure,
       caCert,
       proxy,
+      sharedHoppFetchHook,
+      sharedAgents,
     } = params;
 
     // Initialising updatedEnvs with given parameter envs, will eventually get updated.
@@ -381,7 +408,8 @@ export const processRequest =
       processedEnvs,
       legacySandbox ?? false,
       collectionVariables,
-      inheritedPreRequestScripts
+      inheritedPreRequestScripts,
+      sharedHoppFetchHook
     )();
     if (E.isLeft(preRequestRes)) {
       printPreRequestRunner.fail();
@@ -414,7 +442,7 @@ export const processRequest =
     };
 
     // RC-1/RC-2/RC-3/RC-5: pass transport options (proxy, timeout, retries, TLS)
-    const runnerOpts: RequestRunnerOptions = { timeout, retries, insecure, caCert, proxy };
+    const runnerOpts: RequestRunnerOptions = { timeout, retries, insecure, caCert, proxy, sharedAgents };
 
     // Executing request-runner.
     const requestRunnerRes = await delayPromiseFunction<
@@ -457,7 +485,8 @@ export const processRequest =
       effectiveRequest,
       updatedEnvs,
       legacySandbox ?? false,
-      inheritedTestScripts
+      inheritedTestScripts,
+      sharedHoppFetchHook
     );
 
     // Executing test-runner.

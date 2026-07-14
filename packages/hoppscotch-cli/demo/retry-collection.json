@@ -1,0 +1,28 @@
+{
+  "v": 6,
+  "name": "Retry Demo — ENOTFOUND triggers auto-retry",
+  "folders": [],
+  "requests": [
+    {
+      "v": "3",
+      "name": "GET non-existent host (triggers ENOTFOUND retries)",
+      "method": "GET",
+      "endpoint": "https://this-host-does-not-exist-hopp-demo.invalid/test",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    }
+  ],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}
+

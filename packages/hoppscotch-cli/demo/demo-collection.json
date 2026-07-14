@@ -1,0 +1,57 @@
+{
+  "v": 6,
+  "name": "Demo Collection — Story 1 & 2",
+  "folders": [],
+  "requests": [
+    {
+      "v": "3",
+      "name": "GET /get (httpbin)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/get",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "pw.env.set(\"requestId\", \"demo-123\");",
+      "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    },
+    {
+      "v": "3",
+      "name": "POST /post with JSON body (httpbin)",
+      "method": "POST",
+      "endpoint": "https://httpbin.org/post",
+      "params": [],
+      "headers": [{ "key": "Content-Type", "value": "application/json", "active": true, "description": "" }],
+      "preRequestScript": "pw.env.set(\"payload\", \"story1\");",
+      "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": "application/json", "body": "{\"demo\": \"shared-socket-pool\"}" },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    },
+    {
+      "v": "3",
+      "name": "GET /delay/1 (slow endpoint — tests 30 s default timeout)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/delay/1",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    }
+  ],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}
