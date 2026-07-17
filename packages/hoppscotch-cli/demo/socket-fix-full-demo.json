@@ -1,0 +1,125 @@
+{
+  "v": 6,
+  "name": "Socket Hangup Fix — Full Demo",
+  "folders": [
+    {
+      "v": 1,
+      "name": "1. Baseline — shared keep-alive socket pool",
+      "folders": [],
+      "requests": [
+        {
+          "v": "3",
+          "name": "GET /get (postman-echo) — socket reused across requests",
+          "method": "GET",
+          "endpoint": "https://postman-echo.com/get",
+          "params": [],
+          "headers": [],
+          "preRequestScript": "pw.env.set(\"requestId\", \"socket-fix-demo\");",
+          "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        },
+        {
+          "v": "3",
+          "name": "POST /post — shared socket pool still alive",
+          "method": "POST",
+          "endpoint": "https://postman-echo.com/post",
+          "params": [],
+          "headers": [
+            { "key": "Content-Type", "value": "application/json", "active": true, "description": "" }
+          ],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });\npw.test(\"Echo contains our payload\", () => { pw.expect(pw.response.body.data.fix).toBe(\"socket-hangup-fix\"); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": { "contentType": "application/json", "body": "{\"fix\": \"socket-hangup-fix\", \"keepAlive\": true}" },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    },
+    {
+      "v": 1,
+      "name": "2. Auth — Bearer token vs. no token",
+      "folders": [],
+      "requests": [
+        {
+          "v": "3",
+          "name": "GET /headers — WITH Bearer token (Authorization header echoed back)",
+          "method": "GET",
+          "endpoint": "https://postman-echo.com/headers",
+          "params": [],
+          "headers": [],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"Status 200 — request accepted\", () => { pw.expect(pw.response.status).toBe(200); });\npw.test(\"Authorization header was sent and contains Bearer\", () => { pw.expect(pw.response.body.headers.authorization).toInclude(\"Bearer\"); });",
+          "auth": { "authType": "bearer", "authActive": true, "token": "my-super-secret-token" },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        },
+        {
+          "v": "3",
+          "name": "GET /headers — WITHOUT token (no Authorization header)",
+          "method": "GET",
+          "endpoint": "https://postman-echo.com/headers",
+          "params": [],
+          "headers": [],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"Status 200\", () => { pw.expect(pw.response.status).toBe(200); });\npw.test(\"No Authorization header sent\", () => { pw.expect(pw.response.body.headers.authorization).toBeType(\"undefined\"); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    },
+    {
+      "v": 1,
+      "name": "3. Retry — ECONNRESET auto-retry (the fix)",
+      "folders": [],
+      "requests": [
+        {
+          "v": "3",
+          "name": "GET /delay/2 (postman-echo) — slow endpoint, socket survives retry",
+          "method": "GET",
+          "endpoint": "https://postman-echo.com/delay/2",
+          "params": [],
+          "headers": [],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"Status is 200 (survived retry)\", () => { pw.expect(pw.response.status).toBe(200); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    }
+  ],
+  "requests": [],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}

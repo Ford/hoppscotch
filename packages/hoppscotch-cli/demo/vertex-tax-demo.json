@@ -1,0 +1,126 @@
+{
+  "v": 6,
+  "name": "Vertex CalculateTax — Auth Demo (Socket Fix)",
+  "folders": [
+    {
+      "v": 1,
+      "name": "1. No Auth — expect 4xx",
+      "folders": [],
+      "requests": [
+        {
+          "v": "6",
+          "name": "POST CalculateTax90 — no credentials (bare SOAP envelope)",
+          "method": "POST",
+          "endpoint": "https://ford3.na1.ondemand.vertexinc.com/vertex-ws/services/CalculateTax90",
+          "params": [],
+          "headers": [
+            { "key": "Content-Type", "value": "text/xml; charset=utf-8", "active": true, "description": "" },
+            { "key": "SOAPAction", "value": "\"\"", "active": true, "description": "" }
+          ],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"No socket hang up — server responded\", () => { pw.expect(pw.response.status).toBeLevel5xx(); });\npw.test(\"500 SOAP fault — no credentials, no auth header\", () => { pw.expect(pw.response.status).toBe(500); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": {
+            "contentType": "text/xml",
+            "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Header/><soapenv:Body/></soapenv:Envelope>"
+          },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        },
+        {
+          "v": "6",
+          "name": "GET CalculateTax90 — no auth + wrong method (expect 405)",
+          "method": "GET",
+          "endpoint": "https://ford3.na1.ondemand.vertexinc.com/vertex-ws/services/CalculateTax90",
+          "params": [],
+          "headers": [],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"405 Method Not Allowed — GET on a SOAP endpoint\", () => { pw.expect(pw.response.status).toBe(405); });",
+          "auth": { "authType": "none", "authActive": false },
+          "body": { "contentType": null, "body": null },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    },
+    {
+      "v": 1,
+      "name": "2. Wrong Bearer Token — expect 4xx",
+      "folders": [],
+      "requests": [
+        {
+          "v": "6",
+          "name": "POST CalculateTax90 — invalid Bearer token",
+          "method": "POST",
+          "endpoint": "https://ford3.na1.ondemand.vertexinc.com/vertex-ws/services/CalculateTax90",
+          "params": [],
+          "headers": [
+            { "key": "Content-Type", "value": "text/xml; charset=utf-8", "active": true, "description": "" },
+            { "key": "SOAPAction", "value": "\"\"", "active": true, "description": "" }
+          ],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"401 Unauthorized — invalid Bearer token rejected\", () => { pw.expect(pw.response.status).toBe(401); });",
+          "auth": { "authType": "bearer", "authActive": true, "token": "invalid-token-12345" },
+          "body": {
+            "contentType": "text/xml",
+            "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Header/><soapenv:Body/></soapenv:Envelope>"
+          },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    },
+    {
+      "v": 1,
+      "name": "3. Basic Auth — wrong credentials (expect 4xx)",
+      "folders": [],
+      "requests": [
+        {
+          "v": "6",
+          "name": "POST CalculateTax90 — Basic Auth with fake credentials",
+          "method": "POST",
+          "endpoint": "https://ford3.na1.ondemand.vertexinc.com/vertex-ws/services/CalculateTax90",
+          "params": [],
+          "headers": [
+            { "key": "Content-Type", "value": "text/xml; charset=utf-8", "active": true, "description": "" },
+            { "key": "SOAPAction", "value": "\"\"", "active": true, "description": "" }
+          ],
+          "preRequestScript": "",
+          "testScript": "pw.test(\"401 Unauthorized — wrong Basic Auth credentials rejected\", () => { pw.expect(pw.response.status).toBe(401); });",
+          "auth": { "authType": "basic", "authActive": true, "username": "demo_user", "password": "wrong_password" },
+          "body": {
+            "contentType": "text/xml",
+            "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Header/><soapenv:Body/></soapenv:Envelope>"
+          },
+          "requestVariables": [],
+          "operationId": null,
+          "responses": {}
+        }
+      ],
+      "headers": [],
+      "auth": { "authType": "none", "authActive": false },
+      "variables": [],
+      "preRequestScript": "",
+      "testScript": ""
+    }
+  ],
+  "requests": [],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}

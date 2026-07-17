@@ -1,0 +1,58 @@
+{
+  "v": 6,
+  "name": "Auth Demo — Bearer token vs No token",
+  "folders": [],
+  "requests": [
+    {
+      "v": "3",
+      "name": "GET /bearer — with valid Bearer token (expect 200)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/bearer",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });\npw.test(\"authenticated flag is true\", () => { const body = JSON.parse(pw.response.body); pw.expect(body.authenticated).toBe(true); });",
+      "auth": { "authType": "bearer", "authActive": true, "token": "<<TOKEN>>" },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    },
+    {
+      "v": "3",
+      "name": "GET /bearer — WITHOUT token (expect 401)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/bearer",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Status is 401 (unauthorized)\", () => { pw.expect(pw.response.status).toBe(401); });",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    },
+    {
+      "v": "3",
+      "name": "GET /get — basic GET, no auth needed (sanity check)",
+      "method": "GET",
+      "endpoint": "https://httpbin.org/get",
+      "params": [],
+      "headers": [],
+      "preRequestScript": "pw.env.set(\"requestId\", \"socket-fix-demo\");",
+      "testScript": "pw.test(\"Status is 200\", () => { pw.expect(pw.response.status).toBe(200); });",
+      "auth": { "authType": "none", "authActive": false },
+      "body": { "contentType": null, "body": null },
+      "requestVariables": [],
+      "operationId": null,
+      "responses": {}
+    }
+  ],
+  "headers": [],
+  "auth": { "authType": "none", "authActive": false },
+  "variables": [],
+  "preRequestScript": "",
+  "testScript": ""
+}
+
