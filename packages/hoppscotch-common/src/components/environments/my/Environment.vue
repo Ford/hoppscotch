@@ -62,6 +62,7 @@
             @keyup.e="edit!.$el.click()"
             @keyup.d="duplicate!.$el.click()"
             @keyup.j="exportAsJsonEl!.$el.click()"
+            @keyup.i="environmentIndex === 'Global' ? (showGlobalImportModal = true) : null"
             @keyup.delete="
               !(environmentIndex === 'Global')
                 ? deleteAction!.$el.click()
@@ -109,6 +110,19 @@
               "
             />
             <HoppSmartItem
+              v-if="environmentIndex === 'Global'"
+              :icon="IconUpload"
+              :label="`${t('environment.import_global_variables')}`"
+              :shortcut="['I']"
+              :disabled="duplicateGlobalEnvironmentLoading"
+              @click="
+                () => {
+                  showGlobalImportModal = true
+                  hide()
+                }
+              "
+            />
+            <HoppSmartItem
               v-if="environmentIndex !== 'Global'"
               ref="deleteAction"
               :icon="IconTrash2"
@@ -126,6 +140,10 @@
         </template>
       </tippy>
     </span>
+    <EnvironmentsMyGlobalImport
+      :show="showGlobalImportModal"
+      @hide-modal="showGlobalImportModal = false"
+    />
     <HoppSmartConfirmModal
       :show="confirmRemove"
       :title="`${t('confirm.remove_environment')}`"
@@ -156,6 +174,7 @@ import IconCopy from "~icons/lucide/copy"
 import IconEdit from "~icons/lucide/edit"
 import IconMoreVertical from "~icons/lucide/more-vertical"
 import IconTrash2 from "~icons/lucide/trash-2"
+import IconUpload from "~icons/lucide/upload"
 import { CurrentValueService } from "~/services/current-environment-value.service"
 
 const t = useI18n()
@@ -190,6 +209,7 @@ const emit = defineEmits<{
 }>()
 
 const confirmRemove = ref(false)
+const showGlobalImportModal = ref(false)
 
 const secretEnvironmentService = useService(SecretEnvironmentService)
 const currentEnvironmentValueService = useService(CurrentValueService)
