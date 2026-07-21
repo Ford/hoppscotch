@@ -45,7 +45,7 @@ import { TeamEnvironment } from "~/helpers/teams/TeamEnvironment"
 import { computed } from "vue"
 import { useReadonlyStream } from "~/composables/stream"
 import { initializeDownloadFile } from "~/helpers/import-export/export"
-import { prepareVariablesForExport } from "~/helpers/import-export/export/environment"
+import { transformEnvironmentVariables } from "~/helpers/import-export/export/environment"
 import { environmentsExporter } from "~/helpers/import-export/export/environments"
 import { gistExporter } from "~/helpers/import-export/export/gist"
 import { platform } from "~/platform"
@@ -86,26 +86,12 @@ const isTeamEnvironment = computed(() => {
 
 const environmentJson = computed(() => {
   if (isTeamEnvironment.value && props.teamEnvironments) {
-    return props.teamEnvironments.map(({ environment }) => {
-      const getRuntimeCurrentValue = (key: string) =>
-        currentEnvironmentValueService.getEnvironmentByKey(environment.id, key)
-          ?.currentValue ?? ""
-      return {
-        ...environment,
-        variables: prepareVariablesForExport(environment.variables, getRuntimeCurrentValue),
-      }
-    })
+    return props.teamEnvironments.map(({ environment }) =>
+      transformEnvironmentVariables(environment)
+    )
   }
 
-  return myEnvironments.value.map((environment) => {
-    const getRuntimeCurrentValue = (key: string) =>
-      currentEnvironmentValueService.getEnvironmentByKey(environment.id, key)
-        ?.currentValue ?? ""
-    return {
-      ...environment,
-      variables: prepareVariablesForExport(environment.variables, getRuntimeCurrentValue),
-    }
-  })
+  return myEnvironments.value.map(transformEnvironmentVariables)
 })
 
 const workspaceType = computed(() =>
