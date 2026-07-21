@@ -1,23 +1,32 @@
 /**
  * Importer for Global Environment variables.
  *
- * Accepts a JSON file in any of the following shapes:
- *   1. Hoppscotch Environment export  – `{ v, name, variables: [...] }`
- *   2. Array of Hoppscotch Environments – `[{ v, name, variables: [...] }, ...]`
- *   3. Postman Environment export  – `{ name, values: [{ key, value, type }] }`
+ * Supported input shapes:
+ *   1. Hoppscotch GlobalEnvironment v1 – `{ v: 1, variables: [{ key, value, secret }] }`
+ *   2. Hoppscotch GlobalEnvironment v2 – `{ v: 2, name, variables: [{ key, initialValue, currentValue, secret }] }`
+ *   3. Array of Hoppscotch environments – `[{ v, name, variables }, ...]` (each item V1 or V2)
+ *   4. Loose Hoppscotch env object      – `{ name?, variables?: [...] }` (no `v` field, uses defaults)
+ *   5. Postman Environment export       – `{ name?, values: [{ key, value, type }] }`
+ *
+ * V0 (bare array of variable objects, pre-2024.10.0) is intentionally NOT supported.
+ * V0 items have no `v`, `values`, `name` or `variables` fields and are rejected.
+ *
+ * IMPORTANT: safeParseJSON is always called with convertToArray=true, so `raw` is
+ * always an array. Each element is classified independently.
  *
  * All matched variables are merged (appended) into the Global environment.
  */
 
-import { GlobalEnvironmentVariable } from "@hoppscotch/data"
+import { GlobalEnvironment, GlobalEnvironmentVariable } from "@hoppscotch/data"
 import * as O from "fp-ts/Option"
 import * as TE from "fp-ts/TaskEither"
+import { entityReference } from "verzod"
 import { z } from "zod"
 
 import { safeParseJSON } from "~/helpers/functional/json"
 import { IMPORTER_INVALID_FILE_FORMAT } from "."
 
-// ── Hoppscotch environment variable shape (v2) ───────────────────────────────
+// ── Loose Hoppscotch env schema (no version field, field defaults) ─────────────
 const hoppEnvVariableSchema = z.object({
   key: z.string(),
   initialValue: z.string().default(""),
@@ -25,16 +34,10 @@ const hoppEnvVariableSchema = z.object({
   secret: z.boolean().default(false),
 })
 
-// Accept both single-object and array formats
 const hoppSingleEnvSchema = z.object({
   name: z.string().optional(),
   variables: z.array(hoppEnvVariableSchema).default([]),
 })
-
-const hoppEnvFileSchema = z.union([
-  z.array(hoppSingleEnvSchema),
-  hoppSingleEnvSchema,
-])
 
 // ── Postman environment shape ─────────────────────────────────────────────────
 const postmanEnvVariableSchema = z.object({
@@ -51,36 +54,57 @@ const postmanEnvFileSchema = z.object({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function extractFromHopp(
-  raw: unknown
+/**
+ * Classify and extract variables from a single array item.
+ *
+ * Priority order (prevents false positives):
+ *  1. Has numeric `v` field  →  versioned V1/V2 via entityReference
+ *  2. Has `values` array     →  Postman format
+ *  3. Has `name` string OR `variables` array  →  loose Hopp env
+ *  4. Otherwise              →  unrecognised → return null
+ *
+ * Returning null signals the caller to reject the whole import.
+ */
+function extractFromItem(
+  item: unknown
 ): GlobalEnvironmentVariable[] | null {
-  const result = hoppEnvFileSchema.safeParse(raw)
-  if (!result.success) return null
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
+    return null
+  }
 
-  const envs = Array.isArray(result.data) ? result.data : [result.data]
+  const obj = item as Record<string, unknown>
 
-  return envs.flatMap((env) =>
-    env.variables.map((v) => ({
-      key: v.key,
-      initialValue: v.initialValue,
-      currentValue: v.currentValue,
-      secret: v.secret,
+  // ── 1. Versioned V1 / V2 ──────────────────────────────────────────────────
+  if ("v" in obj && typeof obj.v === "number") {
+    const result = entityReference(GlobalEnvironment).safeParse(item)
+    return result.success ? result.data.variables : null
+  }
+
+  // ── 2. Postman: { name?, values: [...] } ──────────────────────────────────
+  if ("values" in obj && Array.isArray(obj.values)) {
+    const result = postmanEnvFileSchema.safeParse(item)
+    if (!result.success) return null
+    return result.data.values.map(({ key, value, type, secret }) => ({
+      key,
+      initialValue: value,
+      currentValue: value,
+      secret: type === "secret" || secret === true,
     }))
-  )
-}
+  }
 
-function extractFromPostman(
-  raw: unknown
-): GlobalEnvironmentVariable[] | null {
-  const result = postmanEnvFileSchema.safeParse(raw)
-  if (!result.success) return null
+  // ── 3. Loose Hopp: { name?, variables?: [...] } ───────────────────────────
+  // Require at least a `name` string or `variables` array to avoid matching
+  // completely unrelated objects (e.g. { foo: "bar" }).
+  if (
+    ("name" in obj && typeof obj.name === "string") ||
+    ("variables" in obj && Array.isArray(obj.variables))
+  ) {
+    const result = hoppSingleEnvSchema.safeParse(item)
+    return result.success ? result.data.variables : null
+  }
 
-  return result.data.values.map(({ key, value, type, secret }) => ({
-    key,
-    initialValue: value,
-    currentValue: value,
-    secret: type === "secret" || secret === true,
-  }))
+  // ── 4. Unrecognised ───────────────────────────────────────────────────────
+  return null
 }
 
 export const hoppGlobalEnvImporter = (
@@ -89,6 +113,9 @@ export const hoppGlobalEnvImporter = (
   typeof IMPORTER_INVALID_FILE_FORMAT,
   GlobalEnvironmentVariable[]
 > => {
+  // safeParseJSON with convertToArray=true always returns an array:
+  //   - object input  → wrapped in [object]
+  //   - array input   → kept as-is
   const parsedContents = contents.map((str) => safeParseJSON(str, true))
 
   if (parsedContents.some((p) => O.isNone(p))) {
@@ -98,17 +125,15 @@ export const hoppGlobalEnvImporter = (
   const variables: GlobalEnvironmentVariable[] = []
 
   for (const parsed of parsedContents) {
-    const raw = O.toNullable(parsed)
-    if (raw === null) return TE.left(IMPORTER_INVALID_FILE_FORMAT)
+    const items = O.toNullable(parsed) as unknown[] | null
+    if (!items) return TE.left(IMPORTER_INVALID_FILE_FORMAT)
 
-    // Try Hoppscotch format first, then Postman
-    const extracted = extractFromHopp(raw) ?? extractFromPostman(raw)
-
-    if (extracted === null) return TE.left(IMPORTER_INVALID_FILE_FORMAT)
-
-    variables.push(...extracted)
+    for (const item of items) {
+      const extracted = extractFromItem(item)
+      if (extracted === null) return TE.left(IMPORTER_INVALID_FILE_FORMAT)
+      variables.push(...extracted)
+    }
   }
 
   return TE.right(variables)
 }
-
