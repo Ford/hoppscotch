@@ -48,13 +48,15 @@ export class BrowserKernelInterceptorService
     auth: new Set(["basic", "bearer", "apikey"]),
     security: new Set([]),
     proxy: new Set([]),
-    advanced: new Set([]),
+    advanced: new Set(["redirects"]),
   } as const
 
   public execute(
     request: RelayRequest
   ): ExecutionResult<KernelInterceptorError> {
+    // Ensure redirect options are properly passed through to the Relay
     const processedRequest = preProcessRelayRequest(request)
+
     const relayExecution = Relay.execute(processedRequest)
 
     const response = pipe(relayExecution.response, (promise) =>

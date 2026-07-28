@@ -185,7 +185,15 @@ export class NativeKernelInterceptorService
         preProcessRelayRequest(request)
       )
 
-      await this.cookieJar.applyCookiesToRequest(effectiveRequest)
+      const relevantCookies = this.cookieJar.getCookiesForURL(
+        new URL(effectiveRequest.url!)
+      )
+
+      if (relevantCookies.length > 0) {
+        effectiveRequest.headers!["Cookie"] = relevantCookies
+          .map((cookie) => `${cookie.name!}=${cookie.value!}`)
+          .join(";")
+      }
 
       const existingUserAgentHeader = Object.keys(
         effectiveRequest.headers || {}
@@ -206,19 +214,14 @@ export class NativeKernelInterceptorService
       const nativeRequest = await relayRequestToNativeAdapter(
         effectiveRequestWithUserAgent
       )
+
       const postProcessedRequest = postProcessRelayRequest(nativeRequest)
+
       const relayExecution = Relay.execute(postProcessedRequest)
 
       setRelayExecution(relayExecution)
 
-      const relayResponse = await relayExecution.response
-      if (E.isRight(relayResponse)) {
-        await this.cookieJar.captureResponseCookies(
-          relayResponse.right,
-          effectiveRequest.url
-        )
-      }
-      return relayResponse
+      return await relayExecution.response
     } catch (e) {
       return E.left(e)
     }

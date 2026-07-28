@@ -4,6 +4,10 @@ import { type LazyStore } from "@tauri-apps/plugin-store"
 import { UpdateStatus, CheckResult, UpdateState } from "~/types"
 
 export class UpdaterService {
+  // Add a flag to completely disable updater functionality.
+  // Set to true to suppress any auto update behavior.
+  private static readonly UPDATES_DISABLED = true
+
   private currentProgress: { downloaded: number; total?: number } = {
     downloaded: 0,
   }
@@ -21,6 +25,14 @@ export class UpdaterService {
   }
 
   async checkForUpdates(timeout = 5000): Promise<CheckResult> {
+    if (UpdaterService.UPDATES_DISABLED) {
+      await this.saveUpdateState({
+        status: UpdateStatus.NOT_AVAILABLE,
+        message: "Updater disabled",
+      })
+      return CheckResult.NOT_AVAILABLE
+    }
+
     try {
       await this.saveUpdateState({
         status: UpdateStatus.CHECKING,
@@ -89,6 +101,14 @@ export class UpdaterService {
   }
 
   async downloadAndInstall(): Promise<void> {
+    if (UpdaterService.UPDATES_DISABLED) {
+      await this.saveUpdateState({
+        status: UpdateStatus.ERROR,
+        message: "Updater disabled",
+      })
+      throw new Error("Updater disabled")
+    }
+
     try {
       const updateResult = await check()
 

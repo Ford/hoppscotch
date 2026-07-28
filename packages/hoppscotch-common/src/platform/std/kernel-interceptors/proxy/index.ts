@@ -12,7 +12,6 @@ import { Service } from "dioc"
 import { Relay } from "~/kernel/relay"
 import SettingsProxy from "~/components/settings/Proxy.vue"
 import { KernelInterceptorProxyStore } from "./store"
-import { CookieJarService } from "~/services/cookie-jar.service"
 import type {
   KernelInterceptor,
   ExecutionResult,
@@ -36,6 +35,7 @@ type ProxyRequest = {
   data: string
   wantsBinary: boolean
   accessToken: string
+  followRedirects?: boolean
   auth?: {
     username: string
     password: string
@@ -57,7 +57,6 @@ export class ProxyKernelInterceptorService
 {
   public static readonly ID = "KERNEL_PROXY_INTERCEPTOR_SERVICE"
   private readonly store = this.bind(KernelInterceptorProxyStore)
-  private readonly cookieJar = this.bind(CookieJarService)
 
   public readonly id = "proxy"
   public readonly name = (t: ReturnType<typeof getI18n>) =>
@@ -78,10 +77,7 @@ export class ProxyKernelInterceptorService
     auth: new Set(["basic"]),
     security: new Set([]),
     proxy: new Set([]),
-    // Proxy now attaches stored cookies to outgoing requests through
-    // the shared send path. Receive-side capture is a follow-up
-    // because proxyscotch returns Set-Cookie as a header string.
-    advanced: new Set(["cookies"]),
+    advanced: new Set(["redirects"]),
   } as const
   public readonly settingsEntry = markRaw({
     title: (t: ReturnType<typeof getI18n>) =>
@@ -92,7 +88,7 @@ export class ProxyKernelInterceptorService
   private constructProxyRequest(
     request: RelayRequest,
     accessToken: string
-  ): ProxyRequest {
+  ): ProxyRequest & { followRedirects?: boolean } {
     // NOTE: This should be conditional but for now setting it to true for backwards compat,
     // see std/interceptor/proxy.ts for more info.
     const wantsBinary = true
@@ -191,7 +187,7 @@ export class ProxyKernelInterceptorService
       }
     }
 
-    return {
+    const proxyRequest = {
       accessToken,
       wantsBinary,
       url: request.url,
@@ -199,6 +195,7 @@ export class ProxyKernelInterceptorService
       headers: request.headers,
       params: request.params,
       data: requestData,
+      followRedirects: request.options?.followRedirects,
       auth:
         request.auth?.kind === "basic"
           ? {
@@ -207,6 +204,8 @@ export class ProxyKernelInterceptorService
             }
           : undefined,
     }
+
+    return proxyRequest
   }
 
   public execute(
@@ -233,7 +232,7 @@ export class ProxyKernelInterceptorService
     // request, otherwise the in-memory default (`proxy.hoppscotch.io`) is used
     // when `execute()` is called during initial page load — e.g. the OAuth
     // redirect handler on `/oauth`.
-    const pending = this.store.whenReady().then(async () => {
+    const pending = this.store.whenReady().then(() => {
       if (cancelled) return null
 
       const settings = this.store.getSettings()
@@ -241,11 +240,6 @@ export class ProxyKernelInterceptorService
       const proxyUrl = settings.proxyUrl
 
       const processedRequest = preProcessRelayRequest(request)
-
-      // Same shared send path as native and agent. proxyscotch returns
-      // Set-Cookie as a header string rather than structured cookies, so
-      // receive-side capture for the proxy path is a separate follow-up.
-      await this.cookieJar.applyCookiesToRequest(processedRequest)
 
       let content: ContentType
       const multipartKey = `proxyRequestData-${v4()}`

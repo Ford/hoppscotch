@@ -34,6 +34,8 @@ import {
   processRequest,
 } from "./request";
 import { getTestMetrics } from "./test";
+import {ProxyAgent} from "proxy-agent";
+import axios from "axios";
 import { filterValidScripts } from "@hoppscotch/js-sandbox/scripting";
 
 const { WARN, FAIL, INFO } = exceptionColors;
@@ -148,8 +150,15 @@ const processCollection = async (
     // Request processing initiated message.
     log(WARN(`\nRunning: ${chalk.bold(requestPath)}`));
 
+    const agent = new ProxyAgent();
+    const axiosInstance = axios.create({
+      httpsAgent : agent,
+      httpAgent : agent,
+      proxy: false, // Disable axios's default proxy handling
+    });
+
     // Processing current request.
-    const result = await processRequest(processRequestParams)();
+    const result = await processRequest(processRequestParams,axiosInstance)();
 
     // Updating global & selected envs with new envs from processed-request output.
     const { global, selected } = result.envs;

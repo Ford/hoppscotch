@@ -316,7 +316,6 @@ export class ExtensionKernelInterceptorService
             break
 
           default:
-            // Fallback for any other content types
             requestData = request.content.content
         }
       }

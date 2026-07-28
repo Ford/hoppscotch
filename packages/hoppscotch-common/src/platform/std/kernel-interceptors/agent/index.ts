@@ -126,7 +126,15 @@ export class AgentKernelInterceptorService
       const effectiveRequest = this.store.completeRequest(
         preProcessRelayRequest(request)
       )
-      await this.cookieJar.applyCookiesToRequest(effectiveRequest)
+      const relevantCookies = this.cookieJar.getCookiesForURL(
+        new URL(effectiveRequest.url!)
+      )
+
+      if (relevantCookies.length > 0) {
+        effectiveRequest.headers!["Cookie"] = relevantCookies
+          .map((cookie) => `${cookie.name!}=${cookie.value!}`)
+          .join(";")
+      }
 
       const existingUserAgentHeader = Object.keys(
         effectiveRequest.headers || {}
@@ -203,11 +211,6 @@ export class AgentKernelInterceptorService
         body: { ...transformedBody },
         multiHeaders: multiHeaders.length > 0 ? multiHeaders : undefined,
       }
-
-      await this.cookieJar.captureResponseCookies(
-        transformedResponse,
-        effectiveRequest.url
-      )
 
       return E.right(transformedResponse)
     } catch (e) {
