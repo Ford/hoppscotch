@@ -18,21 +18,11 @@
 
   <div v-else-if="workingConfigs" class="flex flex-col py-8">
     <HoppSmartTabs v-model="selectedOptionTab" render-inactive-tabs>
-      <HoppSmartTab
-        id="auth"
-        :label="t('configs.tabs.auth')"
-        :indicator="tabHasError('auth')"
-        indicator-variant="error"
-      >
+      <HoppSmartTab id="auth" :label="t('configs.tabs.auth')">
         <SettingsAuthConfigurations v-model:config="workingConfigs" />
       </HoppSmartTab>
 
-      <HoppSmartTab
-        id="smtp"
-        :label="t('configs.tabs.smtp')"
-        :indicator="tabHasError('smtp')"
-        indicator-variant="error"
-      >
+      <HoppSmartTab id="smtp" :label="t('configs.tabs.smtp')">
         <div class="pb-8 px-4 flex flex-col space-y-8 divide-y divide-divider">
           <SettingsSmtpConfiguration v-model:config="workingConfigs" />
         </div>
@@ -41,23 +31,13 @@
       <HoppSmartTab :id="'token'" :label="t('configs.tabs.infra_tokens')">
         <Tokens />
       </HoppSmartTab>
-      <HoppSmartTab
-        id="proxy"
-        :label="t('configs.tabs.proxy')"
-        :indicator="tabHasError('proxy')"
-        indicator-variant="error"
-      >
+      <HoppSmartTab id="proxy" :label="t('configs.tabs.proxy')">
         <SettingsProxyURLConfiguration
           class="pb-8 px-4"
           v-model:config="workingConfigs"
         />
       </HoppSmartTab>
-      <HoppSmartTab
-        :id="'rate-limit'"
-        :label="t('configs.tabs.rate_limit')"
-        :indicator="tabHasError('rate-limit')"
-        indicator-variant="error"
-      >
+      <HoppSmartTab :id="'rate-limit'" :label="t('configs.tabs.rate_limit')">
         <SettingsRateLimit v-model:config="workingConfigs" />
       </HoppSmartTab>
       <HoppSmartTab id="miscellaneous" :label="t('configs.tabs.miscellaneous')">
@@ -95,23 +75,14 @@
 
 <script setup lang="ts">
 import { isEqual } from 'lodash-es';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from '~/composables/i18n';
 import { useToast } from '~/composables/toast';
 import { useConfigHandler } from '~/composables/useConfigHandler';
-import {
-  ConfigTab,
-  getConfigValidationIssues,
-  hasGuardIssue,
-  provideConfigValidation,
-  tabHasConfigIssue,
-} from '~/helpers/configs';
+import { hasInputValidationFailed } from '~/helpers/configs';
 
 const t = useI18n();
 const toast = useToast();
-
-// Fresh validation context per mount; children inject for field-level borders.
-const { configEdited, configValidationIssues } = provideConfigValidation();
 
 const showSaveChangesModal = ref(false);
 const initiateServerRestart = ref(false);
@@ -136,6 +107,8 @@ const {
   infraConfigsError,
   fetchingAllowedAuthProviders,
   allowedAuthProvidersError,
+  AreAnyConfigFieldsEmpty,
+  hasPartialSmtpCredentials,
 } = useConfigHandler();
 
 // Check if the configs have been updated
@@ -145,90 +118,32 @@ const isConfigUpdated = computed(() =>
     : false,
 );
 
-// Gates the field-border surface so borders appear while typing, not on load.
-watch(isConfigUpdated, (edited) => (configEdited.value = edited), {
-  immediate: true,
-});
-
-// Keep the issue list live so borders, tab dots, and guards all see the latest.
-watch(
-  workingConfigs,
-  (configs) => {
-    configValidationIssues.value = configs
-      ? getConfigValidationIssues(configs)
-      : [];
-  },
-  { deep: true, immediate: true },
+// Check if any of the fields in workingConfigs are empty
+const areAnyFieldsEmpty = computed(() =>
+  workingConfigs.value ? AreAnyConfigFieldsEmpty(workingConfigs.value) : false,
 );
-
-const blockedByEmptyField = computed(() =>
-  hasGuardIssue(configValidationIssues.value, 'required'),
-);
-const blockedByPartialSmtp = computed(() =>
-  hasGuardIssue(configValidationIssues.value, 'smtp-pair'),
-);
-const blockedByInvalidInput = computed(() =>
-  hasGuardIssue(configValidationIssues.value, 'format'),
-);
-
-// Proactive — shows even before any edit so hidden blockers stay visible.
-const tabHasError = (tab: ConfigTab) =>
-  tabHasConfigIssue(configValidationIssues.value, tab);
-
-// Names the offending fields in the console for support cross-reference.
-const logConfigValidationIssues = () => {
-  const issues = configValidationIssues.value;
-  if (!issues.length) return;
-
-  const rows = issues.map((issue) => ({
-    tab: issue.subTab ? `${issue.tab} › ${issue.subTab}` : issue.tab,
-    field: issue.fieldKey,
-    envVar: issue.envVar,
-    issue: issue.kind,
-  }));
-
-  // eslint-disable-next-line no-console
-  console.warn(
-    `[Hoppscotch Admin] Save blocked — ${issues.length} configuration field(s) need attention:`,
-  );
-  // eslint-disable-next-line no-console
-  console.table(rows);
-};
-
-// Logs diagnostics and surfaces the highest-priority blocking toast, returning
-// true when a guard fired (save must halt) and false when every guard passes.
-// Shared by the Save click and the post-confirm restart so the modal-confirm
-// path enforces the same full guard set as opening the modal — not just the
-// empty-field subset.
-const surfaceSaveBlockers = (): boolean => {
-  const blocked =
-    blockedByEmptyField.value ||
-    blockedByPartialSmtp.value ||
-    blockedByInvalidInput.value;
-
-  if (!blocked) return false;
-
-  logConfigValidationIssues();
-
-  if (blockedByEmptyField.value) {
-    toast.error(t('configs.input_empty'));
-  } else if (blockedByPartialSmtp.value) {
-    toast.error(t('configs.mail_configs.smtp_auth_incomplete'));
-  } else if (blockedByInvalidInput.value) {
-    toast.error(t('configs.input_validation_error'));
-  }
-
-  return true;
-};
 
 const triggerSaveChangesModal = () => {
-  if (surfaceSaveBlockers()) return;
+  if (areAnyFieldsEmpty.value) {
+    return toast.error(t('configs.input_empty'));
+  }
+
+  if (workingConfigs.value && hasPartialSmtpCredentials(workingConfigs.value)) {
+    return toast.error(t('configs.mail_configs.smtp_auth_incomplete'));
+  }
+
+  // Check if any of the input validations have failed
+  if (Object.values(hasInputValidationFailed.value).some(Boolean)) {
+    return toast.error(t('configs.input_validation_error'));
+  }
   showSaveChangesModal.value = true;
 };
 
 const restartServer = () => {
-  if (surfaceSaveBlockers()) return;
-  showSaveChangesModal.value = false;
+  if (areAnyFieldsEmpty.value) {
+    return toast.error(t('configs.input_empty'));
+  }
   initiateServerRestart.value = true;
+  showSaveChangesModal.value = false;
 };
 </script>

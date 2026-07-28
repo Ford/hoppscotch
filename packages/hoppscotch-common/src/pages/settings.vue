@@ -33,18 +33,6 @@
           </section>
 
           <section>
-            <h4 class="font-semibold text-secondaryDark">
-              {{ t("settings.experiments") }}
-            </h4>
-            <div class="my-1 text-secondaryLight">
-              {{ t("settings.experiments_notice") }}
-              <HoppSmartAnchor
-                class="link"
-                to="https://github.com/hoppscotch/hoppscotch/issues/new/choose"
-                blank
-                :label="t('app.contact_us')"
-              />.
-            </div>
             <div class="space-y-4 py-4">
               <div class="flex items-center">
                 <HoppSmartToggle
@@ -53,6 +41,14 @@
                   @change="showConfirmModal"
                 >
                   {{ t("settings.telemetry") }}
+                </HoppSmartToggle>
+              </div>
+              <div class="flex items-center">
+                <HoppSmartToggle
+                  :on="FOLLOW_REDIRECTS"
+                  @change="toggleSetting('FOLLOW_REDIRECTS')"
+                >
+                  {{ t("settings.follow_redirects") }}
                 </HoppSmartToggle>
               </div>
               <div class="flex items-center">
@@ -166,22 +162,6 @@
                   {{ t("settings.experimental_scripting_sandbox") }}
                 </HoppSmartToggle>
               </div>
-              <div class="flex items-center">
-                <HoppSmartToggle
-                  :on="ENABLE_EXPERIMENTAL_MOCK_SERVERS"
-                  @change="toggleSetting('ENABLE_EXPERIMENTAL_MOCK_SERVERS')"
-                >
-                  {{ t("settings.enable_experimental_mock_servers") }}
-                </HoppSmartToggle>
-              </div>
-              <div class="flex items-center">
-                <HoppSmartToggle
-                  :on="ENABLE_EXPERIMENTAL_DOCUMENTATION"
-                  @change="toggleSetting('ENABLE_EXPERIMENTAL_DOCUMENTATION')"
-                >
-                  {{ t("settings.enable_experimental_documentation") }}
-                </HoppSmartToggle>
-              </div>
             </div>
           </section>
         </div>
@@ -245,7 +225,10 @@
             v-for="[id, settings] in kernelInterceptorsWithSettings"
             :key="id"
           >
-            <h4 class="font-semibold text-secondaryDark">
+            <h4
+              v-if="settings.title(t) !== 'Proxy'"
+              class="font-semibold text-secondaryDark"
+            >
               {{ settings.title(t) }}
             </h4>
             <component :is="settings.component" />
@@ -319,6 +302,8 @@ const kernelInterceptorsWithSettings = computed(() =>
 
 const ACCENT_COLOR = useSetting("THEME_COLOR")
 const TELEMETRY_ENABLED = useSetting("TELEMETRY_ENABLED")
+const _FOLLOW_REDIRECTS = useSetting("FOLLOW_REDIRECTS")
+const FOLLOW_REDIRECTS = _FOLLOW_REDIRECTS
 const EXPAND_NAVIGATION = useSetting("EXPAND_NAVIGATION")
 const SIDEBAR_ON_LEFT = useSetting("SIDEBAR_ON_LEFT")
 const ENABLE_AI_EXPERIMENTS = useSetting("ENABLE_AI_EXPERIMENTS")
@@ -327,12 +312,6 @@ const CUSTOM_NAMING_STYLE = useSetting("CUSTOM_NAMING_STYLE")
 
 const EXPERIMENTAL_SCRIPTING_SANDBOX = useSetting(
   "EXPERIMENTAL_SCRIPTING_SANDBOX"
-)
-const ENABLE_EXPERIMENTAL_MOCK_SERVERS = useSetting(
-  "ENABLE_EXPERIMENTAL_MOCK_SERVERS"
-)
-const ENABLE_EXPERIMENTAL_DOCUMENTATION = useSetting(
-  "ENABLE_EXPERIMENTAL_DOCUMENTATION"
 )
 
 const supportedNamingStyles = [
