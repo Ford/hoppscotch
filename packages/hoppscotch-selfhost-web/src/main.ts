@@ -22,6 +22,7 @@ import { InfraPlatform } from "@app/platform/infra/infra.platform"
 import { historySyncDef } from "@app/platform/history/sync"
 import { kernelIO } from "@hoppscotch/common/platform/std/kernel-io"
 import { HeaderDownloadableLinksService } from "@app/services/headerDownloadableLinks.service"
+import { SecretManagerService } from "@hoppscotch/common/services/secret-manager.service"
 
 import DesktopSettingsSection from "@hoppscotch/common/components/settings/Desktop.vue"
 import { useDesktopZoomEffect } from "@hoppscotch/common/composables/desktop-zoom"
@@ -192,7 +193,7 @@ async function initApp() {
     infra: InfraPlatform,
     backend: stdBackendDef,
     additionalLinks: [HeaderDownloadableLinksService],
-    addedServices: [],
+    addedServices: [SecretManagerService],
   })
 
   if (platform === "desktop") {
