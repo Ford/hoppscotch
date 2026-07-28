@@ -155,7 +155,9 @@ export class KernelInterceptorService extends Service {
 
   public execute(req: RelayRequest): ExecutionResult {
     const interceptor = this.validateAndGetActiveInterceptor()
-    return interceptor.execute(req)
+    const result = interceptor.execute(req)
+
+    return result
   }
 
   private validateAndGetActiveInterceptor(): KernelInterceptor {
