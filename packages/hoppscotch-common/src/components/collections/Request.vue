@@ -102,12 +102,9 @@
                 @keyup.d="duplicate?.$el.click()"
                 @keyup.delete="deleteAction?.$el.click()"
                 @keyup.s="shareAction?.$el.click()"
-                @keyup.i="documentationAction?.$el.click()"
-                @keyup.a="addExampleAction?.$el.click()"
                 @keyup.escape="hide()"
               >
                 <HoppSmartItem
-                  v-if="!hasNoTeamAccess"
                   ref="edit"
                   :icon="IconEdit"
                   :label="t('action.edit')"
@@ -120,7 +117,6 @@
                   "
                 />
                 <HoppSmartItem
-                  v-if="!hasNoTeamAccess"
                   ref="duplicate"
                   :icon="IconCopy"
                   :label="t('action.duplicate')"
@@ -133,46 +129,6 @@
                   "
                 />
                 <HoppSmartItem
-                  v-if="!hasNoTeamAccess"
-                  ref="addExampleAction"
-                  :icon="IconPlusCircle"
-                  :label="t('action.add_example')"
-                  :shortcut="['A']"
-                  @click="
-                    () => {
-                      emit('add-example')
-                      hide()
-                    }
-                  "
-                />
-                <HoppSmartItem
-                  v-if="isDocumentationVisible"
-                  ref="documentationAction"
-                  :icon="IconBook"
-                  :label="t('documentation.title')"
-                  :shortcut="['I']"
-                  @click="
-                    () => {
-                      handleDocumentationAction()
-                      hide()
-                    }
-                  "
-                />
-                <HoppSmartItem
-                  v-if="!hasNoTeamAccess"
-                  ref="shareAction"
-                  :icon="IconShare2"
-                  :label="t('action.share')"
-                  :shortcut="['S']"
-                  @click="
-                    () => {
-                      emit('share-request')
-                      hide()
-                    }
-                  "
-                />
-                <HoppSmartItem
-                  v-if="!hasNoTeamAccess"
                   ref="deleteAction"
                   :icon="IconTrash2"
                   :label="t('action.delete')"
@@ -180,6 +136,18 @@
                   @click="
                     () => {
                       emit('remove-request')
+                      hide()
+                    }
+                  "
+                />
+                <HoppSmartItem
+                  ref="shareAction"
+                  :icon="IconShare2"
+                  :label="t('action.share')"
+                  :shortcut="['S']"
+                  @click="
+                    () => {
+                      emit('share-request')
                       hide()
                     }
                   "
@@ -243,12 +211,9 @@ import IconRotateCCW from "~icons/lucide/rotate-ccw"
 import IconShare2 from "~icons/lucide/share-2"
 import IconArrowRight from "~icons/lucide/chevron-right"
 import IconArrowDown from "~icons/lucide/chevron-down"
-import IconBook from "~icons/lucide/book"
-import IconPlusCircle from "~icons/lucide/plus-circle"
 import { ref, PropType, watch, computed } from "vue"
 import { HoppRESTRequest } from "@hoppscotch/data"
 import { useI18n } from "@composables/i18n"
-import { useDocumentationVisibility } from "~/composables/documentationVisibility"
 import { TippyComponent } from "vue-tippy"
 import {
   changeCurrentReorderStatus,
@@ -256,8 +221,8 @@ import {
 } from "~/newstore/reordering"
 import { useReadonlyStream } from "~/composables/stream"
 import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring"
-import { platform } from "~/platform"
-import { invokeAction } from "~/helpers/actions"
+import { platform as _platform } from "~/platform"
+import { invokeAction as _invokeAction } from "~/helpers/actions"
 
 type CollectionType = "my-collections" | "team-collections"
 
@@ -330,11 +295,9 @@ const emit = defineEmits<{
   (event: "edit-request"): void
   (event: "edit-response", payload: ResponsePayload): void
   (event: "duplicate-request"): void
-  (event: "open-request-documentation"): void
   (event: "remove-request"): void
   (event: "select-request"): void
   (event: "share-request"): void
-  (event: "add-example"): void
   (event: "drag-request", payload: DataTransfer): void
   (event: "update-request-order", payload: DataTransfer): void
   (event: "update-last-request-order", payload: DataTransfer): void
@@ -350,10 +313,6 @@ const deleteAction = ref<HTMLButtonElement | null>(null)
 const options = ref<TippyComponent | null>(null)
 const duplicate = ref<HTMLButtonElement | null>(null)
 const shareAction = ref<HTMLButtonElement | null>(null)
-const documentationAction = ref<HTMLButtonElement | null>(null)
-const addExampleAction = ref<HTMLButtonElement | null>(null)
-
-const { isDocumentationVisible } = useDocumentationVisibility()
 
 const dragging = ref(false)
 const ordering = ref(false)
@@ -473,19 +432,6 @@ const isRequestLoading = computed(() => {
   }
   return false
 })
-
-const handleDocumentationAction = () => {
-  const currentUser = platform.auth.getCurrentUser()
-
-  if (!currentUser) {
-    // Show login modal if user is not authenticated
-    invokeAction("modals.login.toggle")
-    return
-  }
-
-  // User is authenticated, proceed with opening documentation
-  emit("open-request-documentation")
-}
 
 const resetDragState = () => {
   dragging.value = false

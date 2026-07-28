@@ -5,8 +5,6 @@
       <HttpRequestOptions
         v-model="tab.document.response.originalRequest"
         v-model:option-tab="optionTabPreference"
-        v-model:inherited-properties="tab.document.inheritedProperties"
-        :envs="resolvedEnvs"
       />
     </template>
     <template #secondary>
@@ -16,18 +14,13 @@
 </template>
 
 <script setup lang="ts">
-import { watch, ref, computed } from "vue"
+import { watch, ref } from "vue"
 import { useVModel } from "@vueuse/core"
-import { cloneDeep, isEqual } from "lodash-es"
+import { cloneDeep } from "lodash-es"
 import { HoppTab } from "~/services/tab"
 import { HoppSavedExampleDocument } from "~/helpers/rest/document"
 import { RESTOptionTabs } from "../RequestOptions.vue"
-import { useReadonlyStream } from "@composables/stream"
-import {
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue,
-} from "~/newstore/environments"
-import { getEffectiveVariablesForRequest } from "~/helpers/utils/environments"
+import { isEqual } from "lodash-es"
 
 const props = defineProps<{ modelValue: HoppTab<HoppSavedExampleDocument> }>()
 
@@ -38,19 +31,6 @@ const emit = defineEmits<{
 const tab = useVModel(props, "modelValue", emit)
 
 const optionTabPreference = ref<RESTOptionTabs>("params")
-
-const envs = useReadonlyStream(
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue()
-)
-
-const resolvedEnvs = computed(() => {
-  return getEffectiveVariablesForRequest(
-    tab.value.document.response.originalRequest.requestVariables,
-    tab.value.document.inheritedProperties?.variables,
-    envs.value
-  )
-})
 
 // TODO: Come up with a better dirty check
 let oldResponse = cloneDeep(tab.value.document.response)

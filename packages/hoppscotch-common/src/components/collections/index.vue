@@ -65,7 +65,6 @@
       @remove-request="removeRequest"
       @remove-response="removeResponse"
       @share-request="shareRequest"
-      @add-example="addExample"
       @select="selectPicked"
       @select-response="selectResponse"
       @select-request="selectRequest"
@@ -117,7 +116,6 @@
       @remove-folder="removeFolder"
       @remove-request="removeRequest"
       @remove-response="removeResponse"
-      @add-example="addExample"
       @run-collection="
         runCollectionHandler({
           type: 'team-collections',
@@ -307,9 +305,7 @@ import {
   HoppRESTAuth,
   HoppRESTHeaders,
   HoppRESTRequest,
-  HoppRESTRequestResponse,
   makeCollection,
-  makeHoppRESTResponseOriginalRequest,
 } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
 import { stripJsonSerializedModulePrefix } from "@hoppscotch/js-sandbox/scripting"
@@ -326,8 +322,7 @@ import { cloneDeep, debounce, isEqual } from "lodash-es"
 import { PropType, computed, nextTick, onMounted, ref, watch } from "vue"
 import { useReadonlyStream } from "~/composables/stream"
 import { defineActionHandler, invokeAction } from "~/helpers/actions"
-import { GQLError, runMutation } from "~/helpers/backend/GQLClient"
-import { UpdateRequestDocument } from "~/helpers/backend/graphql"
+import { GQLError } from "~/helpers/backend/GQLClient"
 import {
   CollectionDataProps,
   getTeamCollectionObject,
@@ -936,7 +931,6 @@ const onExportOpenAPI = (format: "json" | "yaml") => {
   // doExportOpenAPI closes it when finished.
   doExportOpenAPI(format)
 }
-
 const addNewRootCollection = async (name: string) => {
   if (collectionsType.value.type === "my-collections") {
     modalLoadingState.value = true
@@ -1624,9 +1618,8 @@ const duplicateRequest = async (payload: {
   const { folderPath, request } = payload
   if (!folderPath) return
 
-  const { id: _, ...requestWithoutID } = request
   const newRequest = {
-    ...cloneDeep(requestWithoutID),
+    ...cloneDeep(request),
     _ref_id: generateUniqueRefId("req"),
     name: `${request.name} - ${t("action.duplicate")}`,
   }
@@ -1750,225 +1743,6 @@ const duplicateResponse = async (payload: ResponseConfigPayload) => {
       possibleRequestActiveTab.value.document.request.responses =
         updatedRequest.responses
     }
-  }
-}
-
-const addExample = (payload: {
-  folderPath: string
-  request: HoppRESTRequest
-  requestIndex: string | number
-}) => {
-  const { folderPath, request, requestIndex } = payload
-
-  // Defensive check to ensure request is valid
-  if (!request || typeof request !== "object") {
-    console.error("Invalid request object:", request)
-    toast.error(t("error.invalid_request"))
-    return
-  }
-
-  // Additional validation for required request properties
-  if (!request.name && !request.endpoint) {
-    console.error("Request missing required properties:", request)
-    toast.error(t("error.invalid_request"))
-    return
-  }
-
-  editingRequest.value = request
-  editingRequestName.value = request.name ?? ""
-  editingResponseName.value = ""
-  editingResponseOldName.value = ""
-
-  if (collectionsType.value.type === "my-collections" && folderPath) {
-    editingFolderPath.value = folderPath
-    editingRequestIndex.value = parseInt(requestIndex.toString())
-  } else {
-    editingRequestID.value = requestIndex.toString()
-  }
-  displayModalAddExample(true)
-}
-
-const onAddExample = async () => {
-  const exampleName = editingResponseName.value.trim()
-
-  if (!exampleName) {
-    toast.error(t("response.invalid_name"))
-    return
-  }
-
-  const request = editingRequest.value
-  if (!request || !request.name) {
-    toast.error(t("error.invalid_request"))
-    return
-  }
-
-  // Check if example name already exists
-  if (request.responses && request.responses[exampleName]) {
-    toast.error(t("response.duplicate_name_error"))
-    return
-  }
-
-  // Create the original request from the parent request
-  const originalRequest = makeHoppRESTResponseOriginalRequest({
-    name: request.name,
-    method: request.method,
-    endpoint: request.endpoint,
-    headers: request.headers,
-    params: request.params,
-    body: request.body,
-    auth: request.auth,
-    requestVariables: request.requestVariables,
-  })
-
-  // Create a new example response with default values and original request
-  const newExample: HoppRESTRequestResponse = {
-    name: exampleName,
-    code: 200,
-    status: "OK",
-    headers: [],
-    body: "",
-    originalRequest,
-  }
-
-  // Calculate the new example's index (will be used as exampleID)
-  const existingResponsesCount = request.responses
-    ? Object.keys(request.responses).length
-    : 0
-  const newExampleID = existingResponsesCount.toString()
-
-  const updatedRequest = {
-    ...request,
-    responses: {
-      ...request.responses,
-      [exampleName]: newExample,
-    },
-  }
-
-  if (collectionsType.value.type === "my-collections") {
-    const folderPath = editingFolderPath.value
-    const requestIndex = editingRequestIndex.value
-
-    if (folderPath === null || requestIndex === null) return
-
-    const isValidToken = await handleTokenValidation()
-    if (!isValidToken) return
-
-    editRESTRequest(folderPath, requestIndex, updatedRequest)
-    toast.success(t("response.saved"))
-
-    const possibleRequestActiveTab = tabs.getTabRefWithSaveContext({
-      originLocation: "user-collection",
-      requestIndex,
-      folderPath,
-    })
-
-    // Update request tab responses if it's open
-    if (
-      possibleRequestActiveTab &&
-      possibleRequestActiveTab.value.document.type === "request"
-    ) {
-      possibleRequestActiveTab.value.document.request.responses =
-        updatedRequest.responses
-    }
-
-    // Close the modal first
-    displayModalAddExample(false)
-
-    // Open the new example in a new tab
-    tabs.createNewTab({
-      response: {
-        ...cloneDeep(newExample),
-        name: exampleName,
-      },
-      isDirty: false,
-      type: "example-response",
-      saveContext: {
-        originLocation: "user-collection",
-        folderPath: folderPath,
-        requestIndex: requestIndex,
-        exampleID: newExampleID,
-      },
-      inheritedProperties: cascadeParentCollectionForProperties(
-        folderPath,
-        "rest"
-      ),
-    })
-  } else if (hasTeamWriteAccess.value) {
-    modalLoadingState.value = true
-
-    if (!editingRequestID.value) return
-
-    // Double-check request is still valid before proceeding
-    if (!request || !request.name) {
-      toast.error(t("error.invalid_request"))
-      modalLoadingState.value = false
-      return
-    }
-
-    const data = {
-      requestID: editingRequestID.value,
-      data: {
-        title: request.name,
-        request: JSON.stringify(updatedRequest),
-      },
-    }
-
-    pipe(
-      runMutation(UpdateRequestDocument, data),
-      TE.match(
-        (err: GQLError<string>) => {
-          toast.error(`${getErrorMessage(err)}`)
-          modalLoadingState.value = false
-        },
-        () => {
-          modalLoadingState.value = false
-          toast.success(t("response.saved"))
-          displayModalAddExample(false)
-
-          const requestID = editingRequestID.value
-          const collectionID = editingFolderPath.value
-
-          if (!requestID) return
-
-          // Update the request tab responses if it's open
-          const possibleRequestActiveTab = tabs.getTabRefWithSaveContext({
-            originLocation: "team-collection",
-            requestID: requestID,
-          })
-
-          if (
-            possibleRequestActiveTab &&
-            possibleRequestActiveTab.value.document.type === "request"
-          ) {
-            possibleRequestActiveTab.value.document.request.responses =
-              updatedRequest.responses
-          }
-
-          // Open the new example in a new tab
-          tabs.createNewTab({
-            response: {
-              ...cloneDeep(newExample),
-              name: exampleName,
-            },
-            isDirty: false,
-            type: "example-response",
-            saveContext: {
-              originLocation: "team-collection",
-              requestID: requestID,
-              collectionID: collectionID ?? undefined,
-              exampleID: newExampleID,
-            },
-            inheritedProperties: collectionID
-              ? teamCollectionService.cascadeParentCollectionForProperties(
-                  collectionID
-                )
-              : undefined,
-          })
-        }
-      )
-    )()
-
-    return
   }
 }
 
@@ -2203,9 +1977,6 @@ const onRemoveRequest = async () => {
 
       // since the request is deleted, we need to remove the saved responses as well
       possibleTab.value.document.request.responses = {}
-
-      // remove inherited properties
-      possibleTab.value.document.inheritedProperties = undefined
     }
 
     const requestToRemove = navigateToFolderWithIndexPath(
@@ -2267,9 +2038,6 @@ const onRemoveRequest = async () => {
 
       // since the request is deleted, we need to remove the saved responses as well
       possibleTab.value.document.request.responses = {}
-
-      // remove inherited properties
-      possibleTab.value.document.inheritedProperties = undefined
     }
   }
 }
@@ -3442,11 +3210,10 @@ const editProperties = async (payload: {
       )
     }
 
-    const storeID = (collection as HoppCollection)._ref_id ?? collectionId!
-
     const collectionVariables = pipe(
       (collection as HoppCollection).variables ?? [],
       A.mapWithIndex((index, e) => {
+        const storeID = (collection as HoppCollection)._ref_id ?? collectionId!
         const stored = getSecretValues(e.secret, index, storeID)
         return {
           ...e,
@@ -3467,10 +3234,6 @@ const editProperties = async (payload: {
       isRootCollection: isAlreadyInRoot(collectionIndex),
       path: collectionIndex,
       inheritedProperties,
-      // Persist the exact key secrets/current values were read under, so the
-      // properties modal resolves them without re-deriving (and diverging from)
-      // this keying.
-      collectionStoreKey: storeID,
     }
   } else {
     const parentIndex = collectionIndex.split("/").slice(0, -1).join("/") // remove last folder to get parent folder
@@ -3544,8 +3307,6 @@ const editProperties = async (payload: {
       isRootCollection: isAlreadyInRoot(collectionIndex),
       path: collectionIndex,
       inheritedProperties,
-      // Team collections are keyed by `id` (mirrors the save-side keying).
-      collectionStoreKey: collectionId ?? "",
     }
   }
 

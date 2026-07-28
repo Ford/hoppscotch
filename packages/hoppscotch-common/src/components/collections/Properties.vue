@@ -21,7 +21,6 @@
           <HttpHeaders
             v-model="editableCollection"
             :is-collection-property="true"
-            :envs="envs"
             @change-tab="changeOptionTab"
           />
           <div
@@ -42,7 +41,6 @@
             :is-collection-property="true"
             :is-root-collection="editingProperties.isRootCollection"
             :inherited-properties="editingProperties.inheritedProperties"
-            :envs="envs"
             :source="source"
           />
           <div
@@ -63,7 +61,6 @@
             v-model="editableCollection.variables"
             :inherited-properties="editingProperties.inheritedProperties"
             :has-team-write-access="hasTeamWriteAccess"
-            :collection-store-key="collectionStoreKey"
           />
         </HoppSmartTab>
 
@@ -231,12 +228,6 @@ import preRequestLinter from "~/helpers/editor/linting/preRequest"
 import testScriptLinter from "~/helpers/editor/linting/testScript"
 import { copyToClipboard } from "~/helpers/utils/clipboard"
 import { useService } from "dioc/vue"
-import { useReadonlyStream } from "@composables/stream"
-import {
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue,
-} from "~/newstore/environments"
-import { transformInheritedCollectionVariablesToAggregateEnv } from "~/helpers/utils/inheritedCollectionVarTransformer"
 
 import {
   HoppCollection,
@@ -264,9 +255,6 @@ export type EditingProperties = {
   isRootCollection: boolean
   path: string
   inheritedProperties?: HoppInheritedProperty
-  // Key the collection's secret/current values are stored under, computed
-  // authoritatively by `editProperties` (team → `id`, personal → `_ref_id`).
-  collectionStoreKey?: string
 }
 type HoppCollectionAuth = HoppRESTAuth | HoppGQLAuth
 type HoppCollectionHeaders = HoppRESTHeaders | GQLHeader[]
@@ -318,38 +306,6 @@ const copyIcon = refAutoReset<typeof IconCopy | typeof IconCheck>(
 )
 const activeTab = useVModel(props, "modelValue", emit)
 const activeScriptsTab = ref<"pre-request" | "test-script">("pre-request")
-
-const aggregateEnvs = useReadonlyStream(
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue()
-)
-
-// Surfaces the prop's already-keyed store ID so `envs` can pass it as
-// `sourceEnvID` — lets the env tooltip resolve the collection's own secrets.
-const collectionStoreKey = computed(
-  () => props.editingProperties.collectionStoreKey ?? ""
-)
-
-const envs = computed(() => {
-  const collectionVars = editableCollection.value.variables.map((v) => ({
-    key: v.key,
-    currentValue: v.currentValue,
-    initialValue: v.initialValue,
-    sourceEnv: "CollectionVariable",
-    sourceEnvID: collectionStoreKey.value,
-    secret: v.secret,
-  }))
-
-  const inheritedVars = transformInheritedCollectionVariablesToAggregateEnv(
-    props.editingProperties.inheritedProperties?.variables ?? [],
-    true
-  )
-
-  // Note: request-level variables are intentionally NOT merged here since
-  // there is no single active request in scope when editing collection-level
-  // properties.
-  return [...collectionVars, ...inheritedVars, ...aggregateEnvs.value]
-})
 
 const activeTabIsDetails = computed(() => activeTab.value === "details")
 
@@ -419,7 +375,6 @@ const persistUnsavedChanges = async (
       isRootCollection: props.editingProperties.isRootCollection ?? false,
       path: props.editingProperties.path,
       inheritedProperties: props.editingProperties.inheritedProperties,
-      collectionStoreKey: props.editingProperties.collectionStoreKey,
     })
   )
 }

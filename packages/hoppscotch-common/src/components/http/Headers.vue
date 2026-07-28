@@ -263,7 +263,7 @@ import { flow, pipe } from "fp-ts/function"
 import * as O from "fp-ts/Option"
 import * as RA from "fp-ts/ReadonlyArray"
 import { cloneDeep, isEqual } from "lodash-es"
-import { computed, reactive, Ref, ref, toRef, watch } from "vue"
+import { reactive, Ref, ref, toRef, watch } from "vue"
 import draggable from "vuedraggable-es"
 
 import { useVModel } from "@vueuse/core"
@@ -279,12 +279,10 @@ import {
   getComputedHeaders,
 } from "~/helpers/utils/EffectiveURL"
 import { isDragDropAllowed, DragDropEvent } from "~/helpers/dragDropValidation"
-import { filterNonEmptyEnvironmentVariables } from "~/helpers/RequestRunner"
-import { normalizeAggregateEnvs } from "~/helpers/utils/environments"
 import {
   AggregateEnvironment,
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue,
+  aggregateEnvs$,
+  getAggregateEnvs,
   getCurrentEnvironment,
 } from "~/newstore/environments"
 import { toggleNestedSetting } from "~/newstore/settings"
@@ -555,10 +553,7 @@ const clearContent = () => {
   bulkHeaders.value = ""
 }
 
-const aggregateEnvs = useReadonlyStream(
-  aggregateEnvsWithCurrentValue$,
-  getAggregateEnvsWithCurrentValue()
-)
+const aggregateEnvs = useReadonlyStream(aggregateEnvs$, getAggregateEnvs())
 
 const computedHeaders: Ref<
   {
@@ -577,12 +572,10 @@ const inheritedProperty = ref<
   }[]
 >([])
 
-const resolvedEnvs = computed(() => {
-  // Normalize to the v2 env shape so any legacy `{ key, value }` rows still
-  // resolve correctly in the computed headers/auth below.
-  if (props.envs) return normalizeAggregateEnvs(props.envs)
-  const currentSelectedEnvironment = getCurrentEnvironment()
-  return aggregateEnvs.value.map((env) => {
+const currentSelectedEnvironment = getCurrentEnvironment()
+
+watch([props.modelValue, aggregateEnvs], async () => {
+  const resolvedEnvs = aggregateEnvs.value.map((env) => {
     return {
       ...env,
       currentValue:
@@ -596,45 +589,20 @@ const resolvedEnvs = computed(() => {
             )?.currentValue ?? ""),
     }
   })
+  computedHeaders.value = (
+    await getComputedHeaders(props.modelValue, resolvedEnvs)
+  ).map((header, index) => ({
+    id: `header-${index}`,
+    ...header,
+  }))
 })
 
 watch(
-  [() => props.modelValue, resolvedEnvs],
-  async (_newVals, _oldVals, onCleanup) => {
-    let isStale = false
-    onCleanup(() => {
-      isStale = true
-    })
+  () => [props.inheritedProperties, request.value],
+  async () => {
+    if (!props.inheritedProperties) return
 
-    const headers = await getComputedHeaders(
-      props.modelValue,
-      filterNonEmptyEnvironmentVariables(resolvedEnvs.value)
-    )
-    if (isStale) return
-
-    computedHeaders.value = headers.map((header, index) => ({
-      id: `header-${index}`,
-      ...header,
-    }))
-  },
-  { immediate: true, deep: true }
-)
-
-watch(
-  [() => props.inheritedProperties, request, resolvedEnvs],
-  async (_newVals, _oldVals, onCleanup) => {
-    let isStale = false
-    onCleanup(() => {
-      isStale = true
-    })
-
-    if (!props.inheritedProperties) {
-      // Clear any previously-computed inherited rows so they don't linger when
-      // the request switches to one without inherited collection settings.
-      inheritedProperty.value = []
-      return
-    }
-
+    //filter out headers that are already in the request headers
     const inheritedHeaders = props.inheritedProperties.headers.filter(
       (header) =>
         !request.value.headers.some(
@@ -643,9 +611,9 @@ watch(
             requestHeader.active
         )
     )
-    const headersList = inheritedHeaders.map((header, index) => ({
-      inheritedFrom: header.parentName,
-      source: "headers" as const,
+    inheritedProperty.value = inheritedHeaders.map((header, index) => ({
+      inheritedFrom: props.inheritedProperties!.headers[index].parentName!,
+      source: "headers",
       id: `header-${index}`,
       header: header.inheritedHeader,
     }))
@@ -660,24 +628,20 @@ watch(
       )
     ) {
       const [computedAuthHeader] = await getComputedAuthHeaders(
-        filterNonEmptyEnvironmentVariables(resolvedEnvs.value),
+        aggregateEnvs.value,
         request.value,
         props.inheritedProperties.auth.inheritedAuth,
         false
       )
-      if (isStale) return
-
       if (computedAuthHeader) {
-        headersList.push({
+        inheritedProperty.value.push({
           inheritedFrom: props.inheritedProperties.auth.parentName,
-          source: "auth" as const,
+          source: "auth",
           id: `header-auth`,
           header: computedAuthHeader,
         })
       }
     }
-
-    inheritedProperty.value = headersList
   },
   { immediate: true, deep: true }
 )

@@ -33,6 +33,7 @@ export type SettingsDef = {
   syncEnvironments: boolean
 
   PROXY_URL: string
+  FOLLOW_REDIRECTS: boolean
 
   WRAP_LINES: {
     httpRequestBody: boolean
@@ -84,7 +85,6 @@ export type SettingsDef = {
 
   EXPERIMENTAL_SCRIPTING_SANDBOX: boolean
   ENABLE_EXPERIMENTAL_MOCK_SERVERS: boolean
-  ENABLE_EXPERIMENTAL_DOCUMENTATION: boolean
 }
 
 export const getDefaultSettings = (): SettingsDef => {
@@ -116,10 +116,11 @@ export const getDefaultSettings = (): SettingsDef => {
     // Set empty because interceptor module will set the default value
     CURRENT_KERNEL_INTERCEPTOR_ID: "",
 
-    // Static fallback, the actual platform-aware proxy URL is managed by
-    // `KernelInterceptorProxyStore` which resolves it at runtime via
-    // `getDefaultProxyUrl()` (after the platform is initialised).
-    PROXY_URL: DEFAULT_HOPP_PROXY_URL,
+      // Static fallback, the actual platform-aware proxy URL is managed by
+      // `KernelInterceptorProxyStore` which resolves it at runtime via
+      // `getDefaultProxyUrl()` (after the platform is initialised).
+      PROXY_URL: DEFAULT_HOPP_PROXY_URL,
+      FOLLOW_REDIRECTS: true,
     URL_EXCLUDES: {
       auth: true,
       httpUser: true,
@@ -142,8 +143,7 @@ export const getDefaultSettings = (): SettingsDef => {
     CUSTOM_NAMING_STYLE: "",
 
     EXPERIMENTAL_SCRIPTING_SANDBOX: true,
-    ENABLE_EXPERIMENTAL_MOCK_SERVERS: true,
-    ENABLE_EXPERIMENTAL_DOCUMENTATION: true,
+    ENABLE_EXPERIMENTAL_MOCK_SERVERS: false,
   }
 }
 

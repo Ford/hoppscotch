@@ -25,7 +25,6 @@ import { initializeDownloadFile } from "~/helpers/import-export/export"
 import { useReadonlyStream } from "~/composables/stream"
 
 import { platform } from "~/platform"
-import { sync } from "~/lib/sync/defs"
 import {
   appendGraphqlCollections,
   graphqlCollections$,
@@ -240,8 +239,11 @@ const handleImportToStore = (gqlCollections: HoppCollection[]) => {
   const collectionsWithRefIds = gqlCollections.map(ensureRefIds)
   collectionsWithRefIds.forEach(populateLocalStoresFromCollectionTree)
 
-  if (sync.collections.importToPersonalWorkspace && currentUser.value) {
-    return sync.collections.importToPersonalWorkspace(
+  if (
+    platform.sync.collections.importToPersonalWorkspace &&
+    currentUser.value
+  ) {
+    return platform.sync.collections.importToPersonalWorkspace(
       collectionsWithRefIds,
       ReqType.Gql
     )
