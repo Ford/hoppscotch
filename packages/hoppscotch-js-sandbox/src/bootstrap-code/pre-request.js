@@ -177,6 +177,130 @@
       getAll: (domain) => inputs.cookieGetAll(domain),
       delete: (domain, name) => inputs.cookieDelete(domain, name),
       clear: (domain) => inputs.cookieClear(domain),
+      /**
+       * hopp.cookies.jar() — Postman-compatible cookie jar API
+       * Returns a jar object backed by hopp.cookies (domain-based).
+       * URL inputs are normalized to hostname via URL parsing.
+       * Callbacks are Node.js-style (err, result) => void — called synchronously.
+       * Platform guard: warns + returns no-op jar on Web/CLI where cookies are unsupported.
+       */
+      jar: () => {
+        // Helper: extract hostname from a full URL string
+        const extractDomain = (url) => {
+          try {
+            return new URL(url).hostname
+          } catch (_) {
+            // Fallback: use url as-is (already a domain)
+            return url
+          }
+        }
+
+        // Platform guard — cookies only supported on Desktop App
+        const cookiesAvailable = (() => {
+          try {
+            inputs.cookieGet("__probe__", "__probe__")
+            return true
+          } catch (e) {
+            return !String(e).includes("not supported in the current platform")
+          }
+        })()
+
+        if (!cookiesAvailable) {
+          console.warn(
+            "[hopp.cookies.jar] Cookie jar is not supported on this platform. " +
+            "Cookie operations are exclusive to the Desktop App."
+          )
+          const noop = (_a, _b, cb) => { if (typeof cb === "function") cb(null) }
+          return { set: noop, get: noop, getAll: noop, unset: noop, clear: noop }
+        }
+
+        return {
+          /**
+           * jar.set(url, nameOrCookieObj, valueOrCallback, [callback])
+           * Supports both:
+           *   jar.set(url, "name", "value", cb)
+           *   jar.set(url, { name, value, ... }, cb)
+           */
+          set: (url, nameOrCookie, valueOrCallback, maybeCallback) => {
+            const domain = extractDomain(url)
+            let cookieObj
+            let cb
+
+            if (typeof nameOrCookie === "string") {
+              // Signature: set(url, name, value, cb)
+              cookieObj = { name: nameOrCookie, value: valueOrCallback, domain, path: "/" }
+              cb = maybeCallback
+            } else {
+              // Signature: set(url, cookieObject, cb)
+              cookieObj = { domain, path: "/", ...nameOrCookie }
+              cb = valueOrCallback
+            }
+
+            try {
+              inputs.cookieSet(domain, cookieObj)
+              if (typeof cb === "function") cb(null)
+            } catch (err) {
+              if (typeof cb === "function") cb(err)
+            }
+          },
+
+          /**
+           * jar.get(url, name, callback)
+           * Returns the cookie VALUE string (Postman compat), not the full cookie object.
+           */
+          get: (url, name, cb) => {
+            const domain = extractDomain(url)
+            try {
+              const cookie = inputs.cookieGet(domain, name)
+              if (typeof cb === "function") cb(null, cookie ? cookie.value : undefined)
+            } catch (err) {
+              if (typeof cb === "function") cb(err, undefined)
+            }
+          },
+
+          /**
+           * jar.getAll(url, callback)
+           * Returns all Cookie objects for the domain.
+           */
+          getAll: (url, cb) => {
+            const domain = extractDomain(url)
+            try {
+              const cookies = inputs.cookieGetAll(domain)
+              if (typeof cb === "function") cb(null, cookies || [])
+            } catch (err) {
+              if (typeof cb === "function") cb(err, [])
+            }
+          },
+
+          /**
+           * jar.unset(url, name, callback)
+           * Deletes a single named cookie for the URL's domain.
+           */
+          unset: (url, name, cb) => {
+            const domain = extractDomain(url)
+            try {
+              inputs.cookieDelete(domain, name)
+              if (typeof cb === "function") cb(null)
+            } catch (err) {
+              if (typeof cb === "function") cb(err)
+            }
+          },
+
+          /**
+           * jar.clear(url, callback)
+           * Clears ALL cookies for the URL's domain.
+           */
+          clear: (url, cb) => {
+            const domain = extractDomain(url)
+            try {
+              inputs.cookieClear(domain)
+              if (typeof cb === "function") cb(null)
+            } catch (err) {
+              if (typeof cb === "function") cb(err)
+            }
+          },
+        }
+      },
     },
     // Expose fetch as hopp.fetch() for explicit access
     // Note: This exposes the fetch implementation provided by the host environment via hoppFetchHook
@@ -445,6 +569,13 @@
             const showPort =
               forcePort || (parsed.port !== "443" && parsed.port !== "80")
             return showPort ? `${host}:${parsed.port}` : host
+          },
+
+          // Category D3 — pm.request.url.getOAuth1BaseUrl() (PM312)
+          // Returns URL with path only, no query string — used for OAuth1 signature base string
+          getOAuth1BaseUrl: () => {
+            const urlString = globalThis.hopp.request.url || ""
+            return urlString.split("?")[0]
           },
 
           update: (urlString) => {
@@ -980,6 +1111,15 @@
             return globalThis.hopp.request.headers[index] || null
           },
 
+          // Category D1 — pm.request.headers.one(key) alias (PM310)
+          one: (name) => {
+            const headers = globalThis.hopp.request.headers
+            const header = headers.find(
+              (h) => h.key.toLowerCase() === name.toLowerCase()
+            )
+            return header ? header.value : null
+          },
+
           // Advanced PropertyList methods
           find: (rule, context) => {
             const headers = globalThis.hopp.request.headers
@@ -1105,6 +1245,15 @@
           // Spread current body properties
           ...currentBody,
 
+          // Category D2 — pm.request.body.isEmpty() (PM311)
+          isEmpty: () => {
+            if (!currentBody) return true
+            if (currentBody.mode === "raw") return !currentBody.raw || currentBody.raw.trim() === ""
+            if (currentBody.mode === "urlencoded") return !currentBody.urlencoded || currentBody.urlencoded.length === 0
+            if (currentBody.mode === "formdata") return !currentBody.formdata || currentBody.formdata.length === 0
+            return false
+          },
+
           // Postman-compatible update() method
           update: (bodySpec) => {
             if (typeof bodySpec === "string") {
@@ -1195,6 +1344,53 @@
         } else {
           throw new Error("Auth must be an object or null")
         }
+      },
+
+      // Direct header manipulation convenience methods (Postman compatibility)
+      // Shortcuts for pm.request.headers.add() and pm.request.headers.remove()
+
+      /**
+       * Adds a header to the request.
+       * @param {Object} header - Object with 'key' and 'value' properties
+       * @example pm.request.addHeader({ key: "x-forwarded-authorization", value: "Bearer token" })
+       */
+      addHeader: (header) => {
+        if (!header || typeof header !== "object") {
+          throw new Error(
+            "pm.request.addHeader() requires an object with 'key' and 'value' properties"
+          )
+        }
+        if (!header.key) {
+          throw new Error(
+            "pm.request.addHeader() requires a 'key' property"
+          )
+        }
+        globalThis.hopp.request.setHeader(header.key, header.value || "")
+      },
+
+      /**
+       * Removes a header from the request by name (case-insensitive).
+       * Accepts a plain string name or an object with a 'key' property.
+       * @param {string|Object} headerNameOrObject - Header name or {key} object
+       * @example pm.request.removeHeader("x-forwarded-authorization")
+       * @example pm.request.removeHeader({ key: "x-forwarded-authorization" })
+       */
+      removeHeader: (headerNameOrObject) => {
+        let headerName
+        if (typeof headerNameOrObject === "string") {
+          headerName = headerNameOrObject
+        } else if (
+          headerNameOrObject &&
+          typeof headerNameOrObject === "object"
+        ) {
+          headerName = headerNameOrObject.key
+        }
+        if (!headerName || typeof headerName !== "string") {
+          throw new Error(
+            "pm.request.removeHeader() requires a string header name or an object with a 'key' property"
+          )
+        }
+        globalThis.hopp.request.removeHeader(headerName)
       },
 
       // Custom serialization for console.log to ensure consistent behavior
@@ -1493,42 +1689,28 @@
         })
     },
 
-    // Collection variables (unsupported)
+    // Backward-compatible alias for Postman flows
+    setNextRequest: (requestNameOrId) => {
+      return globalThis.pm.execution.setNextRequest(requestNameOrId)
+    },
+
+    // Collection variables — delegated to pm.environment (active scope)
+    // Postman's collectionVariables scope maps to the active environment in Hoppscotch.
+    // Data written here is visible in pm.environment and vice-versa (same store).
     collectionVariables: {
-      get: () => {
-        throw new Error(
-          "pm.collectionVariables.get() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      set: () => {
-        throw new Error(
-          "pm.collectionVariables.set() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      unset: () => {
-        throw new Error(
-          "pm.collectionVariables.unset() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      has: () => {
-        throw new Error(
-          "pm.collectionVariables.has() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      clear: () => {
-        throw new Error(
-          "pm.collectionVariables.clear() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      toObject: () => {
-        throw new Error(
-          "pm.collectionVariables.toObject() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
-      },
-      replaceIn: () => {
-        throw new Error(
-          "pm.collectionVariables.replaceIn() is not supported in Hoppscotch (use environment or request variables instead)"
-        )
+      get: (key) => globalThis.pm.environment.get(key),
+      set: (key, value) => globalThis.pm.environment.set(key, value),
+      unset: (key) => globalThis.pm.environment.unset(key),
+      has: (key) => globalThis.pm.environment.has(key),
+      clear: () => globalThis.pm.environment.clear(),
+      toObject: () => globalThis.pm.environment.toObject(),
+      replaceIn: (template) => {
+        // Inline replaceIn: resolve {{varName}} against the active environment
+        if (typeof template !== "string") return template
+        return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
+          const value = globalThis.hopp.env.active.get(key.trim())
+          return value !== null ? value : match
+        })
       },
     },
 
@@ -1551,55 +1733,106 @@
       },
     },
 
-    // Postman Visualizer (unsupported)
+    // Cookie Jar — Postman-compatible pm.cookies API (PM004)
+    // pm.cookies delegates to hopp.cookies (domain-based) under the hood.
+    // pm.cookies.jar() mirrors the Postman CookieJar interface with async callbacks.
+    cookies: {
+      /**
+       * pm.cookies.get(name) — get cookie for current request URL
+       * Note: delegates to hopp.cookies using the request URL's hostname.
+       */
+      get: (name) => {
+        try {
+          const domain = (() => { try { return new URL(globalThis.hopp.request.url).hostname } catch (_) { return globalThis.hopp.request.url } })()
+          const cookie = inputs.cookieGet(domain, name)
+          return cookie ? cookie.value : undefined
+        } catch (_) {
+          return undefined
+        }
+      },
+      /**
+       * pm.cookies.has(name) — check if cookie exists for current request URL
+       */
+      has: (name) => {
+        try {
+          const domain = (() => { try { return new URL(globalThis.hopp.request.url).hostname } catch (_) { return globalThis.hopp.request.url } })()
+          return inputs.cookieHas(domain, name)
+        } catch (_) {
+          return false
+        }
+      },
+      /**
+       * pm.cookies.getAll() — get all cookies for current request URL
+       */
+      getAll: () => {
+        try {
+          const domain = (() => { try { return new URL(globalThis.hopp.request.url).hostname } catch (_) { return globalThis.hopp.request.url } })()
+          return inputs.cookieGetAll(domain) || []
+        } catch (_) {
+          return []
+        }
+      },
+      /**
+       * pm.cookies.toObject() — all cookies as key:value object for current request URL
+       */
+      toObject: () => {
+        try {
+          const domain = (() => { try { return new URL(globalThis.hopp.request.url).hostname } catch (_) { return globalThis.hopp.request.url } })()
+          const cookies = inputs.cookieGetAll(domain) || []
+          return cookies.reduce((obj, c) => { obj[c.name] = c.value; return obj }, {})
+        } catch (_) {
+          return {}
+        }
+      },
+      /**
+       * pm.cookies.jar() — returns a Postman-compatible CookieJar object.
+       * Delegates to hopp.cookies.jar() which is the same implementation.
+       */
+      jar: () => globalThis.hopp.cookies.jar(),
+    },
+
+    // Postman Visualizer — graceful degradation (PM003)
+    // Hoppscotch has no visual template renderer. Instead of throwing:
+    //   - set(template, data): discard the HTML template, log the data payload to the console
+    //   - clear(): no-op (nothing to clear)
     visualizer: {
-      set: () => {
-        throw new Error(
-          "pm.visualizer.set() is not supported in Hoppscotch (Postman Visualizer feature)"
-        )
+      set: (_template, data) => {
+        // Keep any data extraction value; redirect visualizer output to console (PM003)
+        console.log("[pm.visualizer] data:", data)
       },
       clear: () => {
-        throw new Error(
-          "pm.visualizer.clear() is not supported in Hoppscotch (Postman Visualizer feature)"
-        )
+        // No-op — visualizer is not supported; silently ignore (PM003)
       },
     },
 
-    // Iteration data (unsupported)
+    // Iteration data — delegated to pm.variables / pm.environment (PM002)
+    // Strategy: the runner injects each dataset row's keys into the active environment before
+    // the request runs, so iterationData reads resolve against pm.variables (which merges all scopes).
+    // For toObject()/toJSON() the runner is expected to also store the full row as a JSON string
+    // under the "row" environment variable: pm.environment.set("row", JSON.stringify(datasetRow)).
     iterationData: {
-      get: () => {
-        throw new Error(
-          "pm.iterationData.get() is not supported in Hoppscotch (Collection Runner feature)"
-        )
-      },
-      set: () => {
-        throw new Error(
-          "pm.iterationData.set() is not supported in Hoppscotch (Collection Runner feature)"
-        )
-      },
-      unset: () => {
-        throw new Error(
-          "pm.iterationData.unset() is not supported in Hoppscotch (Collection Runner feature)"
-        )
-      },
-      has: () => {
-        throw new Error(
-          "pm.iterationData.has() is not supported in Hoppscotch (Collection Runner feature)"
-        )
-      },
+      get: (key) => globalThis.pm.variables.get(key),
+      has: (key) => globalThis.pm.variables.has(key),
       toObject: () => {
-        throw new Error(
-          "pm.iterationData.toObject() is not supported in Hoppscotch (Collection Runner feature)"
-        )
+        // Prefer the pre-loaded "row" env variable (runner sets it as a serialised JSON object).
+        // Fall back to an empty object when the runner has not injected it.
+        const rowJson = globalThis.pm.environment.get("row")
+        if (rowJson !== undefined && rowJson !== null) {
+          try { return JSON.parse(rowJson) } catch (_) {}
+        }
+        return {}
       },
       toJSON: () => {
-        throw new Error(
-          "pm.iterationData.toJSON() is not supported in Hoppscotch (Collection Runner feature)"
-        )
+        // Same strategy as toObject()
+        const rowJson = globalThis.pm.environment.get("row")
+        if (rowJson !== undefined && rowJson !== null) {
+          try { return JSON.parse(rowJson) } catch (_) {}
+        }
+        return {}
       },
     },
 
-    // Execution control (unsupported)
+    // Execution control — graceful degradation (PM005, PM006)
     execution: {
       location: (() => {
         const location = ["Hoppscotch"]
@@ -1611,20 +1844,21 @@
         Object.freeze(location)
         return location
       })(),
-      setNextRequest: () => {
-        throw new Error(
-          "pm.execution.setNextRequest() is not supported in Hoppscotch (Collection Runner feature)"
-        )
+      setNextRequest: (requestNameOrId) => {
+        return inputs.pmSetNextRequest(requestNameOrId)
       },
+      // PM005: skipRequest() — redirect to setNextRequest(null) which aborts the current request
       skipRequest: () => {
-        throw new Error(
-          "pm.execution.skipRequest() is not supported in Hoppscotch (Collection Runner feature)"
-        )
+        console.warn("[pm.execution] pm.execution.skipRequest() is not supported. Redirecting to pm.execution.setNextRequest(null) to abort flow. Redesign runner order using setNextRequest() for full control.")
+        return inputs.pmSetNextRequest(null)
       },
-      runRequest: () => {
-        throw new Error(
-          "pm.execution.runRequest() is not supported in Hoppscotch (Collection Runner feature)"
-        )
+      // PM006: runRequest(id) — cannot invoke runner-level request by ID; log guidance and no-op
+      runRequest: (id) => {
+        console.warn(`[pm.execution] pm.execution.runRequest('${id}') is not supported. Use pm.sendRequest({...}, callback) for extra HTTP calls, or redesign collection runner order using setNextRequest().`)
+      },
+      // iterationCount — returns 1 in single-execution environments (Hoppscotch does not support Collection Runner iterations)
+      get iterationCount() {
+        return 1
       },
     },
 

@@ -17,6 +17,7 @@ export const fakeResponse: TestResponse = {
   status: 200,
   statusText: "OK",
   responseTime: 0,
+  duration: 0,
   body: "hoi",
   headers: [],
 }
@@ -106,6 +107,23 @@ export const runPreRequest = (
       hoppFetchHook,
     }),
     TE.map((x) => x.updatedEnvs)
+  )
+
+export const runPreRequestAndGetNextRequest = (
+  script: string,
+  envs: TestResult["envs"],
+  request: ReturnType<typeof getDefaultRESTRequest> = defaultRequest,
+  hoppFetchHook?: HoppFetchHook
+) =>
+  pipe(
+    runPreRequestScript(script, {
+      envs,
+      request,
+      cookies: null,
+      experimentalScriptingSandbox: true,
+      hoppFetchHook,
+    }),
+    TE.map((x) => x.nextRequest)
   )
 
 /**
@@ -202,3 +220,23 @@ export const runTestAndGetEnvs = (
     }),
     TE.map((x: TestResult) => x.envs)
   )
+
+export const runTestAndGetNextRequest = (
+  script: string,
+  envs: TestResult["envs"],
+  response: TestResponse = fakeResponse,
+  request: ReturnType<typeof getDefaultRESTRequest> = defaultRequest,
+  hoppFetchHook?: HoppFetchHook
+) =>
+  pipe(
+    runTestScript(script, {
+      envs,
+      request,
+      response,
+      cookies: null,
+      experimentalScriptingSandbox: true,
+      hoppFetchHook,
+    }),
+    TE.map((x) => x.nextRequest)
+  )
+

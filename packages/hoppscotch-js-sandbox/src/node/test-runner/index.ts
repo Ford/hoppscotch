@@ -13,7 +13,32 @@ export const runTestScript = (
   testScript: string,
   options: RunPostRequestScriptOptions
 ): TE.TaskEither<string, TestResult> => {
-  const responseObjHandle = preventCyclicObjects<TestResponse>(options.response)
+  // Pre-parse the script to catch syntax errors before execution
+  // Use AsyncFunction to support top-level await (required for hopp.fetch, etc.)
+  try {
+    // eslint-disable-next-line no-new-func
+    const AsyncFunction = Object.getPrototypeOf(
+      async function () {}
+    ).constructor
+    new (AsyncFunction as any)(testScript)
+  } catch (e) {
+    const err = e as Error
+    const reason = `${"name" in err ? (err as any).name : "SyntaxError"}: ${err.message}`
+    return TE.left(`Script execution failed: ${reason}`)
+  }
+
+  // Normalize headers: axios can return headers as a plain object { key: value }
+  // but the sandbox expects the array format [{ key, value }]. Convert if needed.
+  const headersArray = Array.isArray(options.response.headers)
+    ? options.response.headers
+    : Object.entries(options.response.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
+  const responseObjHandle = preventCyclicObjects<TestResponse>({
+    ...options.response,
+    headers: headersArray,
+  })
 
   if (E.isLeft(responseObjHandle)) {
     return TE.left(`Response marshalling failed: ${responseObjHandle.left}`)

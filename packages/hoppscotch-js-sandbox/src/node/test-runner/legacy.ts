@@ -22,8 +22,14 @@ const executeScriptInContext = (
   context: ivmT.Context
 ): Promise<TestResult> => {
   return new Promise((resolve, reject) => {
+    const headersArray = Array.isArray(response.headers)
+      ? response.headers
+      : Object.entries(response.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
     // Parse response object
-    const responseObjHandle = preventCyclicObjects<TestResponse>(response)
+    const responseObjHandle = preventCyclicObjects<TestResponse>({ ...response, headers: headersArray })
     if (E.isLeft(responseObjHandle)) {
       return reject(`Response parsing failed: ${responseObjHandle.left}`)
     }
@@ -108,6 +114,10 @@ const executeScriptInContext = (
                 "toBeType",
                 "toHaveLength",
                 "toInclude",
+                "toBeGreaterThan",
+                "toBeLessThan",
+                "toBeGreaterThanOrEqual",
+                "toBeLessThanOrEqual"
               ]
               matcherMethodNames.forEach((methodName) => {
                 matcherMethods[methodName] = expectFnResult.getSync(methodName)

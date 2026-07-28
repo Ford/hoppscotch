@@ -64,6 +64,8 @@ export type TestResponse = {
    * Body of the response, this will be the JSON object if it is a JSON content type, else body string
    */
   body: string | object
+  /** Duration of the request in milliseconds */
+  duration: number
 }
 
 /**
@@ -157,6 +159,7 @@ export type TestResult = {
     global: EnvironmentVariable[]
     selected: EnvironmentVariable[]
   }
+  nextRequest?: string | null
 }
 
 export type GlobalEnvItem = TestResult["envs"]["global"][number]
@@ -167,6 +170,7 @@ export type SandboxTestResult = {
   envs: TestResult["envs"]
   consoleEntries?: ConsoleEntry[]
   updatedCookies: Cookie[] | null
+  nextRequest?: string | null
 }
 
 export type SandboxPreRequestResult = {
@@ -174,6 +178,7 @@ export type SandboxPreRequestResult = {
   consoleEntries?: ConsoleEntry[]
   updatedRequest?: HoppRESTRequest
   updatedCookies: Cookie[] | null
+  nextRequest?: string | null
 }
 
 export interface Expectation {
@@ -185,6 +190,10 @@ export interface Expectation {
   toBeType(expectedType: SandboxValue): void
   toHaveLength(expectedLength: SandboxValue): void
   toInclude(needle: SandboxValue): void
+  toBeGreaterThan(expected: SandboxValue): void
+  toBeLessThan(expected: SandboxValue): void
+  toBeGreaterThanOrEqual(expected: SandboxValue): void
+  toBeLessThanOrEqual(expected: SandboxValue): void
   readonly not: Expectation
 }
 
@@ -281,6 +290,7 @@ export interface PwNamespaceMethods {
 export interface PmNamespaceMethods {
   pmInfoRequestName: SandboxFunction
   pmInfoRequestId: SandboxFunction
+  pmSetNextRequest: SandboxFunction
 }
 
 /**
@@ -295,6 +305,10 @@ export interface ExpectationMethods {
   expectToBeType: SandboxFunction
   expectToHaveLength: SandboxFunction
   expectToInclude: SandboxFunction
+  expectToBeGreaterThan: SandboxFunction
+  expectToBeLessThan: SandboxFunction
+  expectToBeGreaterThanOrEqual: SandboxFunction
+  expectToBeLessThanOrEqual: SandboxFunction
   expectNotToBe: SandboxFunction
   expectNotToBeLevel2xx: SandboxFunction
   expectNotToBeLevel3xx: SandboxFunction
@@ -303,6 +317,10 @@ export interface ExpectationMethods {
   expectNotToBeType: SandboxFunction
   expectNotToHaveLength: SandboxFunction
   expectNotToInclude: SandboxFunction
+  expectNotToBeGreaterThan: SandboxFunction
+  expectNotToBeLessThan: SandboxFunction
+  expectNotToBeGreaterThanOrEqual: SandboxFunction
+  expectNotToBeLessThanOrEqual: SandboxFunction
 }
 
 /**
@@ -339,6 +357,7 @@ export interface BaseInputs
   // Returns serialized env vars (SandboxValue -> string conversion happens here)
   getUpdatedEnvs: () => TestResult["envs"]
   getUpdatedCookies: () => Cookie[] | null
+  getNextRequest: () => string | null | undefined
   [key: string]: SandboxValue // Index signature for dynamic namespace properties
 }
 

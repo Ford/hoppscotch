@@ -145,5 +145,65 @@ export const createExpectationMethods = (
         return createExpect(expectVal).not.toInclude(needle)
       }
     ),
+
+    // Comparison expectation methods
+    expectToBeGreaterThan: defineSandboxFn(
+      ctx,
+      "expectToBeGreaterThan",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).toBeGreaterThan(expected)
+      }
+    ),
+    expectToBeLessThan: defineSandboxFn(
+      ctx,
+      "expectToBeLessThan",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).toBeLessThan(expected)
+      }
+    ),
+    expectToBeGreaterThanOrEqual: defineSandboxFn(
+      ctx,
+      "expectToBeGreaterThanOrEqual",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).toBeGreaterThanOrEqual(expected)
+      }
+    ),
+    expectToBeLessThanOrEqual: defineSandboxFn(
+      ctx,
+      "expectToBeLessThanOrEqual",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).toBeLessThanOrEqual(expected)
+      }
+    ),
+
+    // Negative comparison expectation methods
+    expectNotToBeGreaterThan: defineSandboxFn(
+      ctx,
+      "expectNotToBeGreaterThan",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).not.toBeGreaterThan(expected)
+      }
+    ),
+    expectNotToBeLessThan: defineSandboxFn(
+      ctx,
+      "expectNotToBeLessThan",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).not.toBeLessThan(expected)
+      }
+    ),
+    expectNotToBeGreaterThanOrEqual: defineSandboxFn(
+      ctx,
+      "expectNotToBeGreaterThanOrEqual",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).not.toBeGreaterThanOrEqual(expected)
+      }
+    ),
+    expectNotToBeLessThanOrEqual: defineSandboxFn(
+      ctx,
+      "expectNotToBeLessThanOrEqual",
+      (expectVal: SandboxValue, expected: SandboxValue) => {
+        return createExpect(expectVal).not.toBeLessThanOrEqual(expected)
+      }
+    ),
   }
 }
