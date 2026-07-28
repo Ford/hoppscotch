@@ -17,7 +17,7 @@ import * as A from "fp-ts/Array"
 import * as E from "fp-ts/Either"
 import * as O from "fp-ts/Option"
 import { flow, pipe } from "fp-ts/function"
-import { cloneDeep, isEqual } from "lodash-es"
+import { cloneDeep } from "lodash-es"
 import { Observable, Subject } from "rxjs"
 import { filter } from "rxjs/operators"
 import { Ref } from "vue"
@@ -70,16 +70,16 @@ import { applyScriptRequestUpdates } from "./experimental-sandbox-integration"
 
 const secretEnvironmentService = getService(SecretEnvironmentService)
 const currentEnvironmentValueService = getService(CurrentValueService)
-// `getService(CookieJarService)` at module top level would construct
-// the service during ESM evaluation. `onServiceInit` then reads
-// `window.__KERNEL__.store` and throws because `createHoppApp` has
-// not yet called `initKernel(...)` at that point.
-const getCookieJarService = () => getService(CookieJarService)
+const cookieJarService = getService(CookieJarService)
 const kernelInterceptorService = getService(KernelInterceptorService)
 
 const EXPERIMENTAL_SCRIPTING_SANDBOX = useSetting(
   "EXPERIMENTAL_SCRIPTING_SANDBOX"
 )
+
+type SandboxNextRequest = {
+  nextRequest?: string | null
+}
 
 export type InitialEnvironmentState = {
   initialGlobalEnvs: Environment["variables"]
@@ -399,6 +399,7 @@ const delegatePreRequestScriptRunner = (
       E.right({
         updatedEnvs: envs,
         updatedCookies: cookies,
+        nextRequest: undefined,
       })
     )
   }
@@ -657,23 +658,33 @@ export function runRESTRequest$(
 
             const updatedCookies = postRequestScriptResult.right.updatedCookies
 
-            if (updatedCookies && cookieJarEntries !== null) {
-              // The script's `updatedCookies` is the post-script state of
-              // its pre-script view, so a set difference against the
-              // pre-script snapshot gives the actual mutations. Cookies
-              // the script returned identical to what it received get
-              // skipped because the response capture may have updated
-              // them in the jar in the interim and re-upserting the
-              // script's stale copy would overwrite that. Cookies the
-              // script omitted from its returned array are treated as
-              // deletes, restoring `hopp.cookies.delete` semantics.
-              //
-              // Skipped entirely when `cookieJarEntries` is null
-              // (cookies disabled on the platform). The previous
-              // `?? []` made the empty pre-script snapshot classify
-              // every script cookie as new and never as removed, so
-              // delete-by-omission silently broke on non-desktop.
-              await applyScriptCookieDelta(cookieJarEntries, updatedCookies)
+            if (updatedCookies) {
+              console.log('[RequestRunner] Merging script cookies with existing jar')
+              // Create a new Map starting with existing cookies
+              const newCookieMap = new Map(cookieJarService.cookieJar.value)
+
+              for (const cookie of updatedCookies) {
+                const domain = cookie.domain
+
+                if (!newCookieMap.has(domain)) {
+                  newCookieMap.set(domain, [])
+                }
+
+                const domainCookies = newCookieMap.get(domain)!
+
+                // Remove existing cookie with same name and path if it exists
+                const filteredCookies = domainCookies.filter(
+                  (existingCookie) =>
+                    !(existingCookie.name === cookie.name && existingCookie.path === cookie.path)
+                )
+
+                // Add the updated cookie
+                filteredCookies.push(cookie)
+                newCookieMap.set(domain, filteredCookies)
+              }
+
+              cookieJarService.cookieJar.value = newCookieMap
+              console.log('[RequestRunner] After merge, jar size:', cookieJarService.cookieJar.value.size)
             }
           } else {
             console.error(
@@ -800,65 +811,19 @@ const getCookieJarEntries = () => {
     return null
   }
 
-  // `cloneDeep` so the sandbox cannot mutate the live jar through
-  // a shared reference, and so `applyScriptCookieDelta`'s
-  // pre-script snapshot is independent of whatever the script
-  // returns. Without this a script that mutates a cookie in place
-  // and returns the same array would produce a pre-vs-post delta
-  // of "identical" and the mutation would silently drop.
-  const cookieJarEntries = cloneDeep(
-    Array.from(getCookieJarService().cookieJar.value.values()).flatMap(
-      (cookies) => cookies
-    )
-  )
+  const cookieJarEntries = Array.from(
+    cookieJarService.cookieJar.value.values()
+  ).flatMap((cookies) => cookies)
 
   return cookieJarEntries
-}
-
-const cookieKey = (c: { domain: string; name: string; path?: string }) =>
-  `${getCookieJarService().canonStoreDomain(c.domain)}\u0000${c.name}\u0000${c.path && c.path.length > 0 ? c.path : "/"}`
-
-const applyScriptCookieDelta = async (
-  preScript: Cookie[],
-  postScript: Cookie[]
-): Promise<void> => {
-  const preMap = new Map<string, Cookie>()
-  for (const c of preScript) {
-    preMap.set(cookieKey(c), c)
-  }
-  const postMap = new Map<string, Cookie>()
-  for (const c of postScript) {
-    postMap.set(cookieKey(c), c)
-  }
-
-  const mutated: Cookie[] = []
-  for (const [key, post] of postMap) {
-    const before = preMap.get(key)
-    if (!before || !isEqual(before, post)) {
-      mutated.push(post)
-    }
-  }
-
-  const removed: Array<{ domain: string; name: string; path?: string }> = []
-  for (const [key, pre] of preMap) {
-    if (!postMap.has(key)) {
-      removed.push({ domain: pre.domain, name: pre.name, path: pre.path })
-    }
-  }
-
-  if (mutated.length > 0) {
-    await getCookieJarService().upsertCookies(mutated)
-  }
-  if (removed.length > 0) {
-    await getCookieJarService().deleteCookies(removed)
-  }
 }
 
 /**
  * Run the test runner request
  * @param request The request to run
  * @param persistEnv Whether to persist the environment variables after running the test script
- * @param inheritedVariables The inherited collection variables from the collection/folder
+ * @param inheritedVariables The inherited collection variables
+ * @param iterationData The iteration data from dataset for data-driven testing
  * @param initialEnvironmentState The initial environment state before collection run execution
  * @returns The response and the test result
  */
@@ -868,6 +833,7 @@ export async function runTestRunnerRequest(
   persistEnv = true,
   inheritedVariables: HoppCollectionVariable[] = [],
   initialEnvironmentState: InitialEnvironmentState,
+  iterationData?: Record<string, any>,
   inheritedPreRequestScripts: string[] = [],
   inheritedTestScripts: string[] = []
 ): Promise<
@@ -876,10 +842,31 @@ export async function runTestRunnerRequest(
       response: HoppRESTResponse
       testResult: HoppTestResult
       updatedRequest: HoppRESTRequest
+      nextRequest?: string | null
     }>
   | undefined
 > {
   const cookieJarEntries = getCookieJarEntries()
+
+  // Get combined environment variables
+  const envVariables = getCombinedEnvVariables()
+
+  // Inject iteration data into environment variables if available
+  const iterationDataVars: Environment["variables"] = iterationData
+    ? Object.keys(iterationData).map((key) => ({
+        key,
+        value: String(iterationData[key]),
+        secret: false,
+        initialValue: String(iterationData[key]),
+        currentValue: String(iterationData[key]),
+      }))
+    : []
+
+  const enrichedEnvs = {
+    global: envVariables.global,
+    selected: envVariables.selected,
+    temp: [...envVariables.temp, ...iterationDataVars],
+  }
 
   const {
     initialGlobalEnvs,
@@ -887,7 +874,6 @@ export async function runTestRunnerRequest(
     initialSelectedEnvs,
     initialEnvironmentIndex,
     initialEnvName,
-    initialEnvs,
     initialEnvsForComparison,
   } = initialEnvironmentState
 
@@ -897,7 +883,7 @@ export async function runTestRunnerRequest(
 
   return delegatePreRequestScriptRunner(
     request,
-    initialEnvs,
+    enrichedEnvs,
     cookieJarEntries,
     inheritedPreRequestScripts
   ).then(async (preRequestScriptResult) => {
@@ -923,20 +909,28 @@ export async function runTestRunnerRequest(
       preRequestScriptResult.right.updatedRequest
     )
 
+    // Combine all environment variables including iteration data for effective request resolution
+    // The iteration data is already in enrichedEnvs.temp that was passed to pre-request script
+    const allEnvVariables = filterNonEmptyEnvironmentVariables(
+      combineEnvVariables({
+        environments: {
+          global: preRequestScriptResult.right.updatedEnvs.global,
+          selected: preRequestScriptResult.right.updatedEnvs.selected,
+          temp: [
+            ...iterationDataVars, // Add iteration data from dataset
+            ...(!persistEnv ? getTemporaryVariables() : []), // Add temporary variables if not persisting
+          ],
+        },
+        requestVariables: finalRequestVariables,
+        collectionVariables: inheritedVariables,
+      })
+    )
+
     const effectiveRequest = await getEffectiveRESTRequest(finalRequest, {
       id: "env-id",
       v: 2,
       name: "Env",
-      variables: filterNonEmptyEnvironmentVariables(
-        combineEnvVariables({
-          environments: {
-            ...preRequestScriptResult.right.updatedEnvs,
-            temp: !persistEnv ? getTemporaryVariables() : [],
-          },
-          requestVariables: finalRequestVariables,
-          collectionVariables: inheritedVariables,
-        })
-      ),
+      variables: allEnvVariables,
     })
 
     const [stream] = createRESTNetworkRequestStream(effectiveRequest)
@@ -963,6 +957,19 @@ export async function runTestRunnerRequest(
           )
 
           if (E.isRight(postRequestScriptResult)) {
+            const preRequestResultWithNext = preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+
+            const postRequestResultWithNext = postRequestScriptResult.right as
+              | (SandboxTestResult & SandboxNextRequest)
+              | SandboxTestResult
+
+            const resolvedNextRequest =
+              postRequestResultWithNext.nextRequest !== undefined
+                ? postRequestResultWithNext.nextRequest
+                : preRequestResultWithNext.nextRequest
+
             // Combine console entries from pre and post request scripts
             const combinedResult = {
               ...postRequestScriptResult.right,
@@ -1008,6 +1015,7 @@ export async function runTestRunnerRequest(
               response: res,
               testResult: sandboxTestResult,
               updatedRequest: finalRequest,
+              nextRequest: resolvedNextRequest,
             })
           }
 
@@ -1040,6 +1048,10 @@ export async function runTestRunnerRequest(
             response: res,
             testResult: sandboxTestResult,
             updatedRequest: finalRequest,
+            nextRequest: (preRequestScriptResult.right as
+              | (SandboxPreRequestResult & SandboxNextRequest)
+              | SandboxPreRequestResult
+            ).nextRequest,
           })
         }
       })
