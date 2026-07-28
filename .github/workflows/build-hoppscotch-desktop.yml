@@ -8,11 +8,11 @@ on:
       repository:
         description: Repository to checkout
         required: false
-        default: "hoppscotch/hoppscotch"
+        default: "Ford/hoppscotch"
       branch:
         description: Branch to checkout
-        required: true
-        default: "main"
+        required: false
+        default: "staging"
       tag:
         description: Tag to checkout (takes precedence over branch if provided)
         required: false
@@ -26,26 +26,6 @@ on:
         required: false
         type: boolean
         default: false
-      build_linux:
-        description: Build for Linux
-        type: boolean
-        required: false
-        default: true
-      build_windows:
-        description: Build for Windows
-        type: boolean
-        required: false
-        default: true
-      build_macos_x64:
-        description: Build for macOS x64
-        type: boolean
-        required: false
-        default: true
-      build_macos_arm64:
-        description: Build for macOS ARM64
-        type: boolean
-        required: false
-        default: true
 env:
   CARGO_TERM_COLOR: always
   WORKSPACE_PATH: ${{ github.workspace }}
@@ -53,131 +33,26 @@ env:
   DESKTOP_PATH: ${{ github.workspace }}/packages/hoppscotch-desktop
   BUNDLER_PATH: ${{ github.workspace }}/packages/hoppscotch-desktop/crates/webapp-bundler
 jobs:
-  build-linux:
-    runs-on: ubuntu-24.04
-    if: ${{ inputs.build_linux }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
-          token: ${{ secrets.HOPPSCOTCH_GITHUB_CHECKOUT_TOKEN }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 20
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-      - name: Install additional tools
-        run: |
-          curl -LO "https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.2.0/cargo-tauri-x86_64-unknown-linux-gnu.tgz"
-          tar -xzf cargo-tauri-x86_64-unknown-linux-gnu.tgz
-          chmod +x cargo-tauri
-          sudo mv cargo-tauri /usr/local/bin/tauri
-      - name: Install system dependencies
-        run: |
-          sudo apt update;
-          sudo apt install -y \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
-            libgtk-3-dev \
-            libappindicator3-dev \
-            librsvg2-dev;
-
-          sudo apt install -y \
-            libwebkit2gtk-4.1-0=2.44.0-2 \
-            libwebkit2gtk-4.1-dev=2.44.0-2 \
-            libjavascriptcoregtk-4.1-0=2.44.0-2 \
-            libjavascriptcoregtk-4.1-dev=2.44.0-2 \
-            gir1.2-javascriptcoregtk-4.1=2.44.0-2 \
-            gir1.2-webkit2-4.1=2.44.0-2;
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Setup environment
-        run: |
-          if [ ! -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > ${{ env.WORKSPACE_PATH }}/.env
-            echo "Created .env file from repository secret"
-          elif [ -f "${{ env.WORKSPACE_PATH }}/.env" ]; then
-            echo "Using existing .env file found in repository"
-          else
-            cp ${{ env.WORKSPACE_PATH }}/.env.example ${{ env.WORKSPACE_PATH }}/.env
-            echo "No .env found, copied from .env.example template"
-          fi
-          pnpm install --dir ${{ env.DESKTOP_PATH }}
-      - name: Build web app
-        run: |
-          pnpm install --dir ${{ env.WEB_PATH }}
-          pnpm --dir ${{ env.WEB_PATH }} generate
-      - name: Build and run webapp-bundler
-        run: |
-          cargo build --release --manifest-path ${{ env.BUNDLER_PATH }}/Cargo.toml
-          ${{ env.BUNDLER_PATH }}/target/release/webapp-bundler \
-            --input ${{ env.WEB_PATH }}/dist \
-            --output ${{ env.DESKTOP_PATH }}/bundle.zip \
-            --manifest ${{ env.DESKTOP_PATH }}/manifest.json
-      - name: Build AppImage
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose -b appimage -b updater
-      - name: Build DEB
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          RUST_LOG: debug
-        run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose -b deb -b updater
-      - name: Prepare artifacts
-        run: |
-          ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/release/bundle/
-          mkdir -p dist
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/release/bundle/appimage/*.AppImage dist/Hoppscotch_SelfHost_linux_x64.AppImage
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/release/bundle/appimage/*.AppImage.sig dist/Hoppscotch_SelfHost_linux_x64.AppImage.sig
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/release/bundle/deb/*.deb dist/Hoppscotch_SelfHost_linux_x64.deb
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: selfhost-desktop-linux
-          path: dist/*
   build-windows:
     runs-on: windows-latest
-    if: ${{ inputs.build_windows }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
-          token: ${{ secrets.HOPPSCOTCH_GITHUB_CHECKOUT_TOKEN }}
+          token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
       - name: Set Perl environment variables
         shell: pwsh
         run: |
           echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Download trusted-signing-cli
         if: ${{ inputs.disable_signing != true }}
         shell: pwsh
@@ -229,6 +104,37 @@ jobs:
             --input ${{ env.WEB_PATH }}\dist `
             --output ${{ env.DESKTOP_PATH }}\bundle.zip `
             --manifest ${{ env.DESKTOP_PATH }}\manifest.json
+      - name: Patch WiX version for MSI compatibility
+        shell: pwsh
+        run: |
+          # WiX MSI requires version major <= 255. CalVer years (e.g. 2026) exceed this limit.
+          # We derive a compatible version by subtracting 2000 from the year component.
+          $tauriConfPath = "${{ env.DESKTOP_PATH }}\src-tauri\tauri.conf.json"
+          $conf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
+          $appVersion = $conf.version
+          $parts = $appVersion -split '\.'
+          $major = [int]$parts[0]
+          $minor = if ($parts.Count -gt 1) { $parts[1] } else { "0" }
+          $patch = if ($parts.Count -gt 2) { $parts[2] } else { "0" }
+          # Reduce year-based major to fit within 0-255 (e.g. 2026 -> 26)
+          if ($major -gt 255) { $major = $major - 2000 }
+          $wixVersion = "$major.$minor.$patch"
+          Write-Host "App version: $appVersion -> WiX MSI version: $wixVersion"
+          # Inject wix version override under bundle.windows.wix
+          $conf | ConvertTo-Json -Depth 20 |
+            ConvertFrom-Json |
+            ForEach-Object {
+              if (-not $_.bundle.PSObject.Properties['windows']) {
+                $_.bundle | Add-Member -NotePropertyName 'windows' -NotePropertyValue ([PSCustomObject]@{}) -Force
+              }
+              if (-not $_.bundle.windows.PSObject.Properties['wix']) {
+                $_.bundle.windows | Add-Member -NotePropertyName 'wix' -NotePropertyValue ([PSCustomObject]@{}) -Force
+              }
+              $_.bundle.windows.wix | Add-Member -NotePropertyName 'version' -NotePropertyValue $wixVersion -Force
+              $_
+            } |
+            ConvertTo-Json -Depth 20 |
+            Set-Content $tauriConfPath -Encoding utf8
       - name: Build Tauri app with Azure signing
         if: ${{ inputs.disable_signing != true }}
         shell: powershell
@@ -260,27 +166,23 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-desktop-windows
+          name: windows
           path: dist/*
   build-macos-x64:
     runs-on: macos-latest
-    if: ${{ inputs.build_macos_x64 }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
-          token: ${{ secrets.HOPPSCOTCH_GITHUB_CHECKOUT_TOKEN }}
-      - uses: actions/setup-node@v3
+          token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add x86_64-apple-darwin
       - name: Install additional tools
@@ -294,8 +196,8 @@ jobs:
       - uses: apple-actions/import-codesign-certs@v3
         if: ${{ inputs.disable_signing != true }}
         with:
-          p12-file-base64: ${{ secrets.HOPPSCOTCH_APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.HOPPSCOTCH_APPLE_CERTIFICATE_PASSWORD }}
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
       - uses: actions/cache@v4
         with:
@@ -333,10 +235,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.HOPPSCOTCH_APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.HOPPSCOTCH_APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.HOPPSCOTCH_APPLE_TEAM_ID }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.HOPPSCOTCH_APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
         run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target x86_64-apple-darwin
       - name: Build Tauri app without Apple signing
@@ -352,32 +254,29 @@ jobs:
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/
           mkdir -p dist
           cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_x64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
+          # The tar.gz build for x64 is currently disabled due to createUpdaterArtifacts set to false.
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_x64.tar.gz
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_x64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-desktop-macos-x64
+          name: macos-x64
           path: dist/*
   build-macos-arm64:
     runs-on: macos-latest
-    if: ${{ inputs.build_macos_arm64 }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
-          token: ${{ secrets.HOPPSCOTCH_GITHUB_CHECKOUT_TOKEN }}
-      - uses: actions/setup-node@v3
+          token: ${{ secrets.CHECKOUT_GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.12.0
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          version: 10.32.1
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add aarch64-apple-darwin
       - name: Install additional tools
@@ -391,8 +290,8 @@ jobs:
       - uses: apple-actions/import-codesign-certs@v3
         if: ${{ inputs.disable_signing != true }}
         with:
-          p12-file-base64: ${{ secrets.HOPPSCOTCH_APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.HOPPSCOTCH_APPLE_CERTIFICATE_PASSWORD }}
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
       - uses: actions/cache@v4
         with:
@@ -430,10 +329,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.HOPPSCOTCH_APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.HOPPSCOTCH_APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.HOPPSCOTCH_APPLE_TEAM_ID }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.HOPPSCOTCH_APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           RUST_LOG: debug
         run: pnpm --dir ${{ env.DESKTOP_PATH }} tauri build --verbose --target aarch64-apple-darwin
       - name: Build Tauri app without Apple signing
@@ -449,17 +348,17 @@ jobs:
           ls -lahR ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/
           mkdir -p dist
           cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/Hoppscotch_SelfHost_mac_aarch64.dmg
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
-          cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
+          # The tar.gz build for arm64 is currently disabled due to createUpdaterArtifacts set to false.
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz
+          # cp ${{ env.DESKTOP_PATH }}/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Hoppscotch.app.tar.gz.sig dist/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-desktop-macos-aarch64
+          name: macos-aarch64
           path: dist/*
   create-update-manifest:
-    needs: [build-linux, build-windows, build-macos-x64, build-macos-arm64]
+    needs: [build-windows, build-macos-x64, build-macos-arm64]
     runs-on: ubuntu-latest
-    if: ${{ inputs.build_linux && inputs.build_windows && inputs.build_macos_x64 && inputs.build_macos_arm64 }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -476,21 +375,15 @@ jobs:
             "notes": "${{ inputs.release_notes }}",
             "pub_date": "${CURRENT_DATE}",
             "platforms": {
-              "linux-x86_64": {
-                "signature": "$(cat artifacts/selfhost-desktop-linux/Hoppscotch_SelfHost_linux_x64.AppImage.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_linux_x64.AppImage"
-              },
               "windows-x86_64": {
-                "signature": "$(cat artifacts/selfhost-desktop-windows/Hoppscotch_SelfHost_win_x64.msi.sig)",
+                "signature": "$(cat artifacts/windows/Hoppscotch_SelfHost_win_x64.msi.sig)",
                 "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_win_x64.msi"
               },
               "darwin-x86_64": {
-                "signature": "$(cat artifacts/selfhost-desktop-macos-x64/Hoppscotch_SelfHost_mac_x64.tar.gz.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_x64.tar.gz"
+                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_x64.dmg"
               },
               "darwin-aarch64": {
-                "signature": "$(cat artifacts/selfhost-desktop-macos-aarch64/Hoppscotch_SelfHost_mac_aarch64.tar.gz.sig)",
-                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_aarch64.tar.gz"
+                "url": "https://github.com/hoppscotch/releases/releases/download/${VERSION}/Hoppscotch_SelfHost_mac_aarch64.dmg"
               }
             }
           }
@@ -498,5 +391,5 @@ jobs:
       - name: Upload manifest
         uses: actions/upload-artifact@v4
         with:
-          name: selfhost-desktop-update-manifest
+          name: update-manifest
           path: artifacts/hoppscotch-selfhost-desktop.json
