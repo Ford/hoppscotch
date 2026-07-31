@@ -42,9 +42,16 @@ const hoppSingleEnvSchema = z.object({
 // ── Postman environment shape ─────────────────────────────────────────────────
 const postmanEnvVariableSchema = z.object({
   key: z.string(),
-  value: z.string().default(""),
+  // Postman may export numeric/boolean/null values – coerce all to string.
+  value: z
+    .union([z.string(), z.number(), z.boolean()])
+    .nullable()
+    .transform((v) => (v === null || v === undefined ? "" : String(v)))
+    .default(""),
   type: z.string().default("default"),
   secret: z.boolean().optional(),
+  // Respect the enabled flag – false means the variable is disabled.
+  enabled: z.boolean().optional().default(true),
 })
 
 const postmanEnvFileSchema = z.object({
@@ -84,12 +91,14 @@ function extractFromItem(
   if ("values" in obj && Array.isArray(obj.values)) {
     const result = postmanEnvFileSchema.safeParse(item)
     if (!result.success) return null
-    return result.data.values.map(({ key, value, type, secret }) => ({
-      key,
-      initialValue: value,
-      currentValue: value,
-      secret: type === "secret" || secret === true,
-    }))
+    return result.data.values
+      .filter(({ enabled }) => enabled !== false)
+      .map(({ key, value, type, secret }) => ({
+        key,
+        initialValue: value,
+        currentValue: value,
+        secret: type === "secret" || secret === true,
+      }))
   }
 
   // ── 3. Loose Hopp: { name?, variables?: [...] } ───────────────────────────

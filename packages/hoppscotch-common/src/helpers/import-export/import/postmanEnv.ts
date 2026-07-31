@@ -13,10 +13,16 @@ const postmanEnvSchema = z.object({
   values: z.array(
     z.object({
       key: z.string(),
-      value: z.string(),
-      type: z.string(),
+      // Postman may export numeric/boolean/null values – coerce all to string.
+      value: z
+        .union([z.string(), z.number(), z.boolean()])
+        .nullable()
+        .transform((v) => (v === null || v === undefined ? "" : String(v))),
+      type: z.string().default("default"),
       // Postman 12+ uses `secret: true`; older exports use `type: "secret"`.
       secret: z.boolean().optional(),
+      // Respect the enabled flag – false means the variable is disabled.
+      enabled: z.boolean().optional().default(true),
     })
   ),
 })
@@ -52,17 +58,20 @@ export const postmanEnvImporter = (contents: string[]) => {
   }
 
   // Treat as secret on legacy `type: "secret"` OR Postman 12+ `secret: true`.
+  // Skip variables that are explicitly disabled in Postman.
   const environments: Environment[] = validationResult.data.map(
     ({ name, values }) => ({
       id: uniqueID(),
       v: EnvironmentSchemaVersion,
       name,
-      variables: values.map(({ key, value, type, secret }) => ({
-        key,
-        initialValue: replacePMVarTemplating(value),
-        currentValue: replacePMVarTemplating(value),
-        secret: type === "secret" || secret === true,
-      })),
+      variables: values
+        .filter(({ enabled }) => enabled !== false)
+        .map(({ key, value, type, secret }) => ({
+          key,
+          initialValue: replacePMVarTemplating(value),
+          currentValue: replacePMVarTemplating(value),
+          secret: type === "secret" || secret === true,
+        })),
     })
   )
 
