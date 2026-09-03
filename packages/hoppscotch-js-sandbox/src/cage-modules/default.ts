@@ -2,15 +2,18 @@ import {
   blobPolyfill,
   ConsoleEntry,
   console as ConsoleModule,
-  crypto,
   encoding,
   esmModuleLoader,
   timers,
   urlPolyfill,
 } from "faraday-cage/modules"
+import type { HoppFetchHook } from "~/types"
+import { customCryptoModule } from "./crypto"
+import { customFetchModule } from "./fetch"
 
 type DefaultModulesConfig = {
-  handleConsoleEntry: (consoleEntries: ConsoleEntry) => void
+  handleConsoleEntry?: (consoleEntries: ConsoleEntry) => void
+  hoppFetchHook?: HoppFetchHook
 }
 
 export const defaultModules = (config?: DefaultModulesConfig) => {
@@ -21,11 +24,13 @@ export const defaultModules = (config?: DefaultModulesConfig) => {
       onLog(level, ...args) {
         console[level](...args)
 
-        config?.handleConsoleEntry({
-          type: level,
-          args,
-          timestamp: Date.now(),
-        })
+        if (config?.handleConsoleEntry) {
+          config.handleConsoleEntry({
+            type: level,
+            args,
+            timestamp: Date.now(),
+          })
+        }
       },
       onCount(...args) {
         console.count(args[0])
@@ -55,11 +60,15 @@ export const defaultModules = (config?: DefaultModulesConfig) => {
         console.table(...args)
       },
     }),
-    crypto({
+    customCryptoModule({
       cryptoImpl: globalThis.crypto,
     }),
 
     esmModuleLoader,
+    // Use custom fetch module with HoppFetchHook
+    customFetchModule({
+      fetchImpl: config?.hoppFetchHook,
+    }),
     encoding(),
     timers(),
   ]

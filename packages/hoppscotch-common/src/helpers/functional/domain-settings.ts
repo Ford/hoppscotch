@@ -25,6 +25,7 @@ export type InputDomainSetting = {
   }
   proxy?: {
     url: string
+    no_proxy: string
     auth?: {
       username?: string
       password?: string
@@ -43,6 +44,14 @@ export type InputDomainSetting = {
             password?: string
           }
     }
+  }
+  options?: {
+    followRedirects?: boolean
+    maxRedirects?: number
+    timeout?: number
+    decompress?: boolean
+    cookies?: boolean
+    keepAlive?: boolean
   }
 }
 
@@ -207,20 +216,41 @@ const convertProxy = (
     })
   )
 
+const convertOptions = (
+  options?: InputDomainSetting["options"]
+): O.Option<NonNullable<RelayRequest["meta"]>["options"]> =>
+  pipe(
+    O.fromNullable(options),
+    O.map((opts) => ({
+      ...(opts.followRedirects !== undefined && {
+        followRedirects: opts.followRedirects,
+      }),
+      ...(opts.maxRedirects !== undefined && {
+        maxRedirects: Math.min(opts.maxRedirects, 10),
+      }),
+      ...(opts.timeout !== undefined && { timeout: opts.timeout }),
+      ...(opts.decompress !== undefined && { decompress: opts.decompress }),
+      ...(opts.cookies !== undefined && { cookies: opts.cookies }),
+      ...(opts.keepAlive !== undefined && { keepAlive: opts.keepAlive }),
+    })),
+    O.filter((opts) => Object.keys(opts).length > 0)
+  )
+
 export const convertDomainSetting = (
   input: InputDomainSetting
-): E.Either<Error, Pick<RelayRequest, "proxy" | "security">> => {
+): E.Either<Error, Pick<RelayRequest, "proxy" | "security" | "meta">> => {
   if (input.version !== "v1") {
     return E.left(new Error("Invalid version"))
   }
 
   const security = convertSecurity(input.security)
   const proxy = convertProxy(input.proxy)
+  const options = convertOptions(input.options)
 
-  const result: Pick<RelayRequest, "proxy" | "security"> = {
+  const result: Pick<RelayRequest, "proxy" | "security" | "meta"> = {
     proxy: O.isSome(proxy) ? proxy.value : undefined,
     security: O.isSome(security) ? security.value : undefined,
+    meta: O.isSome(options) ? { options: options.value } : undefined,
   }
-
   return E.right(result)
 }

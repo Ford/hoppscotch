@@ -1,52 +1,116 @@
-# This step is used to build a custom build of Caddy to prevent
-# vulnerable packages on the dependency chain
-FROM alpine:3.22.1 AS caddy_builder
-RUN apk add --no-cache curl go git && \
+# Base Go builder with Go lang installation
+# This stage is used to build both Caddy and the webapp server,
+# preventing vulnerable packages on the dependency chain
+FROM alpine:3.23.2 AS go_builder
+
+RUN apk add --no-cache curl git && \
   mkdir -p /tmp/caddy-build && \
-  curl -L -o /tmp/caddy-build/src.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.0/caddy_2.10.0_src.tar.gz
+  curl -L -o /tmp/caddy-build/src.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.10.2/caddy_2.10.2_src.tar.gz
 
 # Checksum verification of caddy source
-RUN expected="62ba008d9e9fd354e8b28be11de59c6a213f9153f2e9de451417c0b4eb13d9f3" && \
+RUN expected="a9efa00c161922dd24650fd0bee2f4f8bb2fb69ff3e63dcc44f0694da64bb0cf" && \
   actual=$(sha256sum /tmp/caddy-build/src.tar.gz | cut -d' ' -f1) && \
   [ "$actual" = "$expected" ] && \
   echo "✅ Caddy Source Checksum OK" || \
   (echo "❌ Caddy Source Checksum failed!" && exit 1)
 
+# Install Go 1.25.4 from GitHub releases to fix CVE-2025-47907
+ARG TARGETARCH
+ENV GOLANG_VERSION=1.25.6
+# Download and install Go from the official tarball
+RUN case "${TARGETARCH}" in amd64) GOARCH=amd64 ;; arm64) GOARCH=arm64 ;; *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; esac && \
+  curl -fsSL "https://go.dev/dl/go${GOLANG_VERSION}.linux-${GOARCH}.tar.gz" -o go.tar.gz && \
+  tar -C /usr/local -xzf go.tar.gz && \
+  rm go.tar.gz
+# Set up Go environment variables
+ENV PATH="/usr/local/go/bin:${PATH}" \
+  GOPATH="/go" \
+  GOBIN="/go/bin"
+
 WORKDIR /tmp/caddy-build
 RUN tar xvf /tmp/caddy-build/src.tar.gz && \
-  # Patch to resolve CVE-2025-22872 on net
-  go get golang.org/x/net@v0.38.0 && \
-  # Patch to resolve GHSA-vrw8-fxc6-2r93 on chi
-  go get github.com/go-chi/chi/v5@v5.2.2 && \
-  # Patch to resolve GHSA-2x5j-vhc8-9cwm on circl
-  go get github.com/cloudflare/circl@v1.6.1 && \
+  # Patch to resolve CVE-2025-64702 on quic-go
+  go get github.com/quic-go/quic-go@v0.57.0 && \
+  # Patch to resolve CVE-2025-62820 on nebula
+  go get github.com/slackhq/nebula@v1.9.7 && \
+  # Patch to resolve CVE-2025-47913 on crypto
+  go get golang.org/x/crypto@v0.45.0 && \
+  # Patch to resolve CVE-2025-44005 on smallstep
+  go get github.com/smallstep/certificates@v0.29.0 && \
   # Clean up any existing vendor directory and regenerate with updated deps
   rm -rf vendor && \
   go mod tidy && \
   go mod vendor
 
+# Build Caddy from the Go base
+FROM go_builder AS caddy_builder
 WORKDIR /tmp/caddy-build/cmd/caddy
 # Build using the updated vendored dependencies
 RUN go build
 
+# Build webapp server from the Go base
+# This reuses the Go installation from go_builder, avoiding a separate image pull
+# and significantly reducing build time (especially on ARM64 in CI)
+FROM go_builder AS webapp_server_builder
+WORKDIR /usr/src/app
+COPY . .
+WORKDIR /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux go build -o webapp-server .
+
 
 
 # Shared Node.js base with optimized NPM installation
-FROM alpine:3.19.7 AS node_base
-RUN apk add --no-cache nodejs curl tini && \
-  # Install NPM from source, as Alpine version is old and has dependency vulnerabilities
-  # TODO: Find a better method which is resistant to supply chain attacks
-  sh -c "curl -qL https://www.npmjs.com/install.sh | env npm_install=11.4.2 sh" && \
-  npm install -g pnpm@10.13.1 @import-meta-env/cli
+FROM alpine:3.23.2 AS node_base
+# Install dependencies
+RUN apk add --no-cache nodejs curl bash tini ca-certificates
+# Set working directory for NPM installation
+RUN mkdir -p /tmp/npm-install
+WORKDIR /tmp/npm-install
+# Download NPM tarball
+RUN curl -fsSL https://registry.npmjs.org/npm/-/npm-11.7.0.tgz -o npm.tgz
+# Verify checksum
+RUN expected="292f142dc1a8c01199ba34a07e57cf016c260ea2c59b64f3eee8aaae7a2e7504" \
+  && actual=$(sha256sum npm.tgz | cut -d' ' -f1) \
+  && [ "$actual" = "$expected" ] \
+  && echo "✅ NPM Tarball Checksum OK" \
+  || (echo "❌ NPM Tarball Checksum failed!" && exit 1)
+# Install NPM from verified tarball and global packages
+RUN tar -xzf npm.tgz && \
+  cd package && \
+  node bin/npm-cli.js install -g npm@11.7.0 && \
+  cd / && \
+  rm -rf /tmp/npm-install
+RUN npm install -g pnpm@10.28.1 @import-meta-env/cli
 
+# Fix CVE-2025-64756 by replacing vulnerable glob with patched version
+# Fix CVE-2026-23745 by replacing vulnerable tar with patched version
+# Fix GHSA-73rr-hh4g-fpgx replacing vulnerable diff with patched version
+RUN npm install -g glob@11.1.0 tar@7.5.3 diff@8.0.3 && \
+  # Replace tar in npm's node_modules
+  rm -rf /usr/lib/node_modules/npm/node_modules/tar && \
+  cp -r /usr/lib/node_modules/tar /usr/lib/node_modules/npm/node_modules/ && \
+  # Replace tar in npm's node_modules
+  rm -rf /usr/lib/node_modules/npm/node_modules/diff && \
+  cp -r /usr/lib/node_modules/diff /usr/lib/node_modules/npm/node_modules/ && \
+  # Replace glob in @import-meta-env/cli's node_modules
+  rm -rf /usr/lib/node_modules/@import-meta-env/cli/node_modules/glob && \
+  cp -r /usr/lib/node_modules/glob /usr/lib/node_modules/@import-meta-env/cli/node_modules/ && \
+  # Replace tar in @import-meta-env/cli's node_modules
+  rm -rf /usr/lib/node_modules/@import-meta-env/cli/node_modules/tar && \
+  cp -r /usr/lib/node_modules/tar /usr/lib/node_modules/@import-meta-env/cli/node_modules/ && \
+  # Replace diff in @import-meta-env/cli's node_modules
+  rm -rf /usr/lib/node_modules/@import-meta-env/cli/node_modules/diff && \
+  cp -r /usr/lib/node_modules/diff /usr/lib/node_modules/@import-meta-env/cli/node_modules/ 
 
 
 FROM node_base AS base_builder
 # Required by @hoppscotch/js-sandbox to build `isolated-vm`
-RUN apk add python3 make g++ zlib-dev brotli-dev c-ares-dev nghttp2-dev openssl-dev icu-dev
+RUN apk add --no-cache python3 make g++ zlib-dev brotli-dev c-ares-dev nghttp2-dev openssl-dev icu-dev ada-dev simdjson-dev simdutf-dev sqlite-dev zstd-dev
 
 WORKDIR /usr/src/app
 ENV HOPP_ALLOW_RUNTIME_ENV=true
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 COPY pnpm-lock.yaml .
 RUN pnpm fetch
@@ -58,6 +122,7 @@ RUN pnpm install -f --prefer-offline
 
 FROM base_builder AS backend_builder
 WORKDIR /usr/src/app/packages/hoppscotch-backend
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN pnpm exec prisma generate
 RUN pnpm run build
 RUN pnpm --filter=hoppscotch-backend deploy /dist/backend --prod --legacy
@@ -87,13 +152,6 @@ FROM base_builder AS fe_builder
 WORKDIR /usr/src/app/packages/hoppscotch-selfhost-web
 RUN pnpm run generate
 
-FROM rust:1-alpine AS webapp_server_builder
-WORKDIR /usr/src/app
-RUN apk add --no-cache musl-dev
-COPY . .
-WORKDIR /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server
-RUN cargo build --release
-
 
 
 FROM node_base AS app
@@ -101,7 +159,7 @@ FROM node_base AS app
 COPY --from=caddy_builder /tmp/caddy-build/cmd/caddy/caddy /usr/bin/caddy
 
 # Copy over webapp server bin
-COPY --from=webapp_server_builder /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server/target/release/webapp-server /usr/local/bin/
+COPY --from=webapp_server_builder /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server/webapp-server /usr/local/bin/
 
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/prod_run.mjs /site/prod_run.mjs
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/selfhost-web.Caddyfile /etc/caddy/selfhost-web.Caddyfile
@@ -162,7 +220,7 @@ COPY --from=backend_builder /dist/backend /dist/backend
 COPY --from=base_builder /usr/src/app/packages/hoppscotch-backend/prod_run.mjs /dist/backend
 
 # Static Server
-COPY --from=webapp_server_builder /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server/target/release/webapp-server /usr/local/bin/
+COPY --from=webapp_server_builder /usr/src/app/packages/hoppscotch-selfhost-web/webapp-server/webapp-server /usr/local/bin/
 RUN mkdir -p /site/selfhost-web
 COPY --from=fe_builder /usr/src/app/packages/hoppscotch-selfhost-web/dist /site/selfhost-web
 
@@ -176,7 +234,7 @@ COPY aio-subpath-access.Caddyfile /etc/caddy/aio-subpath-access.Caddyfile
 
 ENTRYPOINT [ "tini", "--" ]
 COPY --chmod=755 healthcheck.sh /
-HEALTHCHECK --interval=2s CMD /bin/sh /healthcheck.sh
+HEALTHCHECK --interval=2s --start-period=15s CMD /bin/sh /healthcheck.sh
 
 WORKDIR /dist/backend
 CMD ["node", "/usr/src/app/aio_run.mjs"]

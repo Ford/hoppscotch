@@ -4,11 +4,11 @@ import { pipe } from "fp-ts/function"
 import type ivmT from "isolated-vm"
 import { createRequire } from "module"
 
+import { TestResponse, TestResult } from "~/types"
 import {
   getTestRunnerScriptMethods,
   preventCyclicObjects,
-} from "~/shared-utils"
-import { TestResponse, TestResult } from "~/types"
+} from "~/utils/shared"
 import { getSerializedAPIMethods } from "../utils"
 
 const nodeRequire = createRequire(import.meta.url)
@@ -22,8 +22,14 @@ const executeScriptInContext = (
   context: ivmT.Context
 ): Promise<TestResult> => {
   return new Promise((resolve, reject) => {
+    const headersArray = Array.isArray(response.headers)
+      ? response.headers
+      : Object.entries(response.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
     // Parse response object
-    const responseObjHandle = preventCyclicObjects<TestResponse>(response)
+    const responseObjHandle = preventCyclicObjects<TestResponse>({ ...response, headers: headersArray })
     if (E.isLeft(responseObjHandle)) {
       return reject(`Response parsing failed: ${responseObjHandle.left}`)
     }
@@ -108,6 +114,10 @@ const executeScriptInContext = (
                 "toBeType",
                 "toHaveLength",
                 "toInclude",
+                "toBeGreaterThan",
+                "toBeLessThan",
+                "toBeGreaterThanOrEqual",
+                "toBeLessThanOrEqual"
               ]
               matcherMethodNames.forEach((methodName) => {
                 matcherMethods[methodName] = expectFnResult.getSync(methodName)
@@ -176,7 +186,7 @@ const executeScriptInContext = (
   })
 }
 
-export const runTestScriptWithIsolatedVm = (
+export const runPostRequestScriptWithIsolatedVm = (
   testScript: string,
   envs: TestResult["envs"],
   response: TestResponse

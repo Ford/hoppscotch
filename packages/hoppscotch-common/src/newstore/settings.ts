@@ -33,6 +33,7 @@ export type SettingsDef = {
   syncEnvironments: boolean
 
   PROXY_URL: string
+  FOLLOW_REDIRECTS: boolean
 
   WRAP_LINES: {
     httpRequestBody: boolean
@@ -84,6 +85,7 @@ export type SettingsDef = {
   CUSTOM_NAMING_STYLE: string
 
   EXPERIMENTAL_SCRIPTING_SANDBOX: boolean
+  ENABLE_EXPERIMENTAL_MOCK_SERVERS: boolean
 }
 
 let defaultProxyURL = DEFAULT_HOPP_PROXY_URL
@@ -124,6 +126,7 @@ export const getDefaultSettings = (): SettingsDef => {
 
     // TODO: Interceptor related settings should move under the interceptor systems
     PROXY_URL: defaultProxyURL,
+    FOLLOW_REDIRECTS: true,
     URL_EXCLUDES: {
       auth: true,
       httpUser: true,
@@ -146,6 +149,7 @@ export const getDefaultSettings = (): SettingsDef => {
     CUSTOM_NAMING_STYLE: "",
 
     EXPERIMENTAL_SCRIPTING_SANDBOX: true,
+    ENABLE_EXPERIMENTAL_MOCK_SERVERS: false,
   }
 }
 
@@ -285,8 +289,8 @@ export function applySetting<K extends keyof SettingsDef>(
 ) {
   settingsStore.dispatch({
     dispatcher: "applySetting",
+    // @ts-expect-error TS is not able to understand the type semantics here
     payload: {
-      // @ts-expect-error TS is not able to understand the type semantics here
       settingKey,
       value,
     },

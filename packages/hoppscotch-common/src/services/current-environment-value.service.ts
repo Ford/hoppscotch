@@ -1,6 +1,6 @@
-import { Service } from "dioc"
+import { Container, Service } from "dioc"
 import { cloneDeep } from "lodash-es"
-import { reactive, computed } from "vue"
+import { reactive, computed, watch, nextTick } from "vue"
 
 /**
  * Defines a environment variable.
@@ -20,6 +20,12 @@ export type Variable = {
  */
 export class CurrentValueService extends Service {
   public static readonly ID = "CURRENT_VALUE_SERVICE"
+
+  constructor(c: Container) {
+    super(c)
+    // Initialize the secret environments map
+    this.watchCurrentEnvironments()
+  }
 
   /**
    * Map of current value of environments.
@@ -159,4 +165,26 @@ export class CurrentValueService extends Service {
     })
     return environments
   })
+
+  /**
+   * Watches the current environments for changes.
+   * If a secret variable is removed or has an empty key, it will be deleted.
+   */
+  protected watchCurrentEnvironments() {
+    watch(
+      () => this.environments,
+      () => {
+        nextTick(() => {
+          this.environments.forEach((vars, id) => {
+            const filteredVars = vars.filter((v) => v.key !== "")
+
+            if (filteredVars.length === 0) {
+              this.environments.delete(id)
+            }
+          })
+        })
+      },
+      { deep: true }
+    )
+  }
 }

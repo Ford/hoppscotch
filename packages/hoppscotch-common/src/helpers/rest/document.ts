@@ -22,11 +22,15 @@ export type HoppRESTSaveContext =
       /**
        * Index to the request
        */
-      requestIndex: number
+      requestIndex?: number
       /**
        * ID of the example response
        */
       exampleID?: string
+      /**
+       * Reference ID of the request, if available
+       */
+      requestRefID?: string
     }
   | {
       /**
@@ -49,6 +53,10 @@ export type HoppRESTSaveContext =
        * ID of the example response
        */
       exampleID?: string
+      /**
+       * Reference ID of the request, if available
+       */
+      requestRefID?: string
     }
   | null
 
@@ -87,12 +95,27 @@ export type HoppCollectionSaveContext =
     }
   | null
 
+export type RequestSelectionState = {
+  // Map of request path to selection state
+  // Path format: "folder_0/folder_1/request_2" or "request_0" for root-level requests
+  [path: string]: boolean
+}
+
 export type TestRunnerConfig = {
   iterations: number
   delay: number
   stopOnError: boolean
   persistResponses: boolean
   keepVariableValues: boolean
+  dataset?: {
+    enabled: boolean
+    data: Array<Record<string, any>>
+    source: "json" | "csv"
+    rawContent?: string // Store the original file content for persistence
+    fileName?: string // Store the original file name
+  }
+  requestSelection?: RequestSelectionState // Track selected/unselected requests
+  requestOrder?: string[] // Custom execution order — flat list of request paths in desired run order
 }
 
 export type HoppTestRunnerDocument = {
@@ -259,6 +282,12 @@ export type HoppSavedExampleDocument = {
    * (atleast as far as we can say)
    */
   isDirty: boolean
+
+  /**
+   * The inherited properties from the parent collection
+   * (if any)
+   */
+  inheritedProperties?: HoppInheritedProperty
 }
 
 /**

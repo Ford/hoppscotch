@@ -5,7 +5,7 @@ import { z } from "zod"
 
 import { Service } from "dioc"
 import { StorageLike, watchDebounced } from "@vueuse/core"
-import { assign, clone, isEmpty } from "lodash-es"
+import { assign, clone, isEmpty, cloneDeep } from "lodash-es"
 
 import {
   GlobalEnvironmentVariable,
@@ -70,6 +70,7 @@ import { WSRequest$, setWSRequest } from "../../newstore/WebSocketSession"
 
 import {
   CURRENT_ENVIRONMENT_VALUE_SCHEMA,
+  CURRENT_SORT_VALUES_SCHEMA,
   ENVIRONMENTS_SCHEMA,
   GLOBAL_ENVIRONMENT_SCHEMA,
   GQL_COLLECTION_SCHEMA,
@@ -97,9 +98,12 @@ import {
   CurrentValueService,
   Variable,
 } from "../current-environment-value.service"
-import { cloneDeep } from "lodash-es"
 import { fixBrokenRequestVersion } from "~/helpers/fixBrokenRequestVersion"
 import { fixBrokenEnvironmentVersion } from "~/helpers/fixBrokenEnvironmentVersion"
+import {
+  CurrentSortOption,
+  CurrentSortValuesService,
+} from "../current-sort.service"
 
 export const STORE_NAMESPACE = "persistence.v1"
 
@@ -122,6 +126,7 @@ export const STORE_KEYS = {
   GQL_TABS: "gqlTabs",
   SECRET_ENVIRONMENTS: "secretEnvironments",
   CURRENT_ENVIRONMENT_VALUE: "currentEnvironmentValue",
+  CURRENT_SORT_VALUES: "currentSortValues",
   SCHEMA_VERSION: "schema_version",
 } as const
 
@@ -186,6 +191,10 @@ export class PersistenceService extends Service {
   )
   private readonly currentEnvironmentValueService =
     this.bind(CurrentValueService)
+
+  private readonly currentSortValuesService = this.bind(
+    CurrentSortValuesService
+  )
 
   private showErrorToast(key: string) {
     const toast = useToast()
@@ -345,7 +354,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted LOCAL_STATE:`, loadResult)
     }
 
@@ -377,7 +386,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted SETTINGS:`, loadResult)
     }
 
@@ -409,7 +418,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted REST_HISTORY:`, restLoadResult)
     }
 
@@ -441,7 +450,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted GQL_HISTORY:`, gqlLoadResult)
     }
 
@@ -463,6 +472,7 @@ export class PersistenceService extends Service {
 
         if (result.success) {
           const translatedData = result.data.map(translateToNewRESTCollection)
+
           setRESTCollections(translatedData)
         } else {
           console.error(`Failed with `, result.error, data)
@@ -476,7 +486,7 @@ export class PersistenceService extends Service {
           setRESTCollections(data)
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(
         `Failed parsing persisted REST_COLLECTIONS:`,
         restLoadResult
@@ -513,7 +523,7 @@ export class PersistenceService extends Service {
           setGraphqlCollections(data)
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted GQL_COLLECTIONS:`, gqlLoadResult)
     }
 
@@ -559,7 +569,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted ENVIRONMENTS:`, loadResult)
     }
 
@@ -597,7 +607,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted SECRET_ENVIRONMENTS:`, loadResult)
     }
 
@@ -643,7 +653,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(
         `Failed parsing persisted CURRENT_ENVIRONMENT_VALUE:`,
         loadResult
@@ -689,13 +699,57 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted SELECTED_ENV:`, loadResult)
     }
 
     selectedEnvironmentIndex$.subscribe(async (index) => {
       await Store.set(STORE_NAMESPACE, STORE_KEYS.SELECTED_ENV, index)
     })
+  }
+
+  private async setupCurrentSortValuesPersistence() {
+    const loadResult = await Store.get<any>(
+      STORE_NAMESPACE,
+      STORE_KEYS.CURRENT_SORT_VALUES
+    )
+
+    try {
+      if (E.isRight(loadResult) && loadResult.right) {
+        const result = CURRENT_SORT_VALUES_SCHEMA.safeParse(loadResult.right)
+
+        if (result.success) {
+          this.currentSortValuesService.loadCurrentSortValuesFromPersistedState(
+            result.data
+          )
+        } else {
+          this.showErrorToast(STORE_KEYS.CURRENT_SORT_VALUES)
+          await Store.set(
+            STORE_NAMESPACE,
+            `${STORE_KEYS.CURRENT_SORT_VALUES}-backup`,
+            loadResult.right
+          )
+          console.error(
+            `Failed parsing persisted CURRENT_SORT_VALUES:`,
+            JSON.stringify(loadResult.right)
+          )
+        }
+      }
+    } catch (_e) {
+      console.error(`Failed parsing persisted CURRENT_SORT_VALUES:`, loadResult)
+    }
+
+    watchDebounced(
+      this.currentSortValuesService.persistableCurrentSortValues,
+      async (newData: Record<string, CurrentSortOption>) => {
+        await Store.set(
+          STORE_NAMESPACE,
+          STORE_KEYS.CURRENT_SORT_VALUES,
+          newData
+        )
+      },
+      { debounce: 500 }
+    )
   }
 
   private async setupWebsocketPersistence() {
@@ -726,7 +780,7 @@ export class PersistenceService extends Service {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted WEBSOCKET:`, loadResult)
     }
 
@@ -763,7 +817,7 @@ export class PersistenceService extends Service {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted SOCKETIO:`, loadResult)
     }
 
@@ -793,7 +847,7 @@ export class PersistenceService extends Service {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted SSE:`, loadResult)
     }
 
@@ -823,7 +877,7 @@ export class PersistenceService extends Service {
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted MQTT:`, loadResult)
     }
 
@@ -854,7 +908,7 @@ export class PersistenceService extends Service {
           )
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted GLOBAL_ENV:`, loadResult)
     }
 
@@ -901,7 +955,7 @@ export class PersistenceService extends Service {
           this.restTabService.loadTabsFromPersistedState(loadResult.right)
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted REST_TABS:`, loadResult)
     }
 
@@ -944,7 +998,7 @@ export class PersistenceService extends Service {
           this.gqlTabService.loadTabsFromPersistedState(loadResult.right)
         }
       }
-    } catch (e) {
+    } catch (_e) {
       console.error(`Failed parsing persisted GQL_TABS:`, loadResult)
     }
 
@@ -986,6 +1040,8 @@ export class PersistenceService extends Service {
 
       this.setupSecretEnvironmentsPersistence(),
       this.setupCurrentEnvironmentValuePersistence(),
+
+      this.setupCurrentSortValuesPersistence(),
     ])
   }
 

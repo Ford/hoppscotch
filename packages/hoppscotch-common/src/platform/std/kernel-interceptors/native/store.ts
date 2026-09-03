@@ -26,6 +26,9 @@ const defaultDomainConfig: InputDomainSetting = {
     verifyPeer: true,
   },
   proxy: undefined,
+  options: {
+    followRedirects: true,
+  },
 }
 
 export class KernelInterceptorNativeStore extends Service {
@@ -117,6 +120,15 @@ export class KernelInterceptorNativeStore extends Service {
     )
   }
 
+  private mergeOptions(
+    ...settings: (Required<InputDomainSetting>["options"] | undefined)[]
+  ): Required<InputDomainSetting>["options"] | undefined {
+    return settings.reduce(
+      (acc, setting) => (setting ? { ...acc, ...setting } : acc),
+      undefined as Required<InputDomainSetting>["options"] | undefined
+    )
+  }
+
   private getMergedSettings(domain: string): InputDomainSetting {
     const domainSettings = this.domainSettings.get(domain)
     const globalSettings =
@@ -130,23 +142,58 @@ export class KernelInterceptorNativeStore extends Service {
         domainSettings?.security
       ),
       proxy: this.mergeProxy(globalSettings?.proxy, domainSettings?.proxy),
+      options: this.mergeOptions(
+        globalSettings?.options,
+        domainSettings?.options
+      ),
     }
 
     return { version: "v1", ...result }
   }
 
   public completeRequest(
-    request: Omit<RelayRequest, "proxy" | "security">
+    request: Omit<RelayRequest, "proxy" | "security" | "meta">
   ): RelayRequest {
     const host = new URL(request.url).host
     const settings = this.getMergedSettings(host)
+
+    this.bypassProxyForDomains(host, settings.proxy?.no_proxy, settings)
     const effective = convertDomainSetting(settings)
 
     if (E.isLeft(effective)) {
       throw effective.left
     }
 
-    return { ...request, ...effective.right }
+    // CRITICAL FIX: Preserve the original request options (including followRedirects)
+    return {
+      ...request,
+      ...effective.right,
+      // Ensure options are preserved from the original request
+      options: (request as any).options,
+    }
+  }
+
+  private bypassProxyForDomains(
+    host: string,
+    domainsString: string | null | undefined,
+    settings: InputDomainSetting
+  ): void {
+    if (!domainsString || !settings.proxy) {
+      return
+    }
+
+    const domainsToBypass: string[] = domainsString
+      .split(",")
+      .map((domain) => domain.trim())
+
+    const shouldBypass = domainsToBypass.some((domain) =>
+      host.toLowerCase().endsWith(domain.toLowerCase())
+    )
+
+    if (shouldBypass && settings.proxy) {
+      // Set url to empty string to disable proxy for this domain
+      settings.proxy.url = ""
+    }
   }
 
   public getDomainSettings(domain: string): InputDomainSetting {

@@ -111,25 +111,39 @@ export const requestRunner =
       // NOTE: Temporary parsing check for request endpoint.
       requestConfig.url = new URL(requestConfig.url ?? "").toString();
 
-      let status: number;
       const baseResponse = await axios(requestConfig);
       const { config } = baseResponse;
-      // PR-COMMENT: type error
-      const runnerResponse: RequestRunnerResponse = {
-        ...baseResponse,
-        endpoint: getRequest.endpoint(config.url),
-        method: getRequest.method(config.method),
-        body: baseResponse.data,
-        duration: 0,
-      };
 
       const end = hrtime(start);
       const duration = getDurationInSeconds(end);
-      runnerResponse.duration = duration;
+      const responseTime = duration * 1000; // Convert seconds to milliseconds
+
+      // Transform axios headers to required format
+      const transformedHeaders: { key: string; value: string }[] = [];
+      if (baseResponse.headers) {
+        for (const [key, value] of Object.entries(baseResponse.headers)) {
+          if (value !== undefined) {
+            transformedHeaders.push({
+              key,
+              value: Array.isArray(value) ? value.join(", ") : String(value),
+            });
+          }
+        }
+      }
+
+      const runnerResponse: RequestRunnerResponse = {
+        endpoint: getRequest.endpoint(config.url),
+        method: getRequest.method(config.method),
+        body: baseResponse.data,
+        responseTime,
+        duration: duration,
+        status: baseResponse.status,
+        statusText: baseResponse.statusText,
+        headers: transformedHeaders,
+      };
 
       return E.right(runnerResponse);
     } catch (e) {
-      let status: number;
       const runnerResponse: RequestRunnerResponse = {
         endpoint: "",
         method: "GET",
@@ -138,6 +152,7 @@ export const requestRunner =
         status: 400,
         headers: [],
         duration: 0,
+        responseTime: 0,
       };
 
       if (axios.isAxiosError(e)) {
@@ -148,7 +163,22 @@ export const requestRunner =
           runnerResponse.body = data;
           runnerResponse.statusText = statusText;
           runnerResponse.status = status;
-          runnerResponse.headers = headers;
+
+          // Transform axios headers to required format
+          const transformedHeaders: { key: string; value: string }[] = [];
+          if (headers) {
+            for (const [key, value] of Object.entries(headers)) {
+              if (value !== undefined) {
+                transformedHeaders.push({
+                  key,
+                  value: Array.isArray(value)
+                    ? value.join(", ")
+                    : String(value),
+                });
+              }
+            }
+          }
+          runnerResponse.headers = transformedHeaders;
         } else if (e.request) {
           return E.left(error({ code: "REQUEST_ERROR", data: E.toError(e) }));
         }
@@ -202,7 +232,8 @@ export const processRequest =
     params: ProcessRequestParams
   ): T.Task<{ envs: HoppEnvs; report: RequestReport }> =>
   async () => {
-    const { envs, path, request, delay, legacySandbox } = params;
+    const { envs, path, request, delay, legacySandbox, collectionVariables } =
+      params;
 
     // Initialising updatedEnvs with given parameter envs, will eventually get updated.
     const result = {
@@ -236,7 +267,8 @@ export const processRequest =
     const preRequestRes = await preRequestScriptRunner(
       request,
       processedEnvs,
-      legacySandbox
+      legacySandbox ?? false,
+      collectionVariables
     )();
     if (E.isLeft(preRequestRes)) {
       printPreRequestRunner.fail();
@@ -263,6 +295,7 @@ export const processRequest =
       headers: [],
       status: 400,
       statusText: "",
+      responseTime: 0,
       body: Object(null),
       duration: 0,
     };
@@ -287,9 +320,9 @@ export const processRequest =
     // Extracting test-script-runner parameters.
     const testScriptParams = getTestScriptParams(
       _requestRunnerRes,
-      request,
+      effectiveRequest,
       updatedEnvs,
-      legacySandbox
+      legacySandbox ?? false
     );
 
     // Executing test-runner.
@@ -305,6 +338,34 @@ export const processRequest =
     } else {
       const { envs, testsReport, duration } = testRunnerRes.right;
       const _hasFailedTestCases = hasFailedTestCases(testsReport);
+
+      // Check if any tests have uncaught runtime errors (e.g., ReferenceError, TypeError)
+      // Don't include validation errors (they're reported as individual testcases)
+      const testScriptErrors = testsReport.flatMap((testReport) =>
+        testReport.expectResults
+          .filter(
+            (result) =>
+              result.status === "error" &&
+              /^(ReferenceError|TypeError|SyntaxError|RangeError|URIError|EvalError|AggregateError|InternalError|Error):/.test(
+                result.message
+              )
+          )
+          .map((result) => result.message)
+      );
+
+      // If there are runtime errors, add them to report.errors
+      if (testScriptErrors.length > 0) {
+        const errorMessages = testScriptErrors.join("; ");
+
+        report.errors.push(
+          error({
+            code: "TEST_SCRIPT_ERROR",
+            data: errorMessages,
+          })
+        );
+
+        report.result = false;
+      }
 
       // Updating report with current tests, result and duration.
       report.tests = testsReport;

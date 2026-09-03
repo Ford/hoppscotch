@@ -33,6 +33,7 @@ type ProxyRequest = {
   data: string
   wantsBinary: boolean
   accessToken: string
+  followRedirects?: boolean
   auth?: {
     username: string
     password: string
@@ -74,7 +75,7 @@ export class ProxyKernelInterceptorService
     auth: new Set(["basic"]),
     security: new Set([]),
     proxy: new Set([]),
-    advanced: new Set([]),
+    advanced: new Set(["redirects"]),
   } as const
   public readonly settingsEntry = markRaw({
     title: (t: ReturnType<typeof getI18n>) =>
@@ -85,7 +86,7 @@ export class ProxyKernelInterceptorService
   private constructProxyRequest(
     request: RelayRequest,
     accessToken: string
-  ): ProxyRequest {
+  ): ProxyRequest & { followRedirects?: boolean } {
     // NOTE: This should be conditional but for now setting it to true for backwards compat,
     // see std/interceptor/proxy.ts for more info.
     const wantsBinary = true
@@ -94,6 +95,14 @@ export class ProxyKernelInterceptorService
     // This is required for backwards compatibility with current proxyscotch impl
     if (request.content) {
       switch (request.content.kind) {
+        case "text":
+          // Text content - pass string directly
+          requestData =
+            typeof request.content.content === "string"
+              ? request.content.content
+              : String(request.content.content)
+          break
+
         case "json":
           requestData =
             typeof request.content.content === "string"
@@ -117,11 +126,15 @@ export class ProxyKernelInterceptorService
               for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i)
               }
-              requestData = new Blob([bytes.buffer])
+              // Pass the Uint8Array directly, not .buffer, to avoid offset issues
+              requestData = new Blob([bytes])
             } catch (e) {
               console.error("Error converting binary data:", e)
               requestData = request.content.content
             }
+          } else if (request.content.content instanceof Uint8Array) {
+            // Wrap Uint8Array in Blob for proxy compatibility, avoiding .buffer to prevent offset issues
+            requestData = new Blob([request.content.content])
           } else {
             requestData = request.content.content
           }
@@ -134,12 +147,45 @@ export class ProxyKernelInterceptorService
           requestData = ""
           break
 
+        case "urlencoded":
+          // URL-encoded form data - pass string directly
+          requestData =
+            typeof request.content.content === "string"
+              ? request.content.content
+              : String(request.content.content)
+          break
+
+        case "xml":
+          // XML content - pass string directly
+          requestData =
+            typeof request.content.content === "string"
+              ? request.content.content
+              : String(request.content.content)
+          break
+
+        case "form":
+          // Form data - convert to URLSearchParams for JSON serialization
+          // FormData objects are not JSON-serializable and will be lost when proxied
+          if (request.content.content instanceof FormData) {
+            const params = new URLSearchParams()
+            for (const [key, value] of request.content.content.entries()) {
+              // Only handle string values - File/Blob uploads not supported via proxy
+              if (typeof value === "string") {
+                params.append(key, value)
+              }
+            }
+            requestData = params.toString()
+          } else {
+            requestData = request.content.content
+          }
+          break
+
         default:
           requestData = request.content.content
       }
     }
 
-    return {
+    const proxyRequest = {
       accessToken,
       wantsBinary,
       url: request.url,
@@ -147,6 +193,7 @@ export class ProxyKernelInterceptorService
       headers: request.headers,
       params: request.params,
       data: requestData,
+      followRedirects: request.options?.followRedirects,
       auth:
         request.auth?.kind === "basic"
           ? {
@@ -155,6 +202,8 @@ export class ProxyKernelInterceptorService
             }
           : undefined,
     }
+
+    return proxyRequest
   }
 
   public execute(

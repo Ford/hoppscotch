@@ -31,6 +31,14 @@
         {{ t("settings.verify_peer") }}
       </div>
 
+      <div class="flex items-center">
+        <HoppSmartToggle
+          :on="domainSettings[selectedDomain]?.options?.followRedirects ?? true"
+          @change="toggleFollowRedirects"
+        />
+        {{ t("settings.follow_redirects") }}
+      </div>
+
       <div class="flex space-x-4">
         <HoppButtonSecondary
           :icon="IconFileBadge"
@@ -66,6 +74,13 @@
           :label="t('settings.proxy_url')"
           input-styles="floating-input !border-0"
           @update:model-value="updateProxyUrl"
+        />
+        <HoppSmartInput
+          :model-value="domainSettings[selectedDomain].proxy.no_proxy"
+          :placeholder="' '"
+          :label="'Proxy Bypass (Enter comma separated values to bypass proxy settings. Example: localhost, .example.com)'"
+          input-styles="floating-input !border-0"
+          @update:model-value="updateNoProxy"
         />
         <p class="my-1 text-secondaryLight">
           {{ t("settings.proxy_auth") }}
@@ -513,6 +528,10 @@ function updateDomainSettings(newSettings: any) {
         ...newSettings.security?.certificates,
       },
     },
+    options: {
+      ...currentSettings?.options,
+      ...newSettings.options,
+    },
   }
 
   store.saveDomainSettings(domain, domainSettings[domain])
@@ -530,6 +549,17 @@ function toggleVerifyPeer() {
   updateDomainSettings({
     security: {
       verifyPeer: !domainSettings[selectedDomain.value]?.security?.verifyPeer,
+    },
+  })
+}
+
+function toggleFollowRedirects() {
+  const currentValue =
+    domainSettings[selectedDomain.value]?.options?.followRedirects ?? true
+
+  updateDomainSettings({
+    options: {
+      followRedirects: !currentValue,
     },
   })
 }
@@ -572,6 +602,14 @@ function updateProxyPassword(value: string) {
         password: value,
       },
     },
+  })
+}
+
+function updateNoProxy(value: string) {
+  console.log(" Noproxy  " + JSON.stringify(value, null, 2))
+  const current = domainSettings[selectedDomain.value]?.proxy
+  updateDomainSettings({
+    proxy: { ...current, no_proxy: value },
   })
 }
 

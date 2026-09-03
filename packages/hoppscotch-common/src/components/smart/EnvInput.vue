@@ -101,6 +101,7 @@ import { useService } from "dioc/vue"
 import { RESTTabService } from "~/services/tab/rest"
 import { syntaxTree } from "@codemirror/language"
 import { uniqueID } from "~/helpers/utils/uniqueID"
+import { transformInheritedCollectionVariablesToAggregateEnv } from "~/helpers/utils/inheritedCollectionVarTransformer"
 
 const t = useI18n()
 
@@ -120,6 +121,7 @@ const props = withDefaults(
     contextMenuEnabled?: boolean
     secret?: boolean
     autoCompleteEnv?: boolean
+    autoCompleteEnvSource?: AggregateEnvironment[] | null
   }>(),
   {
     modelValue: "",
@@ -135,7 +137,8 @@ const props = withDefaults(
     inspectionResults: undefined,
     contextMenuEnabled: true,
     secret: false,
-    autoCompleteEnvSource: false,
+    autoCompleteEnv: false,
+    autoCompleteEnvSource: null,
   }
 )
 
@@ -174,6 +177,19 @@ watch(
     if (isSecret.value) {
       updateModelValue(newVal)
     }
+  }
+)
+
+//update secretText when modelValue changes
+watch(
+  () => props.modelValue,
+  (newVal) => {
+    if (secretText.value !== newVal) {
+      secretText.value = newVal
+    }
+  },
+  {
+    immediate: true,
   }
 )
 
@@ -376,65 +392,90 @@ const aggregateEnvs = useReadonlyStream(
 const tabs = useService(RESTTabService)
 
 const envVars = computed(() => {
+  // If envs are passed directly as props, mask secrets and return them
   if (props.envs?.length) {
-    return props.envs.map((x) => {
-      const { key, secret } = x
-      const currentValue = secret ? "********" : x.currentValue
-      const initialValue = secret ? "********" : x.initialValue
-      const sourceEnv = "sourceEnv" in x ? x.sourceEnv : ""
-      return {
+    return props.envs.map(
+      ({ key, currentValue, initialValue, secret, sourceEnv }) => ({
         key,
-        currentValue,
-        initialValue,
-        sourceEnv,
+        currentValue: secret ? "********" : currentValue,
+        initialValue: secret ? "********" : initialValue,
+        sourceEnv: sourceEnv ?? "",
         secret,
-      }
-    })
+      })
+    )
   }
 
-  const requestVariables =
-    tabs.currentActiveTab.value.document.type === "example-response"
-      ? tabs.currentActiveTab.value.document.response.originalRequest
-          .requestVariables
-      : tabs.currentActiveTab.value.document.type === "request"
-        ? tabs.currentActiveTab.value.document.request.requestVariables
-        : []
+  const currentTab = tabs.currentActiveTab.value
+  const { document } = currentTab
+  const isRequest = document.type === "request"
+  const isExample = document.type === "example-response"
 
-  // Transform request variables to match the env format
-  return [
-    ...requestVariables.map(({ active, key, value }) =>
-      active
-        ? {
-            key,
-            currentValue: value,
-            initialValue: value,
-            sourceEnv: "RequestVariable",
-            secret: false,
-          }
-        : ({} as AggregateEnvironment)
-    ),
-    ...aggregateEnvs.value,
-  ]
+  // variables inherited from the collection if we're in a request or example
+  const collectionVariables =
+    isRequest || isExample
+      ? transformInheritedCollectionVariablesToAggregateEnv(
+          document.inheritedProperties?.variables ?? [],
+          false
+        )
+      : []
+
+  // request-level variables
+  const rawRequestVars = isRequest
+    ? document.request.requestVariables
+    : isExample
+      ? document.response.originalRequest.requestVariables
+      : []
+
+  // formated request variables
+  const requestVariables = rawRequestVars
+    .filter((v) => v.active)
+    .map(({ key, value }) => ({
+      key,
+      currentValue: value,
+      initialValue: value,
+      sourceEnv: "RequestVariable",
+      secret: false,
+    }))
+
+  return [...requestVariables, ...collectionVariables, ...aggregateEnvs.value]
 })
 
 function envAutoCompletion(context: CompletionContext) {
-  const options = (envVars.value ?? [])
-    .map((env) => ({
-      label: env?.key ? `<<${env.key}>>` : "",
-      info: env?.currentValue ?? "",
-      apply: env?.key ? `<<${env.key}>>` : "",
-    }))
-    .filter(Boolean)
-
   const nodeBefore = syntaxTree(context.state).resolveInner(context.pos, -1)
   const textBefore = context.state.sliceDoc(nodeBefore.from, context.pos)
-  const tagBefore = /<<\$?\w*$/.exec(textBefore) // Update regex to match <<$ as well
+  const tagBefore = /<<\$?[A-Za-z0-9_.-]*$/.exec(textBefore) // Update regex to match <<$ as well
 
   if (!tagBefore && !context.explicit) return null
+
+  // Check if there's already a closing ">>" after the cursor
+  const textAfter = context.state.sliceDoc(context.pos, context.pos + 2)
+  const hasClosingBrackets = textAfter === ">>"
+
+  const options = (props.autoCompleteEnvSource ?? envVars.value ?? [])
+    .map((env) => {
+      const envKey = env?.key
+      if (!envKey) return null
+
+      // If closing brackets already exist, don't include them in the completion
+      const completionText = hasClosingBrackets
+        ? `<<${envKey}`
+        : `<<${envKey}>>`
+
+      return {
+        label: `<<${envKey}>>`,
+        info: env?.currentValue ?? "",
+        apply: completionText,
+      }
+    })
+    .filter(
+      (option): option is { label: string; info: string; apply: string } =>
+        option !== null
+    )
+
   return {
     from: tagBefore ? nodeBefore.from + tagBefore.index : context.pos,
     options: options,
-    validFor: /^(<<\$?\w*)?$/,
+    validFor: /^(<<\$?[A-Za-z0-9_.-]*)?$/,
   }
 }
 
@@ -546,6 +587,7 @@ const getExtensions = (readonly: boolean): Extension => {
       ? autocompletion({
           activateOnTyping: true,
           override: [envAutoCompletion],
+          tooltipClass: () => "tooltip-autocomplete",
         })
       : [],
 
@@ -616,6 +658,18 @@ const triggerTextSelection = () => {
     })
   })
 }
+
+/**
+ * Focuses the input editor
+ */
+const focusInput = () => {
+  view.value?.focus()
+}
+
+defineExpose({
+  focus: focusInput,
+})
+
 onMounted(() => {
   if (editor.value) {
     if (!view.value) initView(editor.value)
@@ -680,6 +734,12 @@ watch(
   }
 )
 </script>
+
+<style lang="scss">
+.tooltip-autocomplete {
+  @apply z-[1001] #{!important};
+}
+</style>
 
 <style lang="scss" scoped>
 .autocomplete-wrapper {

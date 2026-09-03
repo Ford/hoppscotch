@@ -88,6 +88,16 @@ hopp [options or commands] arguments
 
     - Opt out from the experimental scripting sandbox.
 
+## Versioning
+
+The Hoppscotch CLI follows **pre-1.0 semantic versioning** conventions while in alpha (version `< 1.0.0`):
+
+- **Feature releases** (e.g., `0.20.0` → `0.21.0`): New features, enhancements, or improvements
+- **Patch releases** (e.g., `0.20.0` → `0.20.1`): Bug fixes, security patches, and minor improvements
+- **Breaking changes** (e.g., `0.21.0` → `0.30.0`): Major version-like bumps for backwards-incompatible changes
+
+> Once the CLI reaches stability and a mature feature set, we will transition to standard semantic versioning starting with `1.0.0`.
+
 ## Install
 
 - Before you install Hoppscotch CLI you need to make sure you have the dependencies it requires to run.
@@ -123,10 +133,17 @@ hopp [options or commands] arguments
 
 1. Clone the repository, make sure you've installed latest [pnpm](https://pnpm.io).
 2. `pnpm install`
-3. `cd packages/hoppscotch-cli`
-4. `pnpm run build`
-5. `sudo pnpm link --global`
-6. Test the installation by executing `hopp`
+3. Build required workspace dependencies (if needed):
+   ```bash
+   # These auto-build via postinstall hooks during 'pnpm install'
+   # Rebuild manually only when you make changes to these packages:
+   pnpm --filter @hoppscotch/data run build
+   pnpm --filter @hoppscotch/js-sandbox run build
+   ```
+4. `cd packages/hoppscotch-cli`
+5. `pnpm run build`
+6. `sudo pnpm link --global`
+7. Test the installation by executing `hopp`
 
 ## **Contributing:**
 
@@ -152,7 +169,13 @@ Please note we have a code of conduct, please follow it in all your interactions
 
    ```bash
    pnpm install
-   pnpm run build
+   # Build required workspace dependencies (if needed)
+   # These auto-build via postinstall hooks during 'pnpm install'
+   # Rebuild manually only when you make changes to these packages:
+   pnpm --filter @hoppscotch/data run build
+   pnpm --filter @hoppscotch/js-sandbox run build
+   # Then build the CLI
+   cd packages/hoppscotch-cli && pnpm run build
    ```
 
 2. In order to test locally, you can use two types of package linking:

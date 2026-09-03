@@ -17,6 +17,8 @@ import { HoppCLIError, error } from "../types/errors";
 import { HoppEnvs } from "../types/request";
 import { ExpectResult, TestMetrics, TestRunnerRes } from "../types/response";
 import { getDurationInSeconds } from "./getters";
+import { createHoppFetchHook } from "./hopp-fetch";
+import { stripModulePrefix } from "./mutators";
 
 /**
  * Executes test script and runs testDescriptorParser to generate test-report using
@@ -37,14 +39,27 @@ export const testRunner = (
     TE.bind("test_response", () =>
       pipe(
         TE.of(testScriptData),
-        TE.chain(({ testScript, response, envs, legacySandbox }) => {
+        TE.chain(({ request, response, envs, legacySandbox }) => {
+          const { status, statusText, headers, responseTime, body } = response;
+
+          const effectiveResponse = {
+            status,
+            statusText,
+            headers,
+            responseTime,
+            body,
+          };
+
           const experimentalScriptingSandbox = !legacySandbox;
-          return runTestScript(
-            testScript,
+          const hoppFetchHook = createHoppFetchHook();
+
+          return runTestScript(stripModulePrefix(request.testScript), {
             envs,
-            response,
-            experimentalScriptingSandbox
-          );
+            request,
+            response: effectiveResponse,
+            experimentalScriptingSandbox,
+            hoppFetchHook,
+          });
         })
       )
     ),
@@ -91,10 +106,11 @@ export const testDescriptorParser = (
   pipe(
     /**
      * Generate single TestReport from given testDescriptor.
+     * Skip "root" descriptor to avoid showing synthetic top-level test.
      */
     testDescriptor,
     ({ expectResults, descriptor }) =>
-      A.isNonEmpty(expectResults)
+      A.isNonEmpty(expectResults) && descriptor !== "root"
         ? pipe(
             expectResults,
             A.reduce({ failed: 0, passed: 0 }, (prev, { status }) =>
@@ -147,10 +163,12 @@ export const getTestScriptParams = (
   legacySandbox: boolean
 ) => {
   const testScriptParams: TestScriptParams = {
-    testScript: request.testScript,
+    request,
     response: {
       body: reqRunnerRes.body,
       status: reqRunnerRes.status,
+      statusText: reqRunnerRes.statusText,
+      responseTime: reqRunnerRes.responseTime,
       headers: reqRunnerRes.headers,
     },
     envs,

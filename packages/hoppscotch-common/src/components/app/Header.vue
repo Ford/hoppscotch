@@ -14,31 +14,23 @@
         }"
       >
         <div class="flex">
+          <!-- Instance Switcher (Desktop/On-prem) -->
           <tippy
-            v-if="kernelMode === 'desktop'"
+            v-if="platform.instance?.instanceSwitchingEnabled"
             interactive
             trigger="click"
             theme="popover"
             :on-shown="() => instanceSwitcherRef.focus()"
           >
             <div class="flex items-center cursor-pointer">
-              <div class="flex">
-                <span
-                  class="!font-bold uppercase tracking-wide !text-secondaryDark pr-1"
-                >
-                  {{ instanceDisplayName }}
-                </span>
-                <span
-                  v-if="
-                    currentState.status === 'connected' &&
-                    'type' in currentState.instance &&
-                    currentState.instance.type === 'vendored'
-                  "
-                  class="!font-bold uppercase tracking-wide !text-secondaryDark pr-1"
-                >
-                  {{ platform.instance.displayConfig.description }}
-                </span>
-              </div>
+              <span
+                class="!font-bold uppercase tracking-wide !text-secondaryDark pr-1"
+              >
+                {{
+                  platform.instance.getCurrentInstance?.()?.displayName ||
+                  "Hoppscotch"
+                }}
+              </span>
               <IconChevronDown class="h-4 w-4 text-secondaryDark" />
             </div>
             <template #content="{ hide }">
@@ -52,6 +44,7 @@
               </div>
             </template>
           </tippy>
+
           <HoppButtonSecondary
             v-else
             class="!font-bold uppercase tracking-wide !text-secondaryDark hover:bg-primaryDark focus-visible:bg-primaryDark"
@@ -134,13 +127,14 @@
             class="inline-flex items-center space-x-2"
           >
             <HoppButtonSecondary
-              v-if="!workspaceSelectorFlagEnabled"
+              v-if="false"
               :icon="IconUploadCloud"
               :label="t('header.save_workspace')"
               class="!focus-visible:text-emerald-600 !hover:text-emerald-600 hidden h-8 border border-emerald-600/25 bg-emerald-500/10 !text-emerald-500 hover:border-emerald-600/20 hover:bg-emerald-600/20 focus-visible:border-emerald-600/20 focus-visible:bg-emerald-600/20 md:flex"
               @click="invokeAction('modals.login.toggle')"
             />
             <HoppButtonPrimary
+              v-if="!isLoginDisabled"
               :label="t('header.login')"
               class="h-8"
               @click="invokeAction('modals.login.toggle')"
@@ -203,7 +197,7 @@
                   class="!focus-visible:text-blue-600 !hover:text-blue-600 h-8 rounded border border-blue-600/25 bg-blue-500/10 pr-8 !text-blue-500 hover:border-blue-600/20 hover:bg-blue-600/20 focus-visible:border-blue-600/20 focus-visible:bg-blue-600/20"
                 />
               </HoppSmartSelectWrapper>
-              <template #content="{ hide }">
+              <template #content="{ hide, state }">
                 <div
                   ref="accountActions"
                   class="flex flex-col focus:outline-none"
@@ -211,7 +205,7 @@
                   @keyup.escape="hide()"
                   @click="hide()"
                 >
-                  <WorkspaceSelector />
+                  <WorkspaceSelector :state="state" />
                 </div>
               </template>
             </tippy>
@@ -372,53 +366,33 @@ import { useToast } from "~/composables/toast"
 import { GetMyTeamsQuery, TeamAccessRole } from "~/helpers/backend/graphql"
 import { deleteTeam as backendDeleteTeam } from "~/helpers/backend/mutations/Team"
 import { platform } from "~/platform"
+import { AdditionalLinksService } from "~/services/additionalLinks.service"
 import {
   BANNER_PRIORITY_LOW,
   BannerContent,
   BannerService,
 } from "~/services/banner.service"
 import { WorkspaceService } from "~/services/workspace.service"
-import { InstanceSwitcherService } from "~/services/instance-switcher.service"
+import IconChevronDown from "~icons/lucide/chevron-down"
 import IconDownload from "~icons/lucide/download"
+import IconLayoutDashboard from "~icons/lucide/layout-dashboard"
 import IconLifeBuoy from "~icons/lucide/life-buoy"
 import IconSettings from "~icons/lucide/settings"
 import IconUploadCloud from "~icons/lucide/upload-cloud"
 import IconUser from "~icons/lucide/user"
 import IconUserPlus from "~icons/lucide/user-plus"
 import IconUsers from "~icons/lucide/users"
-import IconChevronDown from "~icons/lucide/chevron-down"
-import IconLayoutDashboard from "~icons/lucide/layout-dashboard"
-import { AdditionalLinksService } from "~/services/additionalLinks.service"
 
 const t = useI18n()
 const toast = useToast()
 const kernelMode = getKernelMode()
-const instanceSwitcherService =
-  kernelMode === "desktop" ? useService(InstanceSwitcherService) : null
-const instanceSwitcherRef =
-  kernelMode === "desktop" ? ref<any | null>(null) : ref(null)
+
 const downloadableLinksRef =
   kernelMode === "web" ? ref<any | null>(null) : ref(null)
+const instanceSwitcherRef =
+  kernelMode === "desktop" ? ref<any | null>(null) : ref(null)
 
 const isUserAdmin = ref(false)
-
-const currentState =
-  kernelMode === "desktop" && instanceSwitcherService
-    ? useReadonlyStream(
-        instanceSwitcherService.getStateStream(),
-        instanceSwitcherService.getCurrentState().value
-      )
-    : ref({
-        status: "disconnected",
-        instance: { displayName: "Hoppscotch" },
-      })
-
-const instanceDisplayName = computed(() => {
-  if (currentState.value.status !== "connected") {
-    return "Hoppscotch"
-  }
-  return currentState.value.instance.displayName
-})
 
 /**
  * Feature flag to enable the workspace selector login conversion
@@ -428,7 +402,7 @@ const workspaceSelectorFlagEnabled = computed(
 )
 
 /**
- * Show the dashboard link if the user is not on the default cloud instance and is an admin
+ * Show the dashboard link if the user is not on the default cloud instance and is an Admin
  */
 onMounted(async () => {
   const { organization } = platform
@@ -443,7 +417,7 @@ onMounted(async () => {
 })
 
 const showTeamsModal = ref(false)
-
+const isLoginDisabled = ref(true)
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const mdAndLarger = breakpoints.greater("md")
 

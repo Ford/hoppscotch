@@ -3,7 +3,7 @@
     v-if="show"
     dialog
     :title="t(`environment.${action}`)"
-    styles="sm:max-w-3xl"
+    styles="sm:max-w-5xl"
     @close="hideModal"
   >
     <template #body>
@@ -138,7 +138,7 @@
                     <input
                       v-model="env.key"
                       v-focus
-                      class="flex flex-1 bg-transparent px-4 py-2"
+                      class="flex flex-1 bg-transparent px-4 py-2 text-secondaryDark"
                       :placeholder="`${t('count.variable', {
                         count: index + 1,
                       })}`"
@@ -419,6 +419,13 @@ const getCurrentValue = (
   )?.currentValue
 }
 
+const getInitialValue = (editingID: string, varIndex: number) => {
+  return secretEnvironmentService.getSecretEnvironmentVariable(
+    editingID,
+    varIndex
+  )?.initialValue
+}
+
 watch(
   () => props.show,
   (show) => {
@@ -449,7 +456,11 @@ watch(
                   index,
                   e.secret
                 ) ?? e.currentValue,
-              initialValue: e.initialValue,
+              initialValue: e.secret
+                ? (getInitialValue(props.editingEnvironment?.id ?? "", index) ??
+                  e.initialValue ??
+                  "")
+                : e.initialValue,
               secret: e.secret,
             },
           }))
@@ -496,6 +507,12 @@ const saveEnvironment = async () => {
     return
   }
 
+  if (editingName.value.trim().length === 0) {
+    isLoading.value = false
+    toast.error(`${t("environment.short_name")}`)
+    return
+  }
+
   const filteredVariables = pipe(
     vars.value,
     A.filterMap(
@@ -510,7 +527,12 @@ const saveEnvironment = async () => {
     filteredVariables,
     A.filterMapWithIndex((i, e) =>
       e.secret
-        ? O.some({ key: e.key, value: e.currentValue, varIndex: i })
+        ? O.some({
+            key: e.key,
+            value: e.currentValue,
+            varIndex: i,
+            initialValue: e.initialValue,
+          })
         : O.none
     )
   )
@@ -534,7 +556,7 @@ const saveEnvironment = async () => {
     A.map((e) => ({
       key: e.key,
       secret: e.secret,
-      initialValue: e.initialValue || "",
+      initialValue: e.secret ? "" : e.initialValue,
       currentValue: "",
     }))
   )

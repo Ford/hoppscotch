@@ -214,7 +214,9 @@ export class NativeKernelInterceptorService
       const nativeRequest = await relayRequestToNativeAdapter(
         effectiveRequestWithUserAgent
       )
+
       const postProcessedRequest = postProcessRelayRequest(nativeRequest)
+
       const relayExecution = Relay.execute(postProcessedRequest)
 
       setRelayExecution(relayExecution)

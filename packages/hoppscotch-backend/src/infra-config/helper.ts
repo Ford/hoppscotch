@@ -16,6 +16,29 @@ type DefaultInfraConfig = {
   isEncrypted: boolean;
 };
 
+// Singleton PrismaService instance for infra config operations
+let sharedPrismaInstance: PrismaService | null = null;
+
+/**
+ * Get or create a shared PrismaService instance for infra config operations
+ */
+function getSharedPrismaInstance(): PrismaService {
+  if (!sharedPrismaInstance) {
+    sharedPrismaInstance = new PrismaService();
+  }
+  return sharedPrismaInstance;
+}
+
+/**
+ * Disconnect the shared Prisma instance during application shutdown
+ */
+export async function disconnectSharedPrismaInstance(): Promise<void> {
+  if (sharedPrismaInstance) {
+    await sharedPrismaInstance.onModuleDestroy();
+    sharedPrismaInstance = null;
+  }
+}
+
 /**
  * Returns a mapping of authentication providers to their required configuration keys based on the current environment configuration.
  */
@@ -67,8 +90,8 @@ export function getAuthProviderRequiredKeys(
  * (ConfigModule will set the environment variables in the process)
  */
 export async function loadInfraConfiguration() {
+  const prisma = getSharedPrismaInstance();
   try {
-    const prisma = new PrismaService();
     const infraConfigs = await prisma.infraConfig.findMany();
 
     const environmentObject: Record<string, string> = {};
@@ -87,7 +110,7 @@ export async function loadInfraConfiguration() {
 
     // Prisma throw error if 'Can't reach at database server' OR 'Table does not exist'
     // Reason for not throwing error is, we want successful build during 'postinstall' and generate dist files
-    console.log('Error from loadInfraConfiguration', error);
+    console.error('Error from loadInfraConfiguration', error);
     return { INFRA: {} };
   }
 }
@@ -97,7 +120,7 @@ export async function loadInfraConfiguration() {
  * @returns Array of default infra configs
  */
 export async function getDefaultInfraConfigs(): Promise<DefaultInfraConfig[]> {
-  const prisma = new PrismaService();
+  const prisma = getSharedPrismaInstance();
 
   // Prepare rows for 'infra_config' table with default values (from .env) for each 'name'
   const onboardingCompleteStatus = await isOnboardingCompleted();
@@ -126,6 +149,11 @@ export async function getDefaultInfraConfigs(): Promise<DefaultInfraConfig[]> {
       name: InfraConfigEnum.SESSION_SECRET,
       value: encrypt(randomBytes(32).toString('hex')),
       isEncrypted: true,
+    },
+    {
+      name: InfraConfigEnum.SESSION_COOKIE_NAME,
+      value: null,
+      isEncrypted: false,
     },
     {
       name: InfraConfigEnum.TOKEN_SALT_COMPLEXITY,
@@ -302,6 +330,11 @@ export async function getDefaultInfraConfigs(): Promise<DefaultInfraConfig[]> {
       value: 'true',
       isEncrypted: false,
     },
+    {
+      name: InfraConfigEnum.MOCK_SERVER_WILDCARD_DOMAIN,
+      value: null,
+      isEncrypted: false,
+    },
   ];
 
   return infraConfigDefaultObjs;
@@ -314,7 +347,7 @@ export async function getDefaultInfraConfigs(): Promise<DefaultInfraConfig[]> {
 export async function getMissingInfraConfigEntries(
   infraConfigDefaultObjs: DefaultInfraConfig[],
 ) {
-  const prisma = new PrismaService();
+  const prisma = getSharedPrismaInstance();
   const dbInfraConfigs = await prisma.infraConfig.findMany();
 
   const missingEntries = infraConfigDefaultObjs.filter(
@@ -332,7 +365,7 @@ export async function getMissingInfraConfigEntries(
 export async function getEncryptionRequiredInfraConfigEntries(
   infraConfigDefaultObjs: DefaultInfraConfig[],
 ) {
-  const prisma = new PrismaService();
+  const prisma = getSharedPrismaInstance();
   const dbInfraConfigs = await prisma.infraConfig.findMany();
 
   const requiredEncryption = dbInfraConfigs.filter((dbConfig) => {
@@ -370,14 +403,16 @@ export async function isInfraConfigTablePopulated(): Promise<boolean> {
 }
 
 /**
- * Stop the app after 5 seconds
- * (Docker will re-start the app)
+ * Stop the app after 5 seconds with graceful shutdown
+ * (Sends SIGTERM to trigger NestJS graceful shutdown, then Docker container stops)
  */
 export function stopApp() {
   console.log('Stopping app in 5 seconds...');
 
   setTimeout(() => {
-    console.log('Stopping app now...');
+    console.log('Stopping app now with graceful shutdown...');
+    // Send SIGTERM to the current process to trigger graceful shutdown
+    // This will call app.close() which triggers onModuleDestroy lifecycle hooks
     process.kill(process.pid, 'SIGTERM');
   }, 5000);
 }
@@ -388,7 +423,7 @@ export function stopApp() {
  * @returns Array of configured SSO providers
  */
 export async function getConfiguredSSOProvidersFromInfraConfig() {
-  const prisma = new PrismaService();
+  const prisma = getSharedPrismaInstance();
   const env = await loadInfraConfiguration();
   const providerConfigKeys = getAuthProviderRequiredKeys(env);
 
@@ -425,7 +460,7 @@ export async function getConfiguredSSOProvidersFromInfraConfig() {
  * @returns boolean
  */
 export async function isOnboardingCompleted(): Promise<boolean> {
-  const prisma = new PrismaService();
+  const prisma = getSharedPrismaInstance();
   const allowedProviders = await prisma.infraConfig.findUnique({
     where: { name: InfraConfigEnum.VITE_ALLOWED_AUTH_PROVIDERS },
     select: { value: true },

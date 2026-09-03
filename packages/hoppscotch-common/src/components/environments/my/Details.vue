@@ -3,7 +3,7 @@
     v-if="show"
     dialog
     :title="t(`environment.${action}`)"
-    styles="sm:max-w-3xl"
+    styles="sm:max-w-5xl"
     @close="hideModal"
   >
     <template #body>
@@ -134,7 +134,7 @@
                     <input
                       v-model="env.key"
                       v-focus
-                      class="flex flex-1 bg-transparent px-4 py-2"
+                      class="flex flex-1 bg-transparent px-4 py-2 text-secondaryDark"
                       :placeholder="`${t('count.variable', {
                         count: index + 1,
                       })}`"
@@ -150,6 +150,7 @@
                         :select-text-on-mount="
                           env.key ? env.key === editingVariableName : false
                         "
+                        :auto-complete-env="true"
                       />
                       <HoppButtonSecondary
                         v-tippy="{ theme: 'tooltip' }"
@@ -173,6 +174,7 @@
                         :select-text-on-mount="
                           env.key ? env.key === editingVariableName : false
                         "
+                        :auto-complete-env="true"
                       />
                       <HoppButtonSecondary
                         v-tippy="{ theme: 'tooltip' }"
@@ -434,12 +436,21 @@ const workingEnvID = computed(() => {
 
 const getCurrentValue = (id: string | "Global", varIndex: number) => {
   const env = workingEnv.value?.variables[varIndex]
-  if (env && env.secret) {
+  if (env?.secret) {
     return secretEnvironmentService.getSecretEnvironmentVariable(id, varIndex)
       ?.value
   }
   return currentEnvironmentValueService.getEnvironmentVariable(id, varIndex)
     ?.currentValue
+}
+
+const getInitialValue = (id: string | "Global", varIndex: number) => {
+  const env = workingEnv.value?.variables[varIndex]
+  if (env?.secret) {
+    return secretEnvironmentService.getSecretEnvironmentVariable(id, varIndex)
+      ?.initialValue
+  }
+  return env?.initialValue
 }
 
 watch(
@@ -467,7 +478,13 @@ watch(
                   : workingEnvID.value,
                 index
               ) ?? e.currentValue,
-            initialValue: e.initialValue,
+            initialValue:
+              getInitialValue(
+                props.editingEnvironmentIndex === "Global"
+                  ? "Global"
+                  : workingEnvID.value,
+                index
+              ) ?? e.initialValue,
             secret: e.secret,
           },
         }))
@@ -510,7 +527,7 @@ const saveEnvironment = () => {
     return
   }
 
-  if (editingName.value.length < 3) {
+  if (editingName.value.trim().length === 0) {
     toast.error(`${t("environment.short_name")}`)
     return
   }
@@ -533,6 +550,7 @@ const saveEnvironment = () => {
             key: e.key,
             value: e.currentValue,
             varIndex: i,
+            initialValue: e.initialValue,
           })
         : O.none
     )
@@ -581,7 +599,7 @@ const saveEnvironment = () => {
     A.map((e) => ({
       key: e.key,
       secret: e.secret,
-      initialValue: e.initialValue || "",
+      initialValue: e.secret ? "" : e.initialValue,
       currentValue: "",
     }))
   )

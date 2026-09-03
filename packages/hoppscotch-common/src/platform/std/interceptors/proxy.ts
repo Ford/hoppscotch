@@ -1,9 +1,8 @@
 import { Interceptor, RequestRunResult } from "~/services/interceptor.service"
-import { AxiosRequestConfig, CancelToken } from "axios"
+import axios, { AxiosRequestConfig, CancelToken } from "axios"
 import * as E from "fp-ts/Either"
 import { preProcessRequest } from "./helpers"
 import { v4 } from "uuid"
-import axios from "axios"
 import { settingsStore } from "~/newstore/settings"
 import { decodeB64StringToArrayBuffer } from "~/helpers/utils/b64"
 import SettingsProxy from "~/components/settings/Proxy.vue"
@@ -15,7 +14,11 @@ type ProxyHeaders = {
 
 type ProxyPayloadType =
   | FormData
-  | (AxiosRequestConfig & { wantsBinary: true; accessToken: string })
+  | (AxiosRequestConfig & {
+      wantsBinary: true
+      accessToken: string
+      followRedirects?: boolean
+    })
 
 const getProxyPayload = (
   req: AxiosRequestConfig,
@@ -25,6 +28,7 @@ const getProxyPayload = (
     ...req,
     wantsBinary: true,
     accessToken: import.meta.env.VITE_PROXYSCOTCH_ACCESS_TOKEN ?? "",
+    followRedirects: settingsStore.value.FOLLOW_REDIRECTS,
   }
 
   if (payload.data instanceof FormData) {

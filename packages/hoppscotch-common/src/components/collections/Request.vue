@@ -22,11 +22,11 @@
       @dragend="resetDragState"
       @contextmenu.prevent="options?.tippy?.show()"
     >
-      <div class="w-5 p-1 flex items-center justify-center">
+      <div class="ms-1 w-3 flex items-center justify-end">
         <component
           :is="isResponseVisible ? IconArrowDown : IconArrowRight"
           v-if="request.responses && Object.keys(request.responses).length > 0"
-          class="svg-icons cursor-pointer hover:bg-primaryDark transition rounded"
+          class="svg-icons w-3 cursor-pointer hover:bg-primaryDark transition rounded"
           @click="toggleRequestResponse()"
         />
       </div>
@@ -35,7 +35,7 @@
         @click="selectRequest()"
       >
         <span
-          class="pointer-events-none flex w-12 items-center justify-start truncate px-2"
+          class="pointer-events-none flex w-8 items-center justify-start truncate px-0.5"
           :style="{ color: getMethodLabelColorClassOf(request.method) }"
         >
           <component
@@ -71,9 +71,9 @@
           </span>
         </span>
       </div>
-      <div v-if="!hasNoTeamAccess" class="flex">
+      <div class="flex">
         <HoppButtonSecondary
-          v-if="!saveRequest"
+          v-if="!saveRequest && !hasNoTeamAccess"
           v-tippy="{ theme: 'tooltip' }"
           :icon="IconRotateCCW"
           :title="t('action.restore')"
@@ -174,7 +174,7 @@
 
     <div v-if="isResponseVisible" class="flex">
       <div
-        class="ml-[.6rem] flex w-0.5 transform cursor-nsResize bg-dividerLight transition hover:scale-x-125 hover:bg-dividerDark"
+        class="ml-[1.35rem] flex w-0.5 transform cursor-nsResize bg-dividerLight transition hover:scale-x-125 hover:bg-dividerDark"
       ></div>
       <div class="flex flex-col w-full pl-3">
         <CollectionsExampleResponse
@@ -221,6 +221,8 @@ import {
 } from "~/newstore/reordering"
 import { useReadonlyStream } from "~/composables/stream"
 import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring"
+import { platform as _platform } from "~/platform"
+import { invokeAction as _invokeAction } from "~/helpers/actions"
 
 type CollectionType = "my-collections" | "team-collections"
 

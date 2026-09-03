@@ -49,49 +49,31 @@ impl<'a> CurlRequest<'a> {
             }
         })?;
 
-        /* NOTE: Once auth handling is correctly migrated over, this is how query param should be handled
-        if let Some(AuthType::ApiKey { key, value, location }) = &self.request.auth {
-            if let ApiKeyLocation::Query = location {
-                tracing::debug!(key = %key, "Adding API key to query parameters");
+        // Configure redirect handling
+        let follow_redirects = self.request.follow_redirects.unwrap_or(false);
 
-                let mut url = url::Url::parse(&self.request.url).map_err(|e| {
-                    tracing::error!(error = %e, "Failed to parse URL for API key addition");
-                    RelayError::Parse {
-                        message: "Failed to parse URL for API key addition".into(),
-                        cause: Some(e.to_string()),
-                    }
-                })?;
-
-                url.query_pairs_mut().append_pair(key, value);
-                let updated_url = url.to_string();
-                tracing::debug!(url = %updated_url, "Updated URL with API key in query parameters");
-
-                self.handle.url(&updated_url).map_err(|e| {
-                    tracing::error!(error = %e, "Failed to set URL with API key");
-                    RelayError::Network {
-                        message: "Failed to set URL with API key".into(),
-                        cause: Some(e.to_string()),
-                    }
-                })?;
-            } else {
-                self.handle.url(&self.request.url).map_err(|e| {
-                    tracing::error!(error = %e, "Failed to set URL");
-                    RelayError::Network {
-                        message: "Failed to set URL".into(),
-                        cause: Some(e.to_string()),
-                    }
-                })?;
+        self.handle.follow_location(follow_redirects).map_err(|e| {
+            tracing::error!(
+                error = %e,
+                follow_redirects = follow_redirects,
+                "Failed to configure redirect handling"
+            );
+            RelayError::Network {
+                message: format!("Failed to configure redirect handling: follow_redirects={}", follow_redirects),
+                cause: Some(e.to_string()),
             }
-        } else {
-            self.handle.url(&self.request.url).map_err(|e| {
-                tracing::error!(error = %e, "Failed to set URL");
+        })?;
+
+        if follow_redirects {
+            // Set maximum redirects to prevent infinite loops
+            self.handle.max_redirections(10).map_err(|e| {
+                tracing::error!(error = %e, "Failed to set max redirections");
                 RelayError::Network {
-                    message: "Failed to set URL".into(),
+                    message: "Failed to set max redirections".into(),
                     cause: Some(e.to_string()),
                 }
             })?;
         }
-        */
 
         self.handle
             .http_version(self.request.version.to_curl_version())
@@ -112,6 +94,88 @@ impl<'a> CurlRequest<'a> {
                 cause: Some(e.to_string()),
             }
         })?;
+
+        let Some(ref meta) = self.request.meta else {
+            tracing::debug!("No meta configuration provided");
+            return Ok(());
+        };
+
+        let Some(ref options) = meta.options else {
+            tracing::debug!("No options in meta configuration");
+            return Ok(());
+        };
+
+        if let Some(follow) = options.follow_redirects {
+            tracing::debug!(follow_redirects = follow, "Setting redirect behavior");
+            self.handle.follow_location(follow).map_err(|e| {
+                tracing::error!(error = %e, "Failed to set follow_location");
+                RelayError::Network {
+                    message: "Failed to set redirect behavior".into(),
+                    cause: Some(e.to_string()),
+                }
+            })?;
+        }
+
+        if let Some(max) = options.max_redirects {
+            tracing::debug!(max_redirects = max, "Setting maximum redirects");
+            self.handle.max_redirections(max).map_err(|e| {
+                tracing::error!(error = %e, "Failed to set max_redirections");
+                RelayError::Network {
+                    message: "Failed to set maximum redirects".into(),
+                    cause: Some(e.to_string()),
+                }
+            })?;
+        }
+
+        if let Some(timeout_ms) = options.timeout {
+            tracing::debug!(timeout_ms = timeout_ms, "Setting request timeout");
+            self.handle
+                .timeout(std::time::Duration::from_millis(timeout_ms))
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Failed to set timeout");
+                    RelayError::Network {
+                        message: "Failed to set timeout".into(),
+                        cause: Some(e.to_string()),
+                    }
+                })?;
+        }
+
+        if let Some(decompress) = options.decompress {
+            if !decompress {
+                tracing::debug!("Disabling automatic decompression");
+                self.handle.accept_encoding("identity").map_err(|e| {
+                    tracing::error!(error = %e, "Failed to disable decompression");
+                    RelayError::Network {
+                        message: "Failed to disable decompression".into(),
+                        cause: Some(e.to_string()),
+                    }
+                })?;
+            }
+        }
+
+        if let Some(enable_cookies) = options.cookies {
+            tracing::debug!(enable_cookies = enable_cookies, "Setting cookie handling");
+            if enable_cookies {
+                self.handle.cookie_file("").map_err(|e| {
+                    tracing::error!(error = %e, "Failed to enable cookies");
+                    RelayError::Network {
+                        message: "Failed to enable cookie handling".into(),
+                        cause: Some(e.to_string()),
+                    }
+                })?;
+            }
+        }
+
+        if let Some(keep_alive) = options.keep_alive {
+            tracing::debug!(keep_alive = keep_alive, "Setting keep-alive");
+            self.handle.tcp_keepalive(keep_alive).map_err(|e| {
+                tracing::error!(error = %e, "Failed to set keep-alive");
+                RelayError::Network {
+                    message: "Failed to set keep-alive".into(),
+                    cause: Some(e.to_string()),
+                }
+            })?;
+        }
 
         tracing::debug!("Basic request parameters set successfully");
         Ok(())

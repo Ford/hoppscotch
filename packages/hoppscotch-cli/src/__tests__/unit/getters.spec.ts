@@ -263,7 +263,7 @@ describe("getters", () => {
       test("Promise rejects with the code `UNKNOWN_ERROR` while encountering an error that is not an instance of `AxiosError`", () => {
         const expected = {
           code: "UNKNOWN_ERROR",
-          data: new TypeError("UNKNOWN_ERROR"),
+          data: new Error("UNKNOWN_ERROR"),
         };
 
         vi.spyOn(axios, "get").mockImplementation(() =>
@@ -356,9 +356,9 @@ describe("getters", () => {
           })
         );
 
-        vi.spyOn(mutators, "readJsonFile").mockImplementation(() =>
-          Promise.resolve(sampleCollectionContents)
-        );
+        const readJsonFileSpy = vi
+          .spyOn(mutators, "readJsonFile")
+          .mockImplementation(() => Promise.resolve(sampleCollectionContents));
 
         vi.spyOn(
           workspaceAccessHelpers,
@@ -369,6 +369,9 @@ describe("getters", () => {
         const resourceType = "collection";
         const accessToken = "valid-access-token";
         const serverUrl = "valid-url";
+
+        // Clear spy calls from setup
+        readJsonFileSpy.mockClear();
 
         await getResourceContents({
           pathOrId,
@@ -389,7 +392,7 @@ describe("getters", () => {
         expect(
           workspaceAccessHelpers.transformWorkspaceCollections
         ).toBeCalled();
-        expect(mutators.readJsonFile).not.toHaveBeenCalled();
+        expect(readJsonFileSpy).not.toHaveBeenCalled();
       });
     });
   });

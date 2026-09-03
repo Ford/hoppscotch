@@ -22,6 +22,7 @@ import { Component, computed, reactive, ref } from "vue"
 import { useToast } from "~/composables/toast"
 import { getService } from "~/modules/dioc"
 import { getI18n } from "~/modules/i18n"
+import { settingsStore } from "~/newstore/settings"
 
 import { addGraphqlHistoryEntry, makeGQLHistoryEntry } from "~/newstore/history"
 
@@ -38,7 +39,7 @@ type ConnectionRequestOptions = {
   url: string
   request: HoppGQLRequest
   inheritedHeaders: HoppGQLRequest["headers"]
-  inheritedAuth: HoppGQLAuth
+  inheritedAuth?: HoppGQLAuth
 }
 
 type RunQueryOptions = {
@@ -46,7 +47,7 @@ type RunQueryOptions = {
   url: string
   request: HoppGQLRequest
   inheritedHeaders: HoppGQLRequest["headers"]
-  inheritedAuth: HoppGQLAuth
+  inheritedAuth?: HoppGQLAuth
   query: string
   variables: string
   operationName: string | undefined
@@ -286,6 +287,9 @@ const getSchema = async (options: ConnectionRequestOptions) => {
         { query: getIntrospectionQuery() },
         MediaType.APPLICATION_JSON
       ),
+      options: {
+        followRedirects: settingsStore.value.FOLLOW_REDIRECTS,
+      },
     }
 
     const kernelInterceptorService = getService(KernelInterceptorService)
@@ -400,14 +404,23 @@ export const runGQLOperation = async (options: RunQueryOptions) => {
     .filter((item) => item.active && item.key !== "")
     .forEach(({ key, value }) => (finalHeaders[key] = value))
 
+  const finalHoppHeaders: HoppRESTHeaders = Object.entries(finalHeaders).map(
+    ([key, value]) => ({
+      active: true,
+      key,
+      value,
+      description: "",
+    })
+  )
+
   const gqlRequest: HoppGQLRequest = {
     v: 9,
     name: options.name || "Untitled Request",
     url: finalUrl,
-    headers: request.headers,
+    headers: finalHoppHeaders,
     query,
     variables,
-    auth: request.auth as HoppGQLAuth,
+    auth: auth ?? request.auth,
   }
 
   if (operationType === "subscription") {

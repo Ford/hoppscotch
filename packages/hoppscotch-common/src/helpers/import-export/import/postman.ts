@@ -13,6 +13,7 @@ import {
   ValidContentTypes,
   HoppRESTRequestResponses,
   makeHoppRESTResponseOriginalRequest,
+  HoppCollectionVariable,
 } from "@hoppscotch/data"
 import * as A from "fp-ts/Array"
 import { flow, pipe } from "fp-ts/function"
@@ -28,6 +29,7 @@ import {
   RequestAuthDefinition,
   Variable,
   VariableDefinition,
+  VariableList,
 } from "postman-collection"
 import { stringArrayJoin } from "~/helpers/functional/array"
 import { PMRawLanguage } from "~/types/pm-coll-exts"
@@ -37,7 +39,31 @@ const safeParseJSON = (jsonStr: string) => O.tryCatch(() => JSON.parse(jsonStr))
 
 const isPMItem = (x: unknown): x is Item => Item.isItem(x)
 
-const replacePMVarTemplating = flow(
+/**
+ * Checks if the Postman collection schema version supports scripts (v2.0+)
+ * @param schema - The schema URL from collection.info.schema
+ * @returns true if v2.0 or v2.1, false otherwise
+ */
+const isSchemaVersionSupported = (schema?: string): boolean => {
+  if (!schema) return false
+  // Support both schema.getpostman.com and schema.postman.com
+  return schema.includes("/v2.0.") || schema.includes("/v2.1.")
+}
+
+/**
+ * Extracts the collection schema from raw JSON data
+ * Note: PMCollection SDK doesn't expose .info.schema, so we parse raw JSON
+ */
+const getCollectionSchema = (jsonStr: string): string | null => {
+  try {
+    const data = JSON.parse(jsonStr)
+    return data?.info?.schema ?? null
+  } catch {
+    return null
+  }
+}
+
+export const replacePMVarTemplating = flow(
   S.replace(/{{\s*/g, "<<"),
   S.replace(/\s*}}/g, ">>")
 )
@@ -77,6 +103,32 @@ const parseDescription = (descField?: string | DescriptionDefinition) => {
   }
 
   return descField.content
+}
+
+const getHoppCollVariables = (
+  ig: ItemGroup<Item>
+): HoppCollectionVariable[] => {
+  if (!("variables" in ig && ig.variables)) {
+    return []
+  }
+
+  return pipe(
+    (ig.variables as VariableList).all(),
+    A.filter(
+      (variable) =>
+        variable.key !== undefined &&
+        variable.key !== null &&
+        variable.key.length > 0
+    ),
+    A.map((variable) => {
+      return <HoppCollectionVariable>{
+        key: replacePMVarTemplating(variable.key ?? ""),
+        initialValue: replacePMVarTemplating(variable.value ?? ""),
+        currentValue: "",
+        secret: variable.type === "secret",
+      }
+    })
+  )
 }
 
 const getHoppReqHeaders = (
@@ -206,8 +258,8 @@ const getHoppResponses = (
 }
 
 type PMRequestAuthDef<
-  AuthType extends
-    RequestAuthDefinition["type"] = RequestAuthDefinition["type"],
+  AuthType extends RequestAuthDefinition["type"] =
+    RequestAuthDefinition["type"],
 > = AuthType extends RequestAuthDefinition["type"] & string
   ? // eslint-disable-next-line no-unused-vars
     { type: AuthType } & { [x in AuthType]: VariableDefinition[] }
@@ -247,7 +299,7 @@ const getHoppReqAuth = (
         getVariableValue(auth.apikey, "value") ?? ""
       ),
       addTo:
-        (getVariableValue(auth.apikey, "in") ?? "query") === "query"
+        getVariableValue(auth.apikey, "in") === "query"
           ? "QUERY_PARAMS"
           : "HEADERS",
     }
@@ -275,6 +327,31 @@ const getHoppReqAuth = (
     const token = replacePMVarTemplating(
       getVariableValue(auth.oauth2, "accessToken") ?? ""
     )
+    const clientSecret = replacePMVarTemplating(
+      getVariableValue(auth.oauth2, "clientSecret") ?? ""
+    )
+
+    // Check for PKCE settings
+    const usePkce = getVariableValue(auth.oauth2, "usePkce")
+    const isPKCE = usePkce === "true"
+
+    // Get challenge algorithm, default to S256 if PKCE is enabled but no algorithm specified
+    const challengeAlgorithm = getVariableValue(
+      auth.oauth2,
+      "challengeAlgorithm"
+    )
+    let codeVerifierMethod: "plain" | "S256" | undefined
+
+    if (isPKCE) {
+      // Postman uses "SHA-256" or "plain" - normalize to our format
+      // Default to S256 for any value other than "plain"
+      if (challengeAlgorithm === "plain") {
+        codeVerifierMethod = "plain"
+      } else {
+        // Covers "S256", "SHA-256", undefined, and any other value
+        codeVerifierMethod = "S256"
+      }
+    }
 
     return {
       authType: "oauth-2",
@@ -286,8 +363,12 @@ const getHoppReqAuth = (
         scopes: scope,
         token: token,
         tokenEndpoint: accessTokenURL,
-        clientSecret: "",
-        isPKCE: false,
+        clientSecret: clientSecret,
+        isPKCE: isPKCE,
+        ...(codeVerifierMethod ? { codeVerifierMethod } : {}),
+        authRequestParams: [],
+        tokenRequestParams: [],
+        refreshRequestParams: [],
       },
       addTo: "HEADERS",
     }
@@ -425,7 +506,87 @@ const getHoppReqURL = (url: Item["request"]["url"] | null): string => {
   )
 }
 
-const getHoppRequest = (item: Item): HoppRESTRequest => {
+/**
+ * Extracts script content from a Postman event
+ * Handles both string format and exec array format
+ */
+const extractScriptFromEvent = (event: any): string => {
+  if (!event?.script) return ""
+
+  if (typeof event.script === "string") {
+    return event.script
+  }
+
+  if (event.script.exec && Array.isArray(event.script.exec)) {
+    return event.script.exec.join("\n")
+  }
+
+  return ""
+}
+
+const getHoppScripts = (
+  item: Item,
+  importScripts: boolean
+): { preRequestScript: string; testScript: string } => {
+  if (!importScripts) {
+    return { preRequestScript: "", testScript: "" }
+  }
+
+  let preRequestScript = ""
+  let testScript = ""
+
+  // Postman stores scripts in the events array
+  if (item.events) {
+    const events = item.events.all()
+    events.forEach((event: any) => {
+      if (event.listen === "prerequest") {
+        preRequestScript = extractScriptFromEvent(event)
+      } else if (event.listen === "test") {
+        testScript = extractScriptFromEvent(event)
+      }
+    })
+  }
+
+  return { preRequestScript, testScript }
+}
+
+const getCollectionDescription = (
+  docField?: string | DescriptionDefinition
+): string | null => {
+  if (!docField) {
+    return null
+  }
+
+  if (typeof docField === "string") {
+    return docField
+  } else if (typeof docField === "object" && "content" in docField) {
+    return docField.content || null
+  }
+
+  return null
+}
+
+const getRequestDescription = (
+  docField?: string | DescriptionDefinition
+): string | null => {
+  if (!docField) {
+    return null
+  }
+
+  if (typeof docField === "string") {
+    return docField
+  } else if (typeof docField === "object" && "content" in docField) {
+    return docField.content || null
+  }
+
+  return null
+}
+
+const getHoppRequest = (
+  item: Item,
+  importScripts: boolean
+): HoppRESTRequest => {
+  const { preRequestScript, testScript } = getHoppScripts(item, importScripts)
   return makeRESTRequest({
     name: item.name,
     endpoint: getHoppReqURL(item.request.url),
@@ -439,37 +600,70 @@ const getHoppRequest = (item: Item): HoppRESTRequest => {
     }),
     requestVariables: getHoppReqVariables(item.request.url.variables),
     responses: getHoppResponses(item.responses),
-
-    // TODO: Decide about this
-    preRequestScript: "",
-    testScript: "",
+    preRequestScript,
+    testScript,
+    description: getRequestDescription(item.request.description),
   })
 }
 
-const getHoppFolder = (ig: ItemGroup<Item>): HoppCollection =>
+const getHoppFolder = (
+  ig: ItemGroup<Item>,
+  importScripts: boolean
+): HoppCollection =>
   makeCollection({
     name: ig.name,
     folders: pipe(
       ig.items.all(),
       A.filter(isPMItemGroup),
-      A.map(getHoppFolder)
+      A.map((folder) => getHoppFolder(folder, importScripts))
     ),
-    requests: pipe(ig.items.all(), A.filter(isPMItem), A.map(getHoppRequest)),
+    requests: pipe(
+      ig.items.all(),
+      A.filter(isPMItem),
+      A.map((item) => getHoppRequest(item, importScripts))
+    ),
     auth: getHoppReqAuth(ig.auth),
     headers: [],
+    variables: getHoppCollVariables(ig),
+    description: getCollectionDescription(ig.description),
   })
 
-export const getHoppCollections = (collections: PMCollection[]) => {
-  return collections.map(getHoppFolder)
+export const getHoppCollections = (
+  collections: PMCollection[],
+  importScripts: boolean
+) => {
+  return collections.map((collection) =>
+    getHoppFolder(collection, importScripts)
+  )
 }
 
-export const hoppPostmanImporter = (fileContents: string[]) =>
+export const hoppPostmanImporter = (
+  fileContents: string[],
+  importScripts = false
+) =>
   pipe(
     // Try reading
     fileContents,
     A.traverse(O.Applicative)(readPMCollection),
 
-    O.map(flow(getHoppCollections)),
+    O.map((collections) => {
+      // Validate schema version if importing scripts
+      if (importScripts && fileContents.length > 0) {
+        const schema = getCollectionSchema(fileContents[0])
+        const isSupported = isSchemaVersionSupported(schema ?? undefined)
+
+        if (!isSupported) {
+          console.warn(
+            `[Postman Import] Script import requested but collection schema "${schema ?? "unknown"}" does not support scripts. ` +
+              `Only Postman Collection Format v2.0 and v2.1 are supported. Scripts will be skipped.`
+          )
+          // Skip script import for unsupported versions
+          return getHoppCollections(collections, false)
+        }
+      }
+
+      return getHoppCollections(collections, importScripts)
+    }),
 
     TE.fromOption(() => IMPORTER_INVALID_FILE_FORMAT)
   )

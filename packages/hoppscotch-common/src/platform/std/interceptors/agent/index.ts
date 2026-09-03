@@ -20,7 +20,7 @@ import axios, { CancelTokenSource } from "axios"
 import SettingsAgentInterceptor from "~/components/settings/Agent.vue"
 import AgentRootUIExtension from "~/components/interceptors/agent/RootExt.vue"
 import { UIExtensionService } from "~/services/ui-extension.service"
-import { x25519 } from "@noble/curves/ed25519"
+import { x25519 } from "@noble/curves/ed25519.js"
 import { base16 } from "@scure/base"
 import { invokeAction } from "~/helpers/actions"
 import { preProcessRequest } from "../helpers"
@@ -328,7 +328,7 @@ export class AgentInterceptorService extends Service implements Interceptor {
       try {
         const proxyInfo = JSON.parse(persistedProxyInfo)
         this.proxyInfo.value = proxyInfo
-      } catch (e) {}
+      } catch (_e) {}
     }
 
     // Load SSL Validation
@@ -557,7 +557,7 @@ export class AgentInterceptorService extends Service implements Interceptor {
     try {
       await this.performHandshake()
       this.isAgentRunning.value = true
-    } catch (error) {
+    } catch (_error) {
       this.isAgentRunning.value = false
     }
   }

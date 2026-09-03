@@ -1,7 +1,7 @@
 import { ExecutionContext, HttpException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { GqlExecutionContext } from '@nestjs/graphql';
-import { Prisma } from '@prisma/client';
+import { Prisma } from 'src/generated/prisma/client';
 import * as A from 'fp-ts/Array';
 import * as E from 'fp-ts/Either';
 import { pipe } from 'fp-ts/lib/function';
@@ -12,6 +12,28 @@ import { ENV_NOT_FOUND_KEY_DATA_ENCRYPTION_KEY, JSON_INVALID } from './errors';
 import { TeamAccessRole } from './team/team.model';
 import { RESTError } from './types/RESTError';
 import * as crypto from 'crypto';
+
+/**
+ * Delays the execution for a given number of milliseconds.
+ * @param ms The number of milliseconds to delay
+ * @returns A promise that resolves after the delay
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Safely parses a string to an integer, returning undefined if the value is null, undefined, or results in NaN.
+ * @param value The string value to parse
+ * @returns The parsed integer or undefined
+ */
+export function parseIntSafe(
+  value: string | null | undefined,
+): number | undefined {
+  if (!value) return undefined;
+  const parsed = parseInt(value, 10);
+  return !isNaN(parsed) ? parsed : undefined;
+}
 
 /**
  * A workaround to throw an exception in an expression.
@@ -220,7 +242,7 @@ export function stringToJson<T>(
  * @returns boolean if title is of valid length or not
  */
 export function isValidLength(title: string, length: number) {
-  if (title.length < length) {
+  if (!title || title.trim() === '' || title.length < length) {
     return false;
   }
 

@@ -1,7 +1,7 @@
 <template>
   <div
-    v-tippy="{ theme: 'tooltip', delay: [500, 20] }"
-    :title="tabState.name"
+    v-tippy="{ theme: 'tooltip', delay: [500, 20], allowHTML: true }"
+    :title="tabTooltip"
     class="flex items-center truncate px-2"
     @dblclick="emit('open-rename-modal')"
     @contextmenu.prevent="options?.tippy?.show()"
@@ -65,7 +65,7 @@
             "
           />
           <HoppSmartItem
-            v-if="!isResponseExample"
+            v-if="!isResponseExample && showShareRequestAction"
             ref="shareRequestAction"
             :icon="IconShare2"
             :label="t('tab.share_tab_request')"
@@ -124,6 +124,7 @@ import {
   HoppRequestDocument,
   HoppSavedExampleDocument,
 } from "~/helpers/rest/document"
+import { restCollectionStore } from "~/newstore/collections"
 
 const t = useI18n()
 
@@ -132,6 +133,7 @@ const props = defineProps<{
   isRemovable: boolean
 }>()
 
+const showShareRequestAction = ref(false)
 const tabState = computed(() => {
   if (props.tab.document.type === "request") {
     return {
@@ -149,6 +151,70 @@ const tabState = computed(() => {
 
 const isResponseExample = computed(() => {
   return props.tab.document.type === "example-response"
+})
+
+const requestPath = computed(() => {
+  if (props.tab.document.type !== "request" || !props.tab.document.saveContext)
+    return null
+
+  const ctx = props.tab.document.saveContext
+
+  if (
+    ctx.originLocation === "user-collection" &&
+    "folderPath" in ctx &&
+    ctx.folderPath
+  ) {
+    try {
+      const folderIndices = ctx.folderPath.split("/").map((x) => parseInt(x))
+      const pathItems: string[] = []
+
+      let currentFolder =
+        restCollectionStore.value.state[folderIndices.shift()!]
+      if (currentFolder) {
+        pathItems.push(currentFolder.name)
+
+        while (folderIndices.length > 0) {
+          const folderIndex = folderIndices.shift()!
+          const folder = currentFolder.folders[folderIndex]
+          if (folder) {
+            pathItems.push(folder.name)
+            currentFolder = folder
+          }
+        }
+      }
+      return pathItems.join(" / ")
+    } catch (e) {
+      console.error(e)
+      return null
+    }
+  }
+  return null
+})
+
+const escapeHtml = (text: string) => {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+const tabTooltip = computed(() => {
+  if (requestPath.value) {
+    const lines: string[] = [
+      escapeHtml(tabState.value.name),
+      escapeHtml(requestPath.value),
+    ]
+
+    const endpoint = tabState.value.request?.endpoint
+    if (endpoint) {
+      lines.push(escapeHtml(endpoint))
+    }
+
+    return `<div class="text-left font-normal">${lines.join("<br>")}</div>`
+  }
+  return escapeHtml(tabState.value.name)
 })
 
 const emit = defineEmits<{

@@ -34,6 +34,8 @@ import {
   processRequest,
 } from "./request";
 import { getTestMetrics } from "./test";
+import {ProxyAgent} from "proxy-agent";
+import axios from "axios";
 
 const { WARN, FAIL, INFO } = exceptionColors;
 
@@ -115,19 +117,32 @@ const processCollection = async (
   for (const request of collection.requests) {
     const _request = preProcessRequest(request as HoppRESTRequest, collection);
     const requestPath = `${path}/${_request.name}`;
+
+    const collectionVariables = collection.variables.filter(
+      (variable) => variable.key && variable.key.trim() !== ""
+    );
+
     const processRequestParams: ProcessRequestParams = {
       path: requestPath,
       request: _request,
       envs,
       delay,
       legacySandbox,
+      collectionVariables,
     };
 
     // Request processing initiated message.
     log(WARN(`\nRunning: ${chalk.bold(requestPath)}`));
 
+    const agent = new ProxyAgent();
+    const axiosInstance = axios.create({
+      httpsAgent : agent,
+      httpAgent : agent,
+      proxy: false, // Disable axios's default proxy handling
+    });
+
     // Processing current request.
-    const result = await processRequest(processRequestParams)();
+    const result = await processRequest(processRequestParams,axiosInstance)();
 
     // Updating global & selected envs with new envs from processed-request output.
     const { global, selected } = result.envs;
@@ -143,11 +158,11 @@ const processCollection = async (
   for (const folder of collection.folders) {
     const updatedFolder: HoppCollection = { ...folder };
 
-    if (updatedFolder.auth?.authType === "inherit") {
+    if (updatedFolder.auth.authType === "inherit") {
       updatedFolder.auth = collection.auth;
     }
 
-    if (collection.headers?.length) {
+    if (collection.headers.length) {
       // Filter out header entries present in the parent collection under the same name
       // This ensures the folder headers take precedence over the collection headers
       const filteredHeaders = collection.headers.filter(
@@ -159,6 +174,21 @@ const processCollection = async (
         }
       );
       updatedFolder.headers.push(...filteredHeaders);
+    }
+
+    // Inherit collection variables into folder, with folder variables taking precedence
+    if (collection.variables.length) {
+      // Filter out collection variables with same key as folder variables
+      const filteredVariables = collection.variables.filter(
+        (collectionVariableEntries) => {
+          return !updatedFolder.variables.some(
+            (folderVariableEntries) =>
+              folderVariableEntries.key === collectionVariableEntries.key
+          );
+        }
+      );
+
+      updatedFolder.variables.push(...filteredVariables);
     }
 
     await processCollection(

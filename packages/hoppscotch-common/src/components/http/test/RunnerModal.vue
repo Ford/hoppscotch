@@ -3,20 +3,188 @@
     dialog
     :title="t('collection_runner.run_collection')"
     :full-width-body="true"
+    :styles="modalStyles"
     @close="closeModal"
   >
     <template #body>
       <HoppSmartTabs v-model="activeTab">
         <HoppSmartTab id="gui" :label="t('collection_runner.ui')">
-          <div
-            class="flex-shrink-0 w-full h-full p-4 overflow-auto overflow-x-auto bg-primary"
-          >
+          <div class="flex min-h-[600px] h-full">
+            <!-- Left Panel: Request Selection with drag-to-reorder -->
+            <div
+              class="flex flex-col w-3/5 border-r border-divider p-4 overflow-hidden"
+            >
+              <div
+                class="flex-1 overflow-y-auto border rounded border-divider p-2"
+              >
+                <RequestRunOrder
+                  v-if="collectionTreeForSelection"
+                  v-model="requestOrder"
+                  :collection="collectionTreeForSelection"
+                  :selection="requestSelection"
+                  @update:selection="requestSelection = $event"
+                />
+                <div
+                  v-else
+                  class="flex items-center justify-center h-32 text-secondaryLight text-sm"
+                >
+                  {{ t("collection_runner.loading_requests") }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Panel: Configuration -->
+            <div class="flex flex-col w-2/5 p-4 overflow-y-auto">
             <section>
               <h4 class="font-semibold text-secondaryDark">
                 {{ t("collection_runner.run_config") }}
               </h4>
-              <div class="mt-4">
-                <!-- TODO: fix input component types. so that it accepts number -->
+              <div class="mt-4 space-y-4">
+                <!-- Iterations Input -->
+                <HoppSmartInput
+                  v-model="config.iterations as any"
+                  type="number"
+                  :label="t('test.iterations')"
+                  class="!rounded-r-none !border-r-0"
+                  :class="{ 'border-red-500': config.iterations < 1 }"
+                  input-styles="floating-input !rounded-r-none !border-r-0"
+                >
+                  <template #button>
+                    <span
+                      class="px-4 py-2 font-semibold border rounded-r bg-primaryLight border-divider text-secondaryLight"
+                    >
+                      {{
+                        config.iterations === 1
+                          ? t("count.time")
+                          : t("count.times")
+                      }}
+                    </span>
+                  </template>
+                </HoppSmartInput>
+                <p
+                  v-if="config.iterations < 1"
+                  class="text-xs text-red-500 mt-1"
+                >
+                  {{ t("collection_runner.invalid_iterations") }}
+                </p>
+                <p
+                  v-if="datasetEnabled && datasetRowCount > 0"
+                  class="text-xs text-secondaryLight"
+                >
+                  <span v-if="config.iterations <= datasetRowCount">
+                    {{
+                      t("collection_runner.dataset_iterations_info", {
+                        iterations: config.iterations,
+                        rows: datasetRowCount,
+                        total: config.iterations,
+                      })
+                    }}
+                  </span>
+                  <span v-else>
+                    {{
+                      t("collection_runner.dataset_iterations_exceeds", {
+                        iterations: config.iterations,
+                        rows: datasetRowCount,
+                        extra: config.iterations,
+                      })
+                    }}
+                  </span>
+                </p>
+
+                <!-- Data Feed Section (Postman Style) -->
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm font-medium text-secondaryDark">
+                      {{ t("collection_runner.data_feed") }}
+                    </label>
+                  </div>
+
+                  <div v-if="!datasetEnabled" class="space-y-2">
+                    <!--                    <p class="text-xs text-secondaryLight">
+                      {{ t("collection_runner.data_feed_description") }}
+                    </p>-->
+                    <div class="flex gap-2">
+                      <label
+                        class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
+                      >
+                        <input
+                          ref="csvFileInput"
+                          type="file"
+                          accept=".csv"
+                          class="hidden"
+                          @change="handleFileUpload($event, 'csv')"
+                        />
+                        <span>{{ t("collection_runner.select_csv") }}</span>
+                      </label>
+
+                      <label
+                        class="flex items-center justify-center px-4 py-2 text-sm border rounded cursor-pointer border-divider hover:bg-primaryLight transition"
+                      >
+                        <input
+                          ref="jsonFileInput"
+                          type="file"
+                          accept=".json"
+                          class="hidden"
+                          @change="handleFileUpload($event, 'json')"
+                        />
+                        <span>{{ t("collection_runner.select_json") }}</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div
+                    v-else
+                    class="p-3 border rounded bg-primaryLight border-divider space-y-2"
+                  >
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2 text-sm">
+                        <span class="font-medium text-secondaryDark">{{
+                          datasetFileName
+                        }}</span>
+                        <span class="text-secondaryLight">•</span>
+                        <span class="text-secondaryLight">{{
+                          datasetSource?.toUpperCase()
+                        }}</span>
+                        <span class="text-secondaryLight">•</span>
+                        <span class="text-accent"
+                          >{{ datasetRowCount }}
+                          {{
+                            datasetRowCount === 1
+                              ? t("collection_runner.row")
+                              : t("collection_runner.rows")
+                          }}</span
+                        >
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <HoppButtonSecondary
+                          v-tippy="{ theme: 'tooltip' }"
+                          :title="t('collection_runner.preview_data')"
+                          :icon="IconEye"
+                          class="!py-1 !px-2"
+                          outline
+                          @click="showPreviewModal = true"
+                        />
+                        <HoppButtonSecondary
+                          v-tippy="{ theme: 'tooltip' }"
+                          :title="t('action.remove')"
+                          :icon="IconTrash"
+                          class="!py-1 !px-2"
+                          outline
+                          @click="clearDataset"
+                        />
+                      </div>
+                    </div>
+                    <p class="text-xs text-accent">
+                      {{
+                        t("collection_runner.iterations_from_data", {
+                          count: datasetRowCount,
+                        })
+                      }}
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Delay Input -->
                 <HoppSmartInput
                   v-model="config.delay as any"
                   type="number"
@@ -86,8 +254,10 @@
                 </HoppSmartCheckbox>
               </div>
             </section>
-          </div>
+            </div><!-- end right panel -->
+          </div><!-- end flex container -->
         </HoppSmartTab>
+
         <HoppSmartTab id="cli" :label="t('collection_runner.cli')">
           <div v-if="!CLICommand" class="p-4">
             <p class="p-4 border rounded-md text-amber-500 border-amber-600">
@@ -130,6 +300,12 @@
         <template #actions>
           <HoppButtonSecondary
             v-tippy="{ theme: 'tooltip' }"
+            :title="isExpanded ? t('collection_runner.collapse_modal') : t('collection_runner.expand_modal')"
+            :icon="isExpanded ? IconMinimize2 : IconMaximize2"
+            @click="isExpanded = !isExpanded"
+          />
+          <HoppButtonSecondary
+            v-tippy="{ theme: 'tooltip' }"
             class="!py-0 pl-2"
             :to="runnerLink"
             blank
@@ -145,7 +321,7 @@
         <HoppButtonPrimary
           v-if="activeTab === 'gui'"
           :label="`${t('test.run')}`"
-          :disabled="config.delay < 0"
+          :disabled="config.delay < 0 || config.iterations < 1"
           :loading="loadingCollection"
           :icon="IconPlay"
           outline
@@ -167,23 +343,92 @@
       </div>
     </template>
   </HoppSmartModal>
+
+  <!-- Data Preview Modal -->
+  <HoppSmartModal
+    v-if="showPreviewModal"
+    dialog
+    :title="t('collection_runner.data_preview')"
+    @close="showPreviewModal = false"
+  >
+    <template #body>
+      <div class="flex flex-col gap-4 p-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="font-medium text-secondaryDark">{{
+              datasetFileName
+            }}</span>
+            <span class="text-secondaryLight">•</span>
+            <span class="text-secondaryLight">{{
+              datasetSource?.toUpperCase()
+            }}</span>
+            <span class="text-secondaryLight">•</span>
+            <span class="text-accent"
+              >{{ datasetRowCount }}
+              {{
+                datasetRowCount === 1
+                  ? t("collection_runner.row")
+                  : t("collection_runner.rows")
+              }}</span
+            >
+          </div>
+          <HoppButtonSecondary
+            v-tippy="{ theme: 'tooltip' }"
+            :title="t('action.download_file')"
+            :icon="IconDownload"
+            outline
+            @click="downloadDataset"
+          />
+        </div>
+
+        <div class="border rounded bg-primaryLight border-divider">
+          <div class="overflow-auto max-h-96 p-4">
+            <pre
+              class="text-xs"
+            ><code>{{ JSON.stringify(datasetData, null, 2) }}</code></pre>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template #footer>
+      <HoppButtonSecondary
+        :label="t('action.close')"
+        outline
+        filled
+        @click="showPreviewModal = false"
+      />
+    </template>
+  </HoppSmartModal>
 </template>
 
 <script setup lang="ts">
 import { refAutoReset } from "@vueuse/core"
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import { useI18n } from "~/composables/i18n"
 
 import { HoppCollection } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
 import { useToast } from "~/composables/toast"
-import { TestRunnerConfig } from "~/helpers/rest/document"
+import { TestRunnerConfig, RequestSelectionState } from "~/helpers/rest/document"
 import { copyToClipboard } from "~/helpers/utils/clipboard"
 import { RESTTabService } from "~/services/tab/rest"
+import RequestSelectionTree from "./RequestSelectionTree.vue"
+import RequestRunOrder from "./RequestRunOrder.vue"
+import {
+  parseCSV,
+  parseJSON,
+  validateDataset,
+} from "~/helpers/import-export/dataset/parser"
 import IconCheck from "~icons/lucide/check"
 import IconCopy from "~icons/lucide/copy"
 import IconHelpCircle from "~icons/lucide/help-circle"
 import IconPlay from "~icons/lucide/play"
+import IconDownload from "~icons/lucide/download"
+import IconEye from "~icons/lucide/eye"
+import IconTrash from "~icons/lucide/trash-2"
+import IconMaximize2 from "~icons/lucide/maximize-2"
+import IconMinimize2 from "~icons/lucide/minimize-2"
 import { CurrentEnv } from "./Env.vue"
 import { pipe } from "fp-ts/lib/function"
 import {
@@ -227,7 +472,7 @@ const emit = defineEmits<{
 }>()
 
 const includeEnvironmentID = ref(false)
-const activeTab = ref<"gui" | "cli">("gui")
+const activeTab = ref<"gui" | "cli" | "data">("gui")
 
 const environmentID = ref("")
 const currentEnv = ref<CurrentEnv>(null)
@@ -253,11 +498,71 @@ const config = ref<TestRunnerConfig>({
   keepVariableValues: true,
 })
 
-onMounted(() => {
+const requestSelection = ref<RequestSelectionState>({})
+const requestOrder = ref<string[]>([])
+const collectionTreeForSelection = ref<HoppCollection | null>(null)
+const isExpanded = ref(false)
+
+/**
+ * Flatten a collection to a list of request paths in natural traversal order
+ * (folders first, then requests — matching the runner's default order).
+ */
+const buildFlatOrder = (collection: HoppCollection): string[] => {
+  const paths: string[] = []
+  const traverse = (node: HoppCollection, parentPath: string) => {
+    node.folders.forEach((folder, folderIdx) => {
+      const folderSeg = parentPath
+        ? `${parentPath}/folder_${folderIdx}`
+        : `folder_${folderIdx}`
+      traverse(folder as HoppCollection, folderSeg)
+    })
+    node.requests.forEach((_: unknown, reqIdx: number) => {
+      paths.push(
+        parentPath ? `${parentPath}/request_${reqIdx}` : `request_${reqIdx}`
+      )
+    })
+  }
+  traverse(collection, "")
+  return paths
+}
+const modalStyles = computed(() =>
+  isExpanded.value ? "max-w-6xl w-full" : "max-w-4xl w-full"
+)
+
+onMounted(async () => {
   if (props.prevConfig) {
     config.value = { ...config.value, ...props.prevConfig }
   }
+
+  // Load collection tree for request selection
+  const tree = await getCollectionTree(
+    props.collectionRunnerData.type,
+    props.collectionRunnerData.collectionID
+  )
+  
+  if (tree) {
+    collectionTreeForSelection.value = tree
+    // Initialize run order from natural traversal (if not already set from prevConfig)
+    if (requestOrder.value.length === 0) {
+      const flatPaths = buildFlatOrder(tree)
+      requestOrder.value = flatPaths
+      // Default: all requests selected
+      const allSelected: RequestSelectionState = {}
+      flatPaths.forEach((path) => { allSelected[path] = true })
+      requestSelection.value = allSelected
+    }
+  }
 })
+
+// Sync requestSelection with config
+watch(requestSelection, (newSelection) => {
+  config.value.requestSelection = newSelection
+}, { deep: true })
+
+// Sync requestOrder with config
+watch(requestOrder, (newOrder) => {
+  config.value.requestOrder = newOrder
+}, { deep: true })
 
 const runTests = async () => {
   const collectionTree = await getCollectionTree(
@@ -307,7 +612,8 @@ const runTests = async () => {
 
 /**
  * Fetches the collection tree from the backend
- * @param collection
+ * @param type The collection type
+ * @param collectionID The collection ID
  * @returns collection tree
  */
 const getCollectionTree = async (
@@ -399,4 +705,105 @@ const copyCLICommandToClipboard = () => {
 const closeModal = () => {
   emit("hide-modal")
 }
+
+const datasetEnabled = ref(false)
+const datasetData = ref<any[]>([])
+const datasetSource = ref<string | null>(null)
+const datasetFileName = ref<string | null>(null)
+const datasetRawContent = ref<string | null>(null)
+const showPreviewModal = ref(false)
+
+const handleFileUpload = (event: Event, type: "csv" | "json") => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const contents = e.target?.result
+
+    if (typeof contents === "string") {
+      try {
+        const parsedData =
+          type === "csv" ? parseCSV(contents) : parseJSON(contents)
+
+        // Validate the parsed data
+        if (!validateDataset(parsedData)) {
+          throw new Error("Invalid dataset structure")
+        }
+
+        datasetData.value = parsedData
+        datasetSource.value = type === "csv" ? "CSV" : "JSON"
+        datasetFileName.value = file.name
+        datasetRawContent.value = contents
+        datasetEnabled.value = true
+
+        // Automatically set iterations to match dataset row count
+        config.value.iterations = parsedData.length
+
+        toast.success(t("collection_runner.dataset_loaded"))
+      } catch (error) {
+        const errorMsg =
+          type === "csv"
+            ? t("collection_runner.invalid_csv")
+            : t("collection_runner.invalid_json")
+        toast.error(errorMsg)
+      }
+    }
+  }
+
+  reader.readAsText(file)
+
+  target.value = ""
+}
+
+const clearDataset = () => {
+  datasetData.value = []
+  datasetSource.value = null
+  datasetEnabled.value = false
+  datasetFileName.value = null
+  datasetRawContent.value = null
+}
+
+const downloadDataset = () => {
+  if (!datasetRawContent.value) return
+
+  const blob = new Blob([datasetRawContent.value], {
+    type: datasetSource.value === "CSV" ? "text/csv" : "application/json",
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download =
+    datasetFileName.value ||
+    `dataset.${datasetSource.value?.toLowerCase() || "txt"}`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  toast.success(t("state.download_started"))
+}
+
+const datasetRowCount = computed(() => datasetData.value.length)
+
+watch([datasetEnabled, datasetData, datasetRawContent, datasetFileName], () => {
+  if (datasetEnabled.value && datasetData.value.length > 0) {
+    config.value.dataset = {
+      enabled: true,
+      data: datasetData.value,
+      source: (datasetSource.value?.toLowerCase() as "json" | "csv") || "json",
+      rawContent: datasetRawContent.value || undefined,
+      fileName: datasetFileName.value || undefined,
+    }
+  } else {
+    config.value.dataset = {
+      enabled: false,
+      data: [],
+      source: "json",
+      rawContent: undefined,
+      fileName: undefined,
+    }
+  }
+})
 </script>

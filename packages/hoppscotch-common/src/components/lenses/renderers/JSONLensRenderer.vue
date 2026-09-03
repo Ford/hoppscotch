@@ -59,7 +59,7 @@
           @click="copyResponse"
         />
         <tippy
-          v-if="showResponse"
+          v-if="showResponse && response.body && !isEditable"
           interactive
           trigger="click"
           theme="popover"
@@ -87,6 +87,13 @@
                   }
                 "
               />
+              <HoppSmartItem
+                v-if="!isTestRunner"
+                :label="t('action.clear_response')"
+                :icon="IconEraser"
+                :shortcut="[getSpecialKey(), 'Delete']"
+                @click="eraseResponse"
+              />
             </div>
           </template>
         </tippy>
@@ -111,23 +118,30 @@
         </span>
         <div
           v-if="filterResponseError"
-          class="flex items-center justify-center rounded px-2 py-1 text-tiny text-accentContrast"
+          v-tippy="{
+            theme: 'tooltip',
+            content: filterResponseError.error,
+            placement: 'bottom',
+          }"
+          role="alert"
+          aria-live="assertive"
+          class="flex max-w-[10rem] cursor-help items-center justify-center rounded px-2 py-1 text-tiny text-accentContrast sm:max-w-[16rem]"
           :class="{
             'bg-red-500':
               filterResponseError.type === 'JSON_PARSE_FAILED' ||
-              filterResponseError.type === 'JSON_PATH_QUERY_ERROR',
+              filterResponseError.type === 'JSON_QUERY_FAILED',
             'bg-amber-500': filterResponseError.type === 'RESPONSE_EMPTY',
           }"
         >
-          <icon-lucide-info class="svg-icons mr-1.5" />
-          <span>{{ filterResponseError.error }}</span>
+          <icon-lucide-info class="svg-icons mr-1.5 flex-shrink-0" />
+          <span class="truncate">{{ filterResponseError.error }}</span>
         </div>
         <HoppButtonSecondary
           v-if="showResponse"
           v-tippy="{ theme: 'tooltip' }"
           :title="t('app.wiki')"
           :icon="IconHelpCircle"
-          to="https://github.com/JSONPath-Plus/JSONPath"
+          to="https://jqlang.org/manual/"
           blank
         />
       </div>
@@ -252,12 +266,14 @@ import IconMore from "~icons/lucide/more-horizontal"
 import IconHelpCircle from "~icons/lucide/help-circle"
 import IconNetwork from "~icons/lucide/network"
 import IconSave from "~icons/lucide/save"
+import IconEraser from "~icons/lucide/eraser"
 import * as LJSON from "lossless-json"
 import * as O from "fp-ts/Option"
 import * as E from "fp-ts/Either"
 import { pipe } from "fp-ts/function"
 import { computed, ref, reactive } from "vue"
-import { JSONPath } from "jsonpath-plus"
+import { computedAsync, refDebounced } from "@vueuse/core"
+import * as jq from "jq-wasm"
 import { useCodemirror } from "@composables/codemirror"
 import { HoppRESTResponse } from "~/helpers/types/HoppRESTResponse"
 import jsonParse, { JSONObjectMember, JSONValue } from "~/helpers/jsonParse"
@@ -286,6 +302,7 @@ const props = defineProps<{
   isSavable: boolean
   isEditable: boolean
   tabId: string
+  isTestRunner?: boolean
 }>()
 
 const { containerRef } = useScrollerRef(
@@ -317,10 +334,11 @@ const isHttpResponse = computed(() => {
 
 const toggleFilter = ref(false)
 const filterQueryText = ref("")
+const debouncedFilterQuery = refDebounced(filterQueryText, 300)
 
 type BodyParseError =
   | { type: "JSON_PARSE_FAILED" }
-  | { type: "JSON_PATH_QUERY_FAILED"; error: Error }
+  | { type: "JSON_QUERY_FAILED"; error: Error }
 
 const responseJsonObject = computed(() => {
   if (isHttpResponse.value) {
@@ -353,28 +371,41 @@ const responseName = computed(() => {
 
 const { responseBodyText } = useResponseBody(props.response)
 
-const jsonResponseBodyText = computed(() => {
-  if (filterQueryText.value.length > 0 && responseJsonObject.value) {
-    return pipe(
-      responseJsonObject.value,
-      E.chain((parsedJSON) =>
-        E.tryCatch(
-          () =>
-            JSONPath({
-              path: filterQueryText.value,
-              json: JSON.parse(LJSON.stringify(parsedJSON as any) || "{}"),
-            }),
-          (err): BodyParseError => ({
-            type: "JSON_PATH_QUERY_FAILED",
-            error: err as Error,
-          })
+const jsonResponseBodyText = computedAsync(
+  async (): Promise<E.Either<BodyParseError, string | object>> => {
+    if (debouncedFilterQuery.value.length > 0 && responseJsonObject.value) {
+      if (E.isLeft(responseJsonObject.value)) {
+        return responseJsonObject.value
+      }
+
+      try {
+        const input = JSON.parse(
+          LJSON.stringify(responseJsonObject.value.right as any) || "{}"
         )
-      ),
-      E.map((result: any) => result as string | object)
-    )
-  }
-  return E.right(responseBodyText.value)
-})
+        const { exitCode, stdout, stderr } = await jq.raw(
+          input,
+          debouncedFilterQuery.value
+        )
+
+        if (exitCode !== 0) {
+          // Extract first line of jq error for user-friendly message
+          const errorMessage = stderr?.split("\n")[0]?.trim() || "Syntax Error"
+          throw new Error(errorMessage)
+        }
+
+        return E.right(stdout as string | object)
+      } catch (err) {
+        return E.left({
+          type: "JSON_QUERY_FAILED",
+          error: err as Error,
+        })
+      }
+    }
+
+    return E.right(responseBodyText.value)
+  },
+  E.right(responseBodyText.value)
+)
 
 const jsonBodyText = computed(() => {
   const { responseBodyText } = useResponseBody(
@@ -386,7 +417,7 @@ const jsonBodyText = computed(() => {
     E.getOrElse(() => responseBodyText.value)
   )
 
-  // If the rawValue is already an object (from JSONPath filtering), stringify it directly
+  // If the rawValue is already an object (from JSON filtering), stringify it directly
   if (typeof rawValue === "object" && rawValue !== null) {
     return JSON.stringify(rawValue, null, 2)
   }
@@ -395,7 +426,7 @@ const jsonBodyText = computed(() => {
   const stringValue = rawValue as string
 
   // If we're filtering, the string should already be clean JSON (no lossless numbers)
-  if (filterQueryText.value.length > 0) {
+  if (debouncedFilterQuery.value.length > 0) {
     return pipe(
       stringValue,
       O.tryCatchK(JSON.parse),
@@ -427,8 +458,8 @@ const filterResponseError = computed(() =>
     E.match(
       (e) => {
         switch (e.type) {
-          case "JSON_PATH_QUERY_FAILED":
-            return { type: "JSON_PATH_QUERY_ERROR", error: e.error.message }
+          case "JSON_QUERY_FAILED":
+            return { type: "JSON_QUERY_FAILED", error: e.error.message }
           case "JSON_PARSE_FAILED":
             return {
               type: "JSON_PARSE_FAILED",
@@ -458,6 +489,16 @@ const saveAsExample = () => {
 }
 
 const { copyIcon, copyResponse } = useCopyResponse(jsonBodyText)
+
+/**
+ * Erases the response body.
+ * Do not erase if the tab is a saved example or test runner.
+ *
+ */
+const eraseResponse = () => {
+  if (!props.isEditable && !props.isTestRunner) emit("update:response", null)
+}
+
 const { downloadIcon, downloadResponse } = useDownloadResponse(
   "application/json",
   jsonBodyText,
@@ -520,6 +561,7 @@ const toggleFilterState = () => {
 
 defineActionHandler("response.file.download", () => downloadResponse())
 defineActionHandler("response.copy", () => copyResponse())
+defineActionHandler("response.erase", () => eraseResponse())
 defineActionHandler("response.save-as-example", () => {
   props.isSavable ? saveAsExample() : null
 })

@@ -1,7 +1,7 @@
 import { TeamService } from './team.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Team, TeamMember, TeamAccessRole } from './team.model';
-import { TeamMember as DbTeamMember } from '@prisma/client';
+import { TeamMember as DbTeamMember } from 'src/generated/prisma/client';
 import {
   USER_NOT_FOUND,
   TEAM_INVALID_ID,
@@ -361,8 +361,8 @@ describe('renameTeam', () => {
     ).resolves.toEqualLeft(TEAM_INVALID_ID);
   });
 
-  test('rejects for new team name length < 6 with TEAM_NAME_INVALID', () => {
-    const newTeamName = 'smol';
+  test('rejects for new team name empty with TEAM_NAME_INVALID', () => {
+    const newTeamName = '';
 
     // Prisma doesn't care about the team name length, so it will resolve
     mockPrisma.team.update.mockResolvedValue({
@@ -668,8 +668,8 @@ describe('createTeam', () => {
     ).resolves.toEqualRight(expect.objectContaining(team));
   });
 
-  test('rejects for team name length < 6 with TEAM_NAME_INVALID', () => {
-    const newName = 'smol';
+  test('rejects for team name empty with TEAM_NAME_INVALID', () => {
+    const newName = '';
 
     // Prisma doesn't care
     mockPrisma.team.create.mockResolvedValue({

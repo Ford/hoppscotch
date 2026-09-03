@@ -1,17 +1,21 @@
 import { NestFactory } from '@nestjs/core';
 import { json } from 'express';
 import { AppModule } from './app.module';
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
-import * as session from 'express-session';
+import session from 'express-session';
 import { emitGQLSchemaFile } from './gql-schema';
 import * as crypto from 'crypto';
-import * as morgan from 'morgan';
+import morgan from 'morgan';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { InfraTokenModule } from './infra-token/infra-token.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
-function setupSwagger(app, isProduction: boolean) {
+function setupSwagger(
+  app: NestExpressApplication,
+  isProduction: boolean,
+): void {
   const swaggerDocPath = '/api-docs';
 
   const config = new DocumentBuilder()
@@ -38,7 +42,7 @@ function setupSwagger(app, isProduction: boolean) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
   const isProduction = configService.get('PRODUCTION') === 'true';
@@ -48,9 +52,16 @@ async function bootstrap() {
 
   app.use(
     session({
+      // Allow overriding the default cookie name 'connect.sid' (which contains a dot).
+      // Some proxies/load balancers (like older Kong versions) cannot hash cookie names with dots,
+      // so we allow setting an alternative name via the INFRA.SESSION_COOKIE_NAME configuration.
+      name:
+        configService.get<string>('INFRA.SESSION_COOKIE_NAME') || 'connect.sid',
       secret:
-        configService.get('INFRA.SESSION_SECRET') ||
+        configService.get<string>('INFRA.SESSION_SECRET') ||
         crypto.randomBytes(16).toString('hex'),
+      resave: false,
+      saveUninitialized: false,
     }),
   );
 
@@ -84,7 +95,13 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.use(morgan(':method :url :status - :response-time ms'));
+
+  if (configService.get('TRUST_PROXY') === 'true') {
+    console.log('Enabling trust proxy');
+    app.set('trust proxy', true);
+  }
+
+  app.use(morgan(':remote-addr :method :url :status - :response-time ms'));
 
   await setupSwagger(app, isProduction);
 
@@ -92,8 +109,10 @@ async function bootstrap() {
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    console.info('SIGTERM signal received');
+    console.info('SIGTERM signal received, initiating graceful shutdown...');
     await app.close();
+    console.info('Application closed successfully');
+    process.exit(0);
   });
 }
 

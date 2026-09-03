@@ -1,7 +1,7 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InfraConfig } from './infra-config.model';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { InfraConfig as DBInfraConfig } from '@prisma/client';
+import { InfraConfig as DBInfraConfig } from 'src/generated/prisma/client';
 import * as E from 'fp-ts/Either';
 import { InfraConfigEnum } from 'src/types/InfraConfig';
 import {
@@ -26,6 +26,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   ServiceStatus,
   buildDerivedEnv,
+  disconnectSharedPrismaInstance,
   getDefaultInfraConfigs,
   getEncryptionRequiredInfraConfigEntries,
   getMissingInfraConfigEntries,
@@ -42,9 +43,10 @@ import {
   SaveOnboardingConfigResponse,
 } from './dto/onboarding.dto';
 import * as crypto from 'crypto';
+import { PrismaError } from 'src/prisma/prisma-error-codes';
 
 @Injectable()
-export class InfraConfigService implements OnModuleInit {
+export class InfraConfigService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -70,6 +72,9 @@ export class InfraConfigService implements OnModuleInit {
 
   async onModuleInit() {
     await this.initializeInfraConfigTable();
+  }
+  async onModuleDestroy() {
+    await disconnectSharedPrismaInstance();
   }
 
   /**
@@ -125,14 +130,14 @@ export class InfraConfigService implements OnModuleInit {
         stopApp();
       }
     } catch (error) {
-      if (error.code === 'P1001') {
+      if (error.code === PrismaError.DATABASE_UNREACHABLE) {
         // Prisma error code for 'Can't reach at database server'
         // We're not throwing error here because we want to allow the app to run 'pnpm install'
-      } else if (error.code === 'P2021') {
+      } else if (error.code === PrismaError.TABLE_DOES_NOT_EXIST) {
         // Prisma error code for 'Table does not exist'
         throwErr(DATABASE_TABLE_NOT_EXIST);
       } else {
-        console.log(error);
+        console.error(error);
         throwErr(error);
       }
     }
@@ -524,10 +529,12 @@ export class InfraConfigService implements OnModuleInit {
     const onboardingRecoveryToken = crypto.randomUUID();
 
     const configEntries: InfraConfigArgs[] = [
-      ...Object.entries(dto).map(([key, value]) => ({
-        name: key as InfraConfigEnum,
-        value,
-      })),
+      ...Object.entries(dto)
+        .filter(([_, value]) => value !== undefined)
+        .map(([key, value]) => ({
+          name: key as InfraConfigEnum,
+          value,
+        })),
       {
         name: InfraConfigEnum.ONBOARDING_COMPLETED,
         value: 'true',
@@ -614,21 +621,26 @@ export class InfraConfigService implements OnModuleInit {
       InfraConfigEnum.ALLOW_ANALYTICS_COLLECTION,
     ];
     try {
-      const infraConfigDefaultObjs = await getDefaultInfraConfigs();
-      const updatedInfraConfigDefaultObjs = infraConfigDefaultObjs.filter(
+      const defaultConfigs = await getDefaultInfraConfigs();
+
+      const configsToReset = defaultConfigs.filter(
         (p) => RESET_EXCLUSION_LIST.includes(p.name) === false,
       );
 
+      // Update ONBOARDING_COMPLETED value to false
+      const onboardingCompletedIndex = configsToReset.findIndex(
+        (p) => p.name === InfraConfigEnum.ONBOARDING_COMPLETED,
+      );
+      if (onboardingCompletedIndex !== -1) {
+        configsToReset[onboardingCompletedIndex].value = 'false';
+      }
+
       await this.prisma.infraConfig.deleteMany({
-        where: {
-          name: {
-            in: updatedInfraConfigDefaultObjs.map((p) => p.name),
-          },
-        },
+        where: { name: { in: configsToReset.map((p) => p.name) } },
       });
 
       await this.prisma.infraConfig.createMany({
-        data: updatedInfraConfigDefaultObjs,
+        data: configsToReset,
       });
 
       stopApp();
@@ -670,6 +682,17 @@ export class InfraConfigService implements OnModuleInit {
 
         case InfraConfigEnum.MAILER_ADDRESS_FROM:
           if (!validateSMTPEmail(value)) return fail();
+          break;
+
+        case InfraConfigEnum.MOCK_SERVER_WILDCARD_DOMAIN:
+          if (!value) break; // Allow empty value
+
+          if (!value.startsWith('*.mock.')) return fail();
+          // Validate domain format after *.mock.
+          const domainPart = value.substring(7); // Remove '*.mock.'
+          const domainRegex =
+            /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+          if (!domainPart || !domainRegex.test(domainPart)) return fail();
           break;
 
         case InfraConfigEnum.MAILER_SMTP_HOST:
@@ -715,6 +738,11 @@ export class InfraConfigService implements OnModuleInit {
         case InfraConfigEnum.RATE_LIMIT_MAX:
           if (!Number.isInteger(Number(value)) || Number(value) < 1)
             return fail();
+          break;
+
+        case InfraConfigEnum.SESSION_COOKIE_NAME:
+          // Allow empty to fall back to default; otherwise enforce allowed characters
+          if (value && !/^[A-Za-z0-9_-]+$/.test(value)) return fail();
           break;
 
         default:

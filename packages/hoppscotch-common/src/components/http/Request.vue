@@ -56,6 +56,7 @@
         class="flex flex-1 whitespace-nowrap rounded-r border-l border-divider bg-primaryLight transition"
       >
         <SmartEnvInput
+          ref="urlInput"
           v-model="tab.document.request.endpoint"
           :placeholder="`${t('request.url_placeholder')}`"
           :auto-complete-source="userHistories"
@@ -70,9 +71,7 @@
       <HoppButtonPrimary
         id="send"
         v-tippy="{ theme: 'tooltip', delay: [500, 20], allowHTML: true }"
-        :title="`${t(
-          'action.send'
-        )} <kbd>${getSpecialKey()}</kbd><kbd>↩</kbd>`"
+        :title="`${t('action.send')} <kbd>${getSpecialKey()}</kbd><kbd>↩</kbd>`"
         :label="`${
           !isTabResponseLoading ? t('action.send') : t('action.cancel')
         }`"
@@ -199,6 +198,7 @@
                 />
                 <hr />
                 <HoppSmartItem
+                  v-if="false"
                   ref="copyRequestAction"
                   :label="t('request.share_request')"
                   :icon="IconShare2"
@@ -243,7 +243,7 @@ import { useReadonlyStream, useStreamSubscriber } from "@composables/stream"
 import { useToast } from "@composables/toast"
 import { useVModel } from "@vueuse/core"
 import * as E from "fp-ts/Either"
-import { computed, ref, onUnmounted } from "vue"
+import { computed, ref, onUnmounted, watch } from "vue"
 import { defineActionHandler, invokeAction } from "~/helpers/actions"
 import { runMutation } from "~/helpers/backend/GQLClient"
 import { UpdateRequestDocument } from "~/helpers/backend/graphql"
@@ -270,6 +270,7 @@ import { RESTTabService } from "~/services/tab/rest"
 import { getMethodLabelColor } from "~/helpers/rest/labelColoring"
 import { WorkspaceService } from "~/services/workspace.service"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import { handleTokenValidation } from "~/helpers/handleTokenValidation"
 
 const t = useI18n()
 const interceptorService = useService(KernelInterceptorService)
@@ -308,14 +309,13 @@ const curlText = ref("")
 const loading = ref(false)
 
 const isTabResponseLoading = computed(
-  () => tab.value.document.response?.type === "loading"
+  () => loading.value || tab.value.document.response?.type === "loading"
 )
 
 const showCurlImportModal = ref(false)
 const showCodegenModal = ref(false)
 const showSaveRequestModal = ref(false)
 
-// Template refs
 const methodTippyActions = ref<any | null>(null)
 const sendTippyActions = ref<any | null>(null)
 const saveTippyActions = ref<any | null>(null)
@@ -324,6 +324,7 @@ const show = ref<any | null>(null)
 const clearAll = ref<any | null>(null)
 const copyRequestAction = ref<any | null>(null)
 const saveRequestAction = ref<any | null>(null)
+const urlInput = ref<{ focus: () => void } | null>(null)
 
 const history = useReadonlyStream<RESTHistoryEntry[]>(restHistory$, [])
 
@@ -342,12 +343,19 @@ const newSendRequest = async () => {
     toast.error(`${t("empty.endpoint")}`)
     return
   }
-
   ensureMethodInEndpoint()
+
+  tab.value.document.response = {
+    type: "loading",
+    req: tab.value.document.request,
+  }
+
+  // Clear test results to ensure loading state persists until new results arrive
+  // This prevents UI flicker where old results briefly appear before new ones
+  tab.value.document.testResults = null
 
   loading.value = true
 
-  // Log the request run into analytics
   platform.analytics?.logEvent({
     type: "HOPP_REQUEST_RUN",
     platform: "rest",
@@ -365,34 +373,49 @@ const newSendRequest = async () => {
       streamResult.right,
       (responseState) => {
         if (loading.value) {
-          // Check exists because, loading can be set to false
-          // when cancelled
           updateRESTResponse(responseState)
-        }
-      },
-      () => {
-        loading.value = false
-      },
-      () => {
-        // TODO: Change this any to a proper type
-        const result = (streamResult.right as any).value
-        if (
-          result.type === "network_fail" &&
-          result.error?.error === "NO_PW_EXT_HOOK"
-        ) {
-          const errorResponse: HoppRESTResponse = {
-            type: "extension_error",
-            error: result.error.humanMessage.heading,
-            component: result.error.component,
-            req: result.req,
+
+          // Network/extension/interceptor errors don't run test scripts, set empty results to clear loading
+          if (
+            responseState.type === "network_fail" ||
+            responseState.type === "extension_error" ||
+            responseState.type === "interceptor_error"
+          ) {
+            tab.value.document.testResults = {
+              description: "",
+              expectResults: [],
+              tests: [],
+              envDiff: {
+                global: { additions: [], deletions: [], updations: [] },
+                selected: { additions: [], deletions: [], updations: [] },
+              },
+              scriptError: false,
+              consoleEntries: [],
+            }
           }
-          updateRESTResponse(errorResponse)
         }
-        loading.value = false
-      }
+      },
+      (error: unknown) => {
+        console.error("Stream error:", error)
+
+        // Set empty testResults to clear loading state
+        if (tab.value.document.testResults === null) {
+          tab.value.document.testResults = {
+            description: "",
+            expectResults: [],
+            tests: [],
+            envDiff: {
+              global: { additions: [], deletions: [], updations: [] },
+              selected: { additions: [], deletions: [], updations: [] },
+            },
+            scriptError: false,
+            consoleEntries: [],
+          }
+        }
+      },
+      () => {}
     )
   } else {
-    loading.value = false
     toast.error(`${t("error.script_fail")}`)
     let error: Error
     if (typeof streamResult.left === "string") {
@@ -404,6 +427,17 @@ const newSendRequest = async () => {
       type: "script_fail",
       error,
     })
+    tab.value.document.testResults = {
+      description: "",
+      expectResults: [],
+      tests: [],
+      envDiff: {
+        global: { additions: [], deletions: [], updations: [] },
+        selected: { additions: [], deletions: [], updations: [] },
+      },
+      scriptError: true,
+      consoleEntries: [],
+    }
   }
 }
 
@@ -422,9 +456,7 @@ const ensureMethodInEndpoint = () => {
 
 const onPasteUrl = (e: { pastedValue: string; prevValue: string }) => {
   if (!e) return
-
   const pastedData = e.pastedValue
-
   if (isCURL(pastedData)) {
     showCurlImportModal.value = true
     curlText.value = pastedData
@@ -438,6 +470,16 @@ function isCURL(curl: string) {
 
 const currentTabID = tabs.currentTabID.value
 
+// Clear loading state when test results are set
+watch(
+  () => tab.value.document.testResults,
+  (newTestResults, oldTestResults) => {
+    if (oldTestResults === null && newTestResults !== null && loading.value) {
+      loading.value = false
+    }
+  }
+)
+
 onUnmounted(() => {
   //check if current tab id exist in the current tab id lists
   const isCurrentTabRemoved = !tabs
@@ -448,10 +490,24 @@ onUnmounted(() => {
 })
 
 const cancelRequest = () => {
-  loading.value = false
   tab.value.document.cancelFunction?.()
-
   updateRESTResponse(null)
+
+  // Set empty testResults - watcher will clear loading
+  // Only set if null to avoid overwriting existing test results
+  if (tab.value.document.testResults === null) {
+    tab.value.document.testResults = {
+      description: "",
+      expectResults: [],
+      tests: [],
+      envDiff: {
+        global: { additions: [], deletions: [], updations: [] },
+        selected: { additions: [], deletions: [], updations: [] },
+      },
+      scriptError: false,
+      consoleEntries: [],
+    }
+  }
 }
 
 const updateMethod = (method: string) => {
@@ -514,7 +570,10 @@ const cycleDownMethod = () => {
   }
 }
 
-const saveRequest = () => {
+const saveRequest = async () => {
+  const isValidToken = await handleTokenValidation()
+  if (!isValidToken) return
+
   const saveCtx = tab.value.document.saveContext
 
   if (!saveCtx) {
@@ -525,6 +584,11 @@ const saveRequest = () => {
     const req = tab.value.document.request
 
     try {
+      if (saveCtx.requestIndex === undefined) {
+        // requestIndex missing; prompt user to resave properly
+        showSaveRequestModal.value = true
+        return
+      }
       editRESTRequest(saveCtx.folderPath, saveCtx.requestIndex, req)
 
       tab.value.document.isDirty = false
@@ -537,7 +601,7 @@ const saveRequest = () => {
       })
 
       toast.success(`${t("request.saved")}`)
-    } catch (e) {
+    } catch (_e) {
       tab.value.document.saveContext = undefined
       saveRequest()
     }
@@ -604,6 +668,10 @@ defineActionHandler("request.import-curl", () => {
 })
 defineActionHandler("request.show-code", () => {
   showCodegenModal.value = true
+})
+
+defineActionHandler("request.focus-url", () => {
+  urlInput.value?.focus()
 })
 
 const isCustomMethod = computed(() => {

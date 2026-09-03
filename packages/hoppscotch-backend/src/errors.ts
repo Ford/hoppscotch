@@ -22,19 +22,20 @@ export const ADMIN_CAN_NOT_BE_DELETED =
  * Token Authorization failed (Check 'Authorization' Header)
  * (GqlAuthGuard)
  */
-export const AUTH_FAIL = 'auth/fail';
+export const AUTH_FAIL = 'auth/fail' as const;
 
 /**
  * Invalid JSON
  * (Utils)
  */
-export const JSON_INVALID = 'json_invalid';
+export const JSON_INVALID = 'json_invalid' as const;
 
 /**
  * Auth Provider not specified
  * (Auth)
  */
-export const AUTH_PROVIDER_NOT_SPECIFIED = 'auth/provider_not_specified';
+export const AUTH_PROVIDER_NOT_SPECIFIED =
+  'auth/provider_not_specified' as const;
 
 /**
  * Email not provided by OAuth provider
@@ -168,7 +169,7 @@ export const TEAM_NOT_REQUIRED_ROLE = 'team/not_required_role' as const;
  * Team name validation failure
  * (TeamService)
  */
-export const TEAM_NAME_INVALID = 'team/name_invalid';
+export const TEAM_NAME_INVALID = 'team/name_invalid' as const;
 
 /**
  * Couldn't find the sync data from the user
@@ -187,6 +188,12 @@ export const TEAM_FB_COLL_PATH_RESOLVE_FAIL = 'team/fb_coll_path_resolve_fail';
  * (TeamCollectionService)
  */
 export const TEAM_COLL_NOT_FOUND = 'team_coll/collection_not_found';
+
+/**
+ * Could not find the team in the database
+ * (TeamCollectionService)
+ */
+export const TEAM_COLL_CREATION_FAILED = 'team_coll/creation_failed';
 
 /**
  * Cannot make parent collection a child of a collection that a child of itself
@@ -426,7 +433,6 @@ export const USER_ENVIRONMENT_GLOBAL_ENV_DOES_NOT_EXISTS =
  */
 export const USER_ENVIRONMENT_GLOBAL_ENV_EXISTS =
   'user_environment/global_env_already_exists' as const;
-/*
 
 /**
  * User environment doesn't exist for the user
@@ -434,7 +440,6 @@ export const USER_ENVIRONMENT_GLOBAL_ENV_EXISTS =
  */
 export const USER_ENVIRONMENT_ENV_DOES_NOT_EXISTS =
   'user_environment/user_env_does_not_exists' as const;
-/*
 
 /**
  * Cannot delete the global user environment
@@ -442,7 +447,6 @@ export const USER_ENVIRONMENT_ENV_DOES_NOT_EXISTS =
  */
 export const USER_ENVIRONMENT_GLOBAL_ENV_DELETION_FAILED =
   'user_environment/user_env_global_env_deletion_failed' as const;
-/*
 
 /**
  * User environment is not a global environment
@@ -450,7 +454,6 @@ export const USER_ENVIRONMENT_GLOBAL_ENV_DELETION_FAILED =
  */
 export const USER_ENVIRONMENT_IS_NOT_GLOBAL =
   'user_environment/user_env_is_not_global' as const;
-/*
 
 /**
  * User environment update failed
@@ -458,7 +461,6 @@ export const USER_ENVIRONMENT_IS_NOT_GLOBAL =
  */
 export const USER_ENVIRONMENT_UPDATE_FAILED =
   'user_environment/user_env_update_failed' as const;
-/*
 
 /**
  * User environment invalid environment name
@@ -466,7 +468,6 @@ export const USER_ENVIRONMENT_UPDATE_FAILED =
  */
 export const USER_ENVIRONMENT_INVALID_ENVIRONMENT_NAME =
   'user_environment/user_env_invalid_env_name' as const;
-/*
 
 /**
  * User history not found
@@ -649,6 +650,13 @@ export const USER_COLL_NOT_SAME_TYPE = 'user_coll/type_mismatch' as const;
  */
 export const USER_COLL_IS_PARENT_COLL =
   'user_coll/user_collection_is_parent_coll' as const;
+
+/**
+ * User Collection Creation Failed
+ * (UserCollectionService)
+ */
+export const USER_COLLECTION_CREATION_FAILED =
+  'user_collection/creation_failed' as const;
 
 /**
  * User Collection Re-Ordering Failed
@@ -871,3 +879,90 @@ export const INFRA_TOKEN_EXPIRED = 'infra_token/expired';
  * (InfraTokenService)
  */
 export const INFRA_TOKEN_CREATOR_NOT_FOUND = 'infra_token/creator_not_found';
+
+/**
+ * Mock server not found
+ * (MockServerService)
+ */
+export const MOCK_SERVER_NOT_FOUND = 'mock_server/not_found';
+
+/**
+ * Mock server invalid collection
+ * (MockServerService)
+ */
+export const MOCK_SERVER_INVALID_COLLECTION = 'mock_server/invalid_collection';
+
+/**
+ * Mock server collection creation failed
+ * (MockServerService)
+ */
+export const MOCK_SERVER_COLLECTION_CREATION_FAILED =
+  'mock_server/collection_creation_failed';
+
+/**
+ * Mock server already exists for this collection
+ * (MockServerService)
+ */
+export const MOCK_SERVER_ALREADY_EXISTS = 'mock_server/already_exists';
+
+/**
+ * Mock server creation failed
+ * (MockServerService)
+ */
+export const MOCK_SERVER_CREATION_FAILED = 'mock_server/creation_failed';
+
+/**
+ * Mock server update failed
+ * (MockServerService)
+ */
+export const MOCK_SERVER_UPDATE_FAILED = 'mock_server/update_failed';
+
+/**
+ * Mock server deletion failed
+ * (MockServerService)
+ */
+export const MOCK_SERVER_DELETION_FAILED = 'mock_server/deletion_failed';
+
+/**
+ * Mock server log not found
+ * (MockServerService)
+ */
+export const MOCK_SERVER_LOG_NOT_FOUND = 'mock_server/log_not_found';
+
+/**
+ * Mock server log deletion failed
+ * (MockServerService)
+ */
+export const MOCK_SERVER_LOG_DELETION_FAILED =
+  'mock_server/log_deletion_failed';
+
+/**
+ * Published Docs invalid collection
+ * (PublishedDocsService)
+ */
+export const PUBLISHED_DOCS_INVALID_COLLECTION =
+  'published_docs/invalid_collection';
+
+/**
+ * Published Docs creation failed
+ * (PublishedDocsService)
+ */
+export const PUBLISHED_DOCS_CREATION_FAILED = 'published_docs/creation_failed';
+
+/**
+ * Published Docs update failed
+ * (PublishedDocsService)
+ */
+export const PUBLISHED_DOCS_UPDATE_FAILED = 'published_docs/update_failed';
+
+/**
+ * Published Docs deletion failed
+ * (PublishedDocsService)
+ */
+export const PUBLISHED_DOCS_DELETION_FAILED = 'published_docs/deletion_failed';
+
+/**
+ * Published Docs not found
+ * (PublishedDocsService)
+ */
+export const PUBLISHED_DOCS_NOT_FOUND = 'published_docs/not_found';

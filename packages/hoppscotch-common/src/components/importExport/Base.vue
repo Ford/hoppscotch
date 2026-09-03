@@ -39,12 +39,10 @@ const props = defineProps({
     // type: Array as PropType<ReturnType<typeof defineImporter>[]>,
     type: Array as PropType<ImporterOrExporter[]>,
     default: () => [],
-    required: true,
   },
   exporterModules: {
     type: Array as PropType<ImporterOrExporter[]>,
     default: () => [],
-    required: true,
   },
   modalTitle: {
     type: String,
@@ -202,6 +200,8 @@ props.importerModules.forEach((importer) => {
       props: () => ({
         collections: importSummary.value.importedCollections,
         importFormat: importer.metadata.format,
+        scriptsImported: importSummary.value.scriptsImported,
+        originalScriptCounts: importSummary.value.originalScriptCounts,
         "on-close": () => {
           emit("hide-modal")
         },
