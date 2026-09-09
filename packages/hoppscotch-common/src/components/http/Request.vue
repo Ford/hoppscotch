@@ -343,6 +343,7 @@ const newSendRequest = async () => {
     toast.error(`${t("empty.endpoint")}`)
     return
   }
+
   ensureMethodInEndpoint()
 
   tab.value.document.response = {
@@ -363,24 +364,44 @@ const newSendRequest = async () => {
     workspaceType: workspaceService.currentWorkspace.value.type,
   })
 
-  const [cancel, streamPromise] = runRESTRequest$(tab)
-  const streamResult = await streamPromise
+  try {
+    const [cancel, streamPromise] = runRESTRequest$(tab)
+    const streamResult = await streamPromise
 
-  tab.value.document.cancelFunction = cancel
+    tab.value.document.cancelFunction = cancel
 
-  if (E.isRight(streamResult)) {
-    subscribeToStream(
-      streamResult.right,
-      (responseState) => {
-        if (loading.value) {
-          updateRESTResponse(responseState)
+    if (E.isRight(streamResult)) {
+      subscribeToStream(
+        streamResult.right,
+        (responseState) => {
+          if (loading.value) {
+            updateRESTResponse(responseState)
 
-          // Network/extension/interceptor errors don't run test scripts, set empty results to clear loading
-          if (
-            responseState.type === "network_fail" ||
-            responseState.type === "extension_error" ||
-            responseState.type === "interceptor_error"
-          ) {
+            // Network/extension/interceptor errors don't run test scripts, set empty results to clear loading
+            if (
+              responseState.type === "network_fail" ||
+              responseState.type === "extension_error" ||
+              responseState.type === "interceptor_error"
+            ) {
+              tab.value.document.testResults = {
+                description: "",
+                expectResults: [],
+                tests: [],
+                envDiff: {
+                  global: { additions: [], deletions: [], updations: [] },
+                  selected: { additions: [], deletions: [], updations: [] },
+                },
+                scriptError: false,
+                consoleEntries: [],
+              }
+            }
+          }
+        },
+        (error: unknown) => {
+          console.error("Stream error:", error)
+
+          // Set empty testResults to clear loading state
+          if (tab.value.document.testResults === null) {
             tab.value.document.testResults = {
               description: "",
               expectResults: [],
@@ -393,40 +414,48 @@ const newSendRequest = async () => {
               consoleEntries: [],
             }
           }
-        }
-      },
-      (error: unknown) => {
-        console.error("Stream error:", error)
-
-        // Set empty testResults to clear loading state
-        if (tab.value.document.testResults === null) {
-          tab.value.document.testResults = {
-            description: "",
-            expectResults: [],
-            tests: [],
-            envDiff: {
-              global: { additions: [], deletions: [], updations: [] },
-              selected: { additions: [], deletions: [], updations: [] },
-            },
-            scriptError: false,
-            consoleEntries: [],
-          }
-        }
-      },
-      () => {}
-    )
-  } else {
-    toast.error(`${t("error.script_fail")}`)
-    let error: Error
-    if (typeof streamResult.left === "string") {
-      error = { name: "RequestFailure", message: streamResult.left }
+        },
+        () => {}
+      )
     } else {
-      error = streamResult.left
+      toast.error(`${t("error.script_fail")}`)
+      let error: Error
+      if (typeof streamResult.left === "string") {
+        error = { name: "RequestFailure", message: streamResult.left }
+      } else {
+        error = streamResult.left
+      }
+      updateRESTResponse({
+        type: "script_fail",
+        error,
+      })
+      tab.value.document.testResults = {
+        description: "",
+        expectResults: [],
+        tests: [],
+        envDiff: {
+          global: { additions: [], deletions: [], updations: [] },
+          selected: { additions: [], deletions: [], updations: [] },
+        },
+        scriptError: true,
+        consoleEntries: [],
+      }
     }
+  } catch (error) {
+    // Catch any unexpected errors during request initialization or pre-request
+    console.error("Request execution error:", error)
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "An unexpected error occurred while processing your request"
+
+    toast.error(errorMessage)
     updateRESTResponse({
       type: "script_fail",
-      error,
+      error: new Error(errorMessage),
     })
+
+    // Always set test results to clear loading state
     tab.value.document.testResults = {
       description: "",
       expectResults: [],
@@ -438,6 +467,17 @@ const newSendRequest = async () => {
       scriptError: true,
       consoleEntries: [],
     }
+  } finally {
+    // Fallback: ensure loading state is cleared after a reasonable timeout
+    // This prevents UI from being stuck even if test results watcher doesn't fire
+    setTimeout(() => {
+      if (loading.value) {
+        console.warn(
+          "Loading state was not cleared by response. Force-clearing now."
+        )
+        loading.value = false
+      }
+    }, 30000) // 30-second safety timeout
   }
 }
 

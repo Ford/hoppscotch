@@ -9,6 +9,7 @@ import {
 } from "@hoppscotch/data"
 import { AwsV4Signer } from "aws4fetch"
 import { getFinalBodyFromRequest } from "~/helpers/utils/EffectiveURL"
+import { signAwsV4RequestWithJsFallback } from "./aws-signature-fallback"
 
 type SignOptions = {
   auth: HoppRESTAuth & { authType: "aws-signature" }
@@ -16,6 +17,11 @@ type SignOptions = {
   envVars: Environment["variables"]
   signQuery?: boolean
 }
+
+const getNormalizedRegion = (regionValue: string) =>
+  regionValue.trim() ? regionValue.trim() : "us-east-1"
+
+const hasWebCryptoSupport = () => Boolean(globalThis.crypto?.subtle)
 
 function processQueryParameters(
   params: HoppRESTParams,
@@ -58,11 +64,28 @@ async function signAWSRequest({
 
   const accessKeyId = parseTemplateString(auth.accessKey, envVars)
   const secretAccessKey = parseTemplateString(auth.secretKey, envVars)
-  const region = parseTemplateString(auth.region, envVars) ?? "us-east-1"
+  const region = getNormalizedRegion(parseTemplateString(auth.region, envVars))
   const service = parseTemplateString(auth.serviceName, envVars)
   const sessionToken = auth.serviceToken
     ? parseTemplateString(auth.serviceToken, envVars)
     : undefined
+
+  // Validate required AWS signature fields before signing
+  if (!accessKeyId || !accessKeyId.trim()) {
+    throw new Error(
+      "AWS Signature: Access Key ID is required and cannot be empty"
+    )
+  }
+  if (!secretAccessKey || !secretAccessKey.trim()) {
+    throw new Error(
+      "AWS Signature: Secret Access Key is required and cannot be empty"
+    )
+  }
+  if (!service || !service.trim()) {
+    throw new Error(
+      "AWS Signature: Service Name is required and cannot be empty"
+    )
+  }
 
   const signerConfig: ConstructorParameters<typeof AwsV4Signer>[0] = {
     method: request.method,
@@ -81,10 +104,53 @@ async function signAWSRequest({
     signerConfig.body = body?.toString()
   }
 
-  const signer = new AwsV4Signer(signerConfig)
-  const sign = await signer.sign()
+  const fallbackBody =
+    typeof signerConfig.body === "string" ? signerConfig.body : undefined
 
-  return { sign, sortedParams }
+  const shouldUseFallback = !hasWebCryptoSupport()
+  if (shouldUseFallback) {
+    const sign = await signAwsV4RequestWithJsFallback({
+      method: request.method,
+      datetime: amzDate,
+      accessKeyId,
+      secretAccessKey,
+      region,
+      service,
+      sessionToken,
+      url: url.toString(),
+      signQuery,
+      body: fallbackBody,
+    })
+
+    return { sign, sortedParams }
+  }
+
+  try {
+    const signer = new AwsV4Signer(signerConfig)
+    return { sign: await signer.sign(), sortedParams }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("importKey")) {
+      const sign = await signAwsV4RequestWithJsFallback({
+        method: request.method,
+        datetime: amzDate,
+        accessKeyId,
+        secretAccessKey,
+        region,
+        service,
+        sessionToken,
+        url: url.toString(),
+        signQuery,
+        body: fallbackBody,
+      })
+
+      return { sign, sortedParams }
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `AWS Signature signing failed: ${errorMessage}. Ensure Access Key ID and Secret Access Key are valid.`
+    )
+  }
 }
 
 export async function generateAwsSignatureAuthHeaders(

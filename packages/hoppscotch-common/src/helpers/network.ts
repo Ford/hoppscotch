@@ -22,47 +22,77 @@ export function createRESTNetworkRequestStream(
 
   const req = cloneDeep(request)
 
-  const execResult = RESTRequest.toRequest(req).then((kernelRequest) => {
-    if (!kernelRequest) {
+  const execResult = RESTRequest.toRequest(req)
+    .then((kernelRequest) => {
+      if (!kernelRequest) {
+        response.next({
+          type: "network_fail",
+          req,
+          error: new Error("Failed to create kernel request"),
+        })
+        response.complete()
+        return
+      }
+
+      return service.execute(kernelRequest)
+    })
+    .catch((error) => {
+      // Catch any errors during request preparation (e.g., auth header generation)
       response.next({
         type: "network_fail",
         req,
-        error: new Error("Failed to create kernel request"),
+        error:
+          error instanceof Error
+            ? error
+            : new Error(
+                "An unknown error occurred during request preparation. Check that all auth credentials are valid and the connection is secure (HTTPS or localhost)."
+              ),
       })
       response.complete()
-      return
-    }
-
-    return service.execute(kernelRequest)
-  })
+    })
 
   const service = getService(KernelInterceptorService)
 
   execResult.then((result) => {
     if (!result) return
 
-    result.response.then(async (res) => {
-      if (res._tag === "Right") {
-        const processedRes = await RESTResponse.toResponse(res.right, req)
+    result.response
+      .then(async (res) => {
+        if (res._tag === "Right") {
+          const processedRes = await RESTResponse.toResponse(res.right, req)
 
-        if (processedRes.type === "success") {
-          response.next(processedRes)
+          if (processedRes.type === "success") {
+            response.next(processedRes)
+          } else {
+            response.next({
+              type: "network_fail",
+              req,
+              error: processedRes.error,
+            })
+          }
         } else {
           response.next({
-            type: "network_fail",
+            type: "interceptor_error",
             req,
-            error: processedRes.error,
+            error: res.left,
           })
         }
-      } else {
+        response.complete()
+      })
+      .catch((error) => {
+        // Ensure response completes even if relay throws
         response.next({
-          type: "interceptor_error",
+          type: "network_fail",
           req,
-          error: res.left,
+          error:
+            error instanceof Error
+              ? error
+              : new Error(
+                  "An unknown network error occurred. Check your connection and credentials."
+                ),
         })
-      }
-      response.complete()
-    })
+        response.complete()
+      })
   })
 
   return [

@@ -24,6 +24,20 @@ import InterceptorsErrorPlaceholder from "~/components/settings/InterceptorError
 import SettingsNative from "~/components/settings/Native.vue"
 import { KernelInterceptorNativeStore } from "./store"
 
+const isDnsResolutionError = (message: string) => {
+  const lowered = message.toLowerCase()
+
+  return (
+    lowered.includes("could not resolve host") ||
+    lowered.includes("could not resolve hostname") ||
+    lowered.includes("name or service not known") ||
+    lowered.includes("dns")
+  )
+}
+
+const buildDnsResolutionHint = (message: string) =>
+  `DNS resolution failed. The hostname in your request is not resolvable from this machine/runtime. Original error: ${message}. Verify endpoint spelling, VPN/corporate network access, DNS record (A/AAAA for CNAME target), or hosts file mapping.`
+
 export class NativeKernelInterceptorService
   extends Service
   implements KernelInterceptor
@@ -121,6 +135,10 @@ export class NativeKernelInterceptorService
                   description: (t: ReturnType<typeof getI18n>) => {
                     switch (error.kind) {
                       case "network":
+                        if (isDnsResolutionError(error.message)) {
+                          return buildDnsResolutionHint(error.message)
+                        }
+
                         return t("error.network.description", {
                           message: error.message,
                           cause: error.cause ?? t("error.unknown.cause"),

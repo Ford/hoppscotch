@@ -43,6 +43,7 @@
     "@hoppscotch/plugin-appload": "github:CuriousCorrelation/tauri-plugin-appload#9d4528be4f385bccbe46859631d31aa2ee1ec0b6",
     "@hoppscotch/ui": "0.2.5",
     "@hoppscotch/vue-toasted": "0.1.0",
+    "@noble/hashes": "2.2.0",
     "@lezer/highlight": "1.2.1",
     "@noble/curves": "2.2.0",
     "@scure/base": "2.2.0",

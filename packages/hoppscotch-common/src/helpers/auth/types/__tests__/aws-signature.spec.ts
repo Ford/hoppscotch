@@ -80,6 +80,7 @@ describe("AWS Signature Auth", () => {
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -188,6 +189,32 @@ describe("AWS Signature Auth", () => {
         mockEnvVars
       )
       expect(result).toHaveLength(3)
+    })
+
+    test("should sign using JS fallback when WebCrypto is unavailable", async () => {
+      vi.unstubAllGlobals()
+      vi.stubGlobal("crypto", undefined)
+
+      const auth = createBaseAuth()
+      const request = createBaseRequest({
+        endpoint: "https://example.com/test",
+      })
+
+      const result = await generateAwsSignatureAuthHeaders(
+        auth,
+        request,
+        mockEnvVars
+      )
+
+      expect(
+        result.find((h) => h.key.toLowerCase() === "authorization")
+      ).toBeDefined()
+      expect(
+        result.find((h) => h.key.toLowerCase() === "x-amz-content-sha256")
+      ).toBeDefined()
+      expect(result.find((h) => h.key.toLowerCase() === "host")?.value).toBe(
+        "example.com"
+      )
     })
   })
 

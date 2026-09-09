@@ -262,52 +262,98 @@ export async function getEffectiveRESTRequest(
 
       const body = getFinalBodyFromRequest(request, resolvedVariables);
 
-      const signer = new AwsV4Signer({
-        method,
-        body: E.isRight(body) ? body.right?.toString() : undefined,
-        datetime: amzDate,
-        signQuery: addTo === "QUERY_PARAMS",
-        accessKeyId: parseTemplateString(
+      try {
+        // Validate required AWS signature fields before signing
+        const accessKeyId = parseTemplateString(
           request.auth.accessKey,
           resolvedVariables
-        ),
-        secretAccessKey: parseTemplateString(
+        );
+        const secretAccessKey = parseTemplateString(
           request.auth.secretKey,
           resolvedVariables
-        ),
-        region:
-          parseTemplateString(request.auth.region, resolvedVariables) ??
-          "us-east-1",
-        service: parseTemplateString(
+        );
+        const service = parseTemplateString(
           request.auth.serviceName,
           resolvedVariables
-        ),
-        url: parseTemplateString(endpoint, resolvedVariables),
-        sessionToken:
-          request.auth.serviceToken &&
-          parseTemplateString(request.auth.serviceToken, resolvedVariables),
-      });
+        );
 
-      const sign = await signer.sign();
+        if (!accessKeyId || !accessKeyId.trim()) {
+          throw new Error(
+            "AWS Signature: Access Key ID is required and cannot be empty"
+          );
+        }
+        if (!secretAccessKey || !secretAccessKey.trim()) {
+          throw new Error(
+            "AWS Signature: Secret Access Key is required and cannot be empty"
+          );
+        }
+        if (!service || !service.trim()) {
+          throw new Error(
+            "AWS Signature: Service Name is required and cannot be empty"
+          );
+        }
 
-      if (addTo === "HEADERS") {
-        sign.headers.forEach((value, key) => {
-          effectiveFinalHeaders.push({
-            active: true,
-            key,
-            value,
-            description: "",
-          });
+        if (!globalThis.crypto?.subtle) {
+          throw new Error(
+            "WebCrypto API is unavailable (crypto.subtle is undefined). Use Node.js 18+ or a runtime with WebCrypto support."
+          );
+        }
+
+        const parsedRegion = parseTemplateString(
+          request.auth.region,
+          resolvedVariables
+        );
+        const normalizedRegion = parsedRegion.trim()
+          ? parsedRegion.trim()
+          : "us-east-1";
+
+        const signer = new AwsV4Signer({
+          method,
+          body: E.isRight(body) ? body.right?.toString() : undefined,
+          datetime: amzDate,
+          signQuery: addTo === "QUERY_PARAMS",
+          accessKeyId,
+          secretAccessKey,
+          region: normalizedRegion,
+          service,
+          url: parseTemplateString(endpoint, resolvedVariables),
+          sessionToken:
+            request.auth.serviceToken &&
+            parseTemplateString(request.auth.serviceToken, resolvedVariables),
         });
-      } else if (addTo === "QUERY_PARAMS") {
-        sign.url.searchParams.forEach((value, key) => {
-          effectiveFinalParams.push({
-            active: true,
-            key,
-            value,
-            description: "",
+
+        const sign = await signer.sign();
+
+        if (addTo === "HEADERS") {
+          sign.headers.forEach((value, key) => {
+            effectiveFinalHeaders.push({
+              active: true,
+              key,
+              value,
+              description: "",
+            });
           });
-        });
+        } else if (addTo === "QUERY_PARAMS") {
+          sign.url.searchParams.forEach((value, key) => {
+            effectiveFinalParams.push({
+              active: true,
+              key,
+              value,
+              description: "",
+            });
+          });
+        }
+      } catch (caughtError) {
+        const errorMessage =
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError);
+        return E.left(
+          error({
+            code: "PARSING_ERROR",
+            data: `AWS Signature signing failed: ${errorMessage}. Ensure Access Key ID and Secret Access Key are valid, WebCrypto is available, and request is over HTTPS or localhost.`,
+          })
+        );
       }
     } else if (request.auth.authType === "digest") {
       const { method, endpoint } = request as HoppRESTRequest;

@@ -6,6 +6,7 @@ import {
 } from "@hoppscotch/data"
 import { OperationType } from "@urql/core"
 import { AwsV4Signer } from "aws4fetch"
+import { signAwsV4RequestWithJsFallback } from "~/helpers/auth/types/aws-signature-fallback"
 import * as E from "fp-ts/Either"
 import {
   GraphQLEnumType,
@@ -34,6 +35,11 @@ import { GQLRequest } from "~/helpers/kernel/gql/request"
 import { GQLResponse } from "~/helpers/kernel/gql/response"
 
 const GQL_SCHEMA_POLL_INTERVAL = 7000
+
+const getNormalizedRegion = (regionValue?: string) =>
+  regionValue?.trim() ? regionValue.trim() : "us-east-1"
+
+const hasWebCryptoSupport = () => Boolean(globalThis.crypto?.subtle)
 
 type ConnectionRequestOptions = {
   url: string
@@ -543,30 +549,122 @@ const generateAuthHeader = async (
       const { accessKey, secretKey, region, serviceName, addTo, serviceToken } =
         auth
 
-      const currentDate = new Date()
-      const amzDate = currentDate.toISOString().replace(/[:-]|\.\d{3}/g, "")
-
-      const signer = new AwsV4Signer({
-        datetime: amzDate,
-        signQuery: addTo === "QUERY_PARAMS",
-        accessKeyId: accessKey,
-        secretAccessKey: secretKey,
-        region: region ?? "us-east-1",
-        service: serviceName,
-        url,
-        sessionToken: serviceToken,
-      })
-
-      const sign = await signer.sign()
-
-      if (addTo === "HEADERS") {
-        sign.headers.forEach((v, k) => {
-          finalHeaders[k] = v
-        })
-      } else if (addTo === "QUERY_PARAMS") {
-        for (const [k, v] of sign.url.searchParams) {
-          params[k] = v
+      try {
+        // Validate required AWS signature fields before signing
+        if (!accessKey || !accessKey.trim()) {
+          throw new Error(
+            "AWS Signature: Access Key ID is required and cannot be empty"
+          )
         }
+        if (!secretKey || !secretKey.trim()) {
+          throw new Error(
+            "AWS Signature: Secret Access Key is required and cannot be empty"
+          )
+        }
+        if (!serviceName || !serviceName.trim()) {
+          throw new Error(
+            "AWS Signature: Service Name is required and cannot be empty"
+          )
+        }
+
+        const currentDate = new Date()
+        const amzDate = currentDate.toISOString().replace(/[:-]|\.\d{3}/g, "")
+        const normalizedRegion = getNormalizedRegion(region)
+
+        if (!hasWebCryptoSupport()) {
+          const sign = await signAwsV4RequestWithJsFallback({
+            method: "POST",
+            datetime: amzDate,
+            signQuery: addTo === "QUERY_PARAMS",
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+            region: normalizedRegion,
+            service: serviceName,
+            url,
+            sessionToken: serviceToken,
+          })
+
+          if (addTo === "HEADERS") {
+            sign.headers.forEach((v, k) => {
+              finalHeaders[k] = v
+            })
+          } else if (addTo === "QUERY_PARAMS") {
+            for (const [k, v] of sign.url.searchParams) {
+              params[k] = v
+            }
+          }
+
+          return { authHeaders: finalHeaders, authParams: params }
+        }
+
+        const signer = new AwsV4Signer({
+          datetime: amzDate,
+          signQuery: addTo === "QUERY_PARAMS",
+          accessKeyId: accessKey,
+          secretAccessKey: secretKey,
+          region: normalizedRegion,
+          service: serviceName,
+          url,
+          sessionToken: serviceToken,
+        })
+
+        let sign = await signer.sign()
+
+        if (!sign) {
+          sign = await signAwsV4RequestWithJsFallback({
+            method: "POST",
+            datetime: amzDate,
+            signQuery: addTo === "QUERY_PARAMS",
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+            region: normalizedRegion,
+            service: serviceName,
+            url,
+            sessionToken: serviceToken,
+          })
+        }
+
+        if (addTo === "HEADERS") {
+          sign.headers.forEach((v, k) => {
+            finalHeaders[k] = v
+          })
+        } else if (addTo === "QUERY_PARAMS") {
+          for (const [k, v] of sign.url.searchParams) {
+            params[k] = v
+          }
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
+        if (error instanceof Error && error.message.includes("importKey")) {
+          const sign = await signAwsV4RequestWithJsFallback({
+            method: "POST",
+            datetime: amzDate,
+            signQuery: addTo === "QUERY_PARAMS",
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+            region: normalizedRegion,
+            service: serviceName,
+            url,
+            sessionToken: serviceToken,
+          })
+
+          if (addTo === "HEADERS") {
+            sign.headers.forEach((v, k) => {
+              finalHeaders[k] = v
+            })
+          } else if (addTo === "QUERY_PARAMS") {
+            for (const [k, v] of sign.url.searchParams) {
+              params[k] = v
+            }
+          }
+
+          return { authHeaders: finalHeaders, authParams: params }
+        }
+
+        throw new Error(
+          `AWS Signature generation failed for GraphQL: ${errorMessage}. Ensure credentials are valid.`
+        )
       }
     }
   }

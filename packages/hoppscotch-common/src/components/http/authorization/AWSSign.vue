@@ -2,6 +2,7 @@
   <div class="flex flex-1 border-b border-dividerLight">
     <label class="flex items-center ml-4 text-secondaryLight min-w-[6rem]">
       {{ t("authorization.aws_signature.access_key") }}
+      <span class="text-red-400">*</span>
     </label>
     <SmartEnvInput
       v-model="auth.accessKey"
@@ -13,6 +14,7 @@
   <div class="flex flex-1 border-b border-dividerLight">
     <label class="flex items-center ml-4 text-secondaryLight min-w-[6rem]">
       {{ t("authorization.aws_signature.secret_key") }}
+      <span class="text-red-400">*</span>
     </label>
     <SmartEnvInput
       v-model="auth.secretKey"
@@ -48,6 +50,7 @@
     <div class="flex flex-1">
       <label class="flex items-center ml-4 text-secondaryLight min-w-[6rem]">
         {{ t("authorization.aws_signature.service_name") }}
+        <span class="text-red-400">*</span>
       </label>
       <SmartEnvInput
         v-model="auth.serviceName"
@@ -112,6 +115,16 @@
         </tippy>
       </span>
     </div>
+
+    <!-- Validation warning -->
+    <div
+      v-if="validationWarning"
+      class="p-4 bg-yellow-50 border-l-4 border-yellow-400"
+    >
+      <p class="text-yellow-700 text-sm">
+        <strong>⚠ AWS Auth Warning:</strong> {{ validationWarning }}
+      </p>
+    </div>
   </div>
 </template>
 
@@ -156,4 +169,24 @@ const passBy = computed(() => {
     t("state.none")
   )
 })
+
+// Validation check for required fields
+const validationWarning = computed(() => {
+  const warnings: string[] = []
+
+  if (!auth.value.accessKey || !auth.value.accessKey.trim()) {
+    warnings.push("Access Key ID is required")
+  }
+  if (!auth.value.secretKey || !auth.value.secretKey.trim()) {
+    warnings.push("Secret Access Key is required")
+  }
+  if (!auth.value.serviceName || !auth.value.serviceName.trim()) {
+    warnings.push("Service Name is required")
+  }
+
+  return warnings.length > 0
+    ? `Missing required fields: ${warnings.join(", ")}. Requests will fail until these are filled.`
+    : null
+})
+
 </script>
