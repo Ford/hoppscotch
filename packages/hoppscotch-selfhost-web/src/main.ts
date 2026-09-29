@@ -181,6 +181,7 @@ async function initApp() {
     platformFeatureFlags: {
       exportAsGIST: false,
       hasTelemetry: false,
+      showAuthButtons: platform !== "desktop",
       cookiesEnabled: config.cookiesEnabled,
       promptAsUsingCookies: false,
       hasCookieBasedAuth: platform === "web",
