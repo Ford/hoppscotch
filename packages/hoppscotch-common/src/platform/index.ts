@@ -33,6 +33,11 @@ export type PlatformDef = {
     hasTelemetry: boolean
 
     /**
+     * Whether to show the unauthenticated Login and save-workspace actions.
+     */
+    showAuthButtons?: boolean
+
+    /**
      *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
      *  If a value is not given, then the value is assumed to be false
      */

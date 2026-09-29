@@ -136,7 +136,10 @@
           }"
         >
           <div
-            v-if="currentUser === null"
+            v-if="
+              currentUser === null &&
+              platform.platformFeatureFlags.showAuthButtons !== false
+            "
             class="inline-flex items-center space-x-2"
           >
             <HoppButtonSecondary
