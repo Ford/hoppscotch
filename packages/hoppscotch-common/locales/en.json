@@ -1321,7 +1321,7 @@
     "delete_account_description": "Once you delete your account, all your data will be permanently deleted. This action cannot be undone.",
     "desktop": "Desktop",
     "desktop_connection": "Connection",
-    "desktop_description": "Update behavior, connection timeouts, keyboard handling, and display preferences for the Hoppscotch desktop app.",
+    "desktop_description": "Connection timeouts, keyboard handling, and display preferences for the Hoppscotch desktop app.",
     "desktop_display": "Display",
     "desktop_keyboard": "Keyboard",
     "desktop_keyboard_strategy_label": "Match shortcuts by typed letter or physical position",

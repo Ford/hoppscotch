@@ -12,64 +12,6 @@
       </p>
     </div>
     <div class="space-y-8 p-8 md:col-span-2">
-      <section>
-        <h4 class="font-semibold text-secondaryDark">
-          {{ t("settings.desktop_updates") }}
-        </h4>
-
-        <!-- The check button's label, icon, disabled-ness, and click
-             behavior all come from one view descriptor computed from the
-             update state, so adding or renaming a state means touching one
-             `case`. A fixed `min-width`
-             keeps the button size stable across label changes, and download
-             progress renders inline in the label so the control stays the
-             same size in every state. -->
-        <div class="mt-4">
-          <div class="flex items-center space-x-3">
-            <HoppButtonSecondary
-              class="!min-w-[15rem] !justify-start"
-              :icon="view.icon"
-              :label="view.label"
-              :disabled="view.disabled"
-              outline
-              @click="view.action"
-            />
-            <HoppButtonSecondary
-              v-if="view.showCancel"
-              :label="t('action.cancel')"
-              outline
-              @click="updateCheck.cancel()"
-            />
-          </div>
-          <div class="mt-3 min-h-[1.25rem]">
-            <Transition name="helper-fade" mode="out-in">
-              <p :key="helperText" :class="helperTextClasses">
-                {{ helperText }}
-              </p>
-            </Transition>
-          </div>
-        </div>
-
-        <!-- The inner `flex items-center` wrapper matches the convention
-             other toggles on the shared settings page use (see
-             `settings/Native.vue`), so the toggle aligns to the same left
-             edge as the check button above, so it does not stretch to fill
-             the `flex-col` parent. -->
-        <div class="mt-6">
-          <div class="flex items-center">
-            <HoppSmartToggle
-              :on="desktopSettings.settings.disableUpdateChecks"
-              @change="toggleDisableUpdateChecks"
-            >
-              {{ t("settings.disable_update_checks") }}
-            </HoppSmartToggle>
-          </div>
-          <p class="mt-3 text-xs text-secondaryLight">
-            {{ t("settings.disable_update_checks_description") }}
-          </p>
-        </div>
-      </section>
-
       <!-- The stored value is a total request deadline, and the bundle
            download client multiplies it by ten. The description states both
            numbers because a user reading only the preset would expect a
@@ -194,14 +136,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type Component } from "vue"
+import { computed, ref } from "vue"
 import {
   HoppButtonSecondary,
   HoppSmartItem,
   HoppSmartRadio,
   HoppSmartRadioGroup,
   HoppSmartSelectWrapper,
-  HoppSmartToggle,
 } from "@hoppscotch/ui"
 import { useI18n } from "~/composables/i18n"
 import {
@@ -209,15 +150,9 @@ import {
   type DesktopSettings,
 } from "~/platform/desktop-settings"
 
-import IconLucideDownload from "~icons/lucide/download"
-import IconLucideRefreshCw from "~icons/lucide/refresh-cw"
-import IconLucideLoader from "~icons/lucide/loader"
 import IconLucideCheck from "~icons/lucide/check"
-import IconLucideCheckCircle from "~icons/lucide/check-circle"
-import IconLucideAlertCircle from "~icons/lucide/alert-circle"
 
 import { useDesktopSettings } from "~/composables/desktop-settings"
-import { useUpdateCheck } from "~/composables/update-check"
 
 // The shared settings page iterates `additionalSettingsSections`
 // with `:key="item.id"`. Without an explicit `id` on the component
@@ -234,169 +169,6 @@ defineOptions({
 const t = useI18n()
 
 const desktopSettings = useDesktopSettings()
-const updateCheck = useUpdateCheck()
-
-// Every field the template binds comes from the same function, so adding,
-// renaming, or deleting an update state is a single-case edit. Parallel
-// computeds for `label`, `icon`, `disabled`, and the click handler would
-// spread each state's behavior across four functions with no single place
-// to read what a given state renders as.
-type ButtonView = {
-  label: string
-  icon: Component
-  disabled: boolean
-  showCancel: boolean
-  action: () => Promise<void> | void
-}
-
-const noop = (): void => undefined
-
-const view = computed<ButtonView>(() => {
-  const s = updateCheck.state.value
-  switch (s.kind) {
-    case "idle":
-      return {
-        label: t("settings.update_check_now"),
-        icon: IconLucideRefreshCw,
-        disabled: false,
-        showCancel: false,
-        action: updateCheck.check,
-      }
-    case "checking":
-      return {
-        label: t("settings.update_checking"),
-        icon: IconLucideLoader,
-        disabled: true,
-        showCancel: false,
-        action: noop,
-      }
-    case "available":
-      return {
-        label: t("settings.update_download_version", {
-          version: s.latestVersion,
-        }),
-        icon: IconLucideDownload,
-        disabled: false,
-        showCancel: false,
-        action: updateCheck.download,
-      }
-    case "not_available":
-      return {
-        label: t("settings.update_check_now"),
-        icon: IconLucideCheckCircle,
-        disabled: false,
-        showCancel: false,
-        action: updateCheck.check,
-      }
-    case "downloading":
-      return {
-        label: t("settings.update_downloading_percent", {
-          percent: Math.round(s.progress.percentage),
-        }),
-        icon: IconLucideLoader,
-        disabled: true,
-        showCancel: true,
-        action: noop,
-      }
-    case "installing":
-      return {
-        label: t("settings.update_installing"),
-        icon: IconLucideLoader,
-        disabled: true,
-        showCancel: true,
-        action: noop,
-      }
-    case "ready_to_restart":
-      return {
-        label: t("settings.update_restart_now"),
-        icon: IconLucideRefreshCw,
-        disabled: false,
-        showCancel: false,
-        action: updateCheck.restart,
-      }
-    case "error":
-      return {
-        label: t("settings.update_check_now"),
-        icon: IconLucideAlertCircle,
-        disabled: false,
-        showCancel: false,
-        action: updateCheck.check,
-      }
-    default: {
-      // Exhaustiveness check. TypeScript narrows `s` to `never` here if
-      // every variant of `UpdateState["kind"]` is handled above, so
-      // adding a new variant without a matching `case` fails to compile.
-      // The throw also satisfies eslint's `vue/return-in-computed-property`,
-      // which does not do TS-level exhaustiveness analysis.
-      const unreachable: never = s
-      throw new Error(`Unhandled update state: ${JSON.stringify(unreachable)}`)
-    }
-  }
-})
-
-// Helper text below the button shows the baseline description by default.
-// Transient status feedback ("Up to date", error message) appears on entry
-// into `not_available` or `error` and fades back to the description after
-// a linger, so the description stays visible most of the time and the
-// status feedback reads as transient confirmation rather than permanent
-// replacement. The `<Transition>` wrapping the `<p>` fades between
-// content changes.
-const TRANSIENT_FEEDBACK_MS = {
-  notAvailable: 4_000,
-  error: 6_000,
-} as const
-
-const showTransientFeedback = ref(false)
-let feedbackTimer: ReturnType<typeof setTimeout> | undefined
-
-watch(
-  () => updateCheck.state.value.kind,
-  (kind) => {
-    if (kind !== "not_available" && kind !== "error") return
-
-    showTransientFeedback.value = true
-    if (feedbackTimer) clearTimeout(feedbackTimer)
-    feedbackTimer = setTimeout(
-      () => {
-        showTransientFeedback.value = false
-      },
-      kind === "error"
-        ? TRANSIENT_FEEDBACK_MS.error
-        : TRANSIENT_FEEDBACK_MS.notAvailable
-    )
-  }
-)
-
-onBeforeUnmount(() => {
-  if (feedbackTimer) clearTimeout(feedbackTimer)
-})
-
-const helperText = computed(() => {
-  if (showTransientFeedback.value) {
-    const s = updateCheck.state.value
-    if (s.kind === "error") {
-      return s.message
-    }
-    if (s.kind === "not_available") {
-      return t("settings.update_up_to_date")
-    }
-  }
-  return t("settings.update_check_description")
-})
-
-const helperTextClasses = computed(() => {
-  const base = "text-xs"
-  return showTransientFeedback.value && updateCheck.state.value.kind === "error"
-    ? `${base} text-red-500`
-    : `${base} text-secondaryLight`
-})
-
-async function toggleDisableUpdateChecks(): Promise<void> {
-  await desktopSettings.update(
-    "disableUpdateChecks",
-    !desktopSettings.settings.disableUpdateChecks
-  )
-}
 
 // Milliseconds because the schema field, the Rust bridge, and the TS race
 // all read that unit, so nothing converts at a boundary. Array order is the
@@ -513,14 +285,3 @@ async function setZoomPreset(value: string): Promise<void> {
   await desktopSettings.update("zoomLevel", factor)
 }
 </script>
-
-<style scoped>
-.helper-fade-enter-active,
-.helper-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.helper-fade-enter-from,
-.helper-fade-leave-to {
-  opacity: 0;
-}
-</style>

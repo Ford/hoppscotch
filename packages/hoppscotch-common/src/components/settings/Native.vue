@@ -93,14 +93,14 @@
             :model-value="domainSettings[selectedDomain].proxy.username"
             :placeholder="' '"
             :label="t('authorization.username')"
-            input-styles="floating-input !border-0"
+            input-styles="input floating-input"
             @update:model-value="updateProxyUsername"
           />
           <HoppSmartInput
             :model-value="domainSettings[selectedDomain].proxy.password"
             :placeholder="' '"
             :label="t('authorization.password')"
-            input-styles="floating-input !border-0"
+            input-styles="input floating-input"
             :type="showProxyPassword ? 'text' : 'password'"
             @update:model-value="updateProxyPassword"
           >

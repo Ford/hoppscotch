@@ -44,12 +44,9 @@ export const DESKTOP_SETTINGS_SCHEMA = z.object({
   connectionTimeoutMs: z.number().int().positive().default(30_000),
   autoReconnectLastInstance: z.boolean().default(true),
 
-  // Update-pipeline controls. `disable*` polarity matches the existing
-  // `disableUpdateNotifications` field so all three update-related
-  // booleans read uniformly, and the on-by-default framing ("Disable X"
-  // with default false) nudges users toward keeping the update flow
-  // active. `disableUpdateChecks` is bound to a toggle in the current
-  // settings UI. `disableUpdateDownloads` is future scope.
+  // Retained for compatibility with settings written by older desktop builds.
+  // Automatic update checks and their settings controls are disabled in this
+  // build; these fields no longer gate launcher startup.
   disableUpdateChecks: z.boolean().default(false),
   disableUpdateDownloads: z.boolean().default(false),
 
