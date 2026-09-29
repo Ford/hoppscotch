@@ -314,6 +314,11 @@ const kernelInterceptorService: KernelInterceptorService = useService(
 const kernelInterceptorsWithSettings = computed(() =>
   pipe(
     kernelInterceptorService.available.value,
+    A.filter(
+      (interceptor) =>
+        interceptor.id !== "proxy" ||
+        platform.platformFeatureFlags.showProxyInterceptor !== false
+    ),
     A.filterMap((kernelInterceptor) =>
       kernelInterceptor.settingsEntry
         ? O.some([

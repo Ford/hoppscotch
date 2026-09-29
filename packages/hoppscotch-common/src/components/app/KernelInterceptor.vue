@@ -65,6 +65,7 @@ import { useI18n } from "@composables/i18n"
 import { useService } from "dioc/vue"
 import { computed } from "vue"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
+import { platform } from "~/platform"
 
 const t = useI18n()
 
@@ -83,8 +84,12 @@ const kernelInterceptorSelection = computed(
   () => kernelInterceptorService.current.value?.id ?? null
 )
 
-const kernelInterceptors = computed(
-  () => kernelInterceptorService.available.value
+const kernelInterceptors = computed(() =>
+  kernelInterceptorService.available.value.filter(
+    (interceptor) =>
+      interceptor.id !== "proxy" ||
+      platform.platformFeatureFlags.showProxyInterceptor !== false
+  )
 )
 
 const setKernelInterceptor = (id: string) => {
