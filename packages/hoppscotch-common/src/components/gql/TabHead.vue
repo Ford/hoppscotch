@@ -64,7 +64,10 @@
             "
           />
           <HoppSmartItem
-            v-if="!isResponseExample"
+            v-if="
+              !isResponseExample &&
+              platform.platformFeatureFlags.showShareTabRequest !== false
+            "
             ref="shareRequestAction"
             :icon="IconShare2"
             :label="t('tab.share_tab_request')"
@@ -112,6 +115,7 @@
 import { computed, ref } from "vue"
 import { TippyComponent } from "vue-tippy"
 import { useI18n } from "~/composables/i18n"
+import { platform } from "~/platform"
 import IconGraphql from "~icons/hopp/graphql"
 import IconXCircle from "~icons/lucide/x-circle"
 import IconXSquare from "~icons/lucide/x-square"

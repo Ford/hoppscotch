@@ -65,7 +65,10 @@
             "
           />
           <HoppSmartItem
-            v-if="!isResponseExample"
+            v-if="
+              !isResponseExample &&
+              platform.platformFeatureFlags.showShareTabRequest !== false
+            "
             ref="shareRequestAction"
             :icon="IconShare2"
             :label="t('tab.share_tab_request')"
@@ -114,6 +117,7 @@ import { ref, computed } from "vue"
 import { TippyComponent } from "vue-tippy"
 import { getMethodLabelColorClassOf } from "~/helpers/rest/labelColoring"
 import { useI18n } from "~/composables/i18n"
+import { platform } from "~/platform"
 import IconXCircle from "~icons/lucide/x-circle"
 import IconXSquare from "~icons/lucide/x-square"
 import IconFileEdit from "~icons/lucide/file-edit"
