@@ -183,6 +183,7 @@ async function initApp() {
       hasTelemetry: false,
       showAuthButtons: platform !== "desktop",
       showShareTabRequest: platform !== "desktop",
+      showSharedRequests: platform !== "desktop",
       cookiesEnabled: config.cookiesEnabled,
       promptAsUsingCookies: false,
       hasCookieBasedAuth: platform === "web",

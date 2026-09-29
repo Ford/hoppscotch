@@ -43,6 +43,11 @@ export type PlatformDef = {
     showShareTabRequest?: boolean
 
     /**
+     * Whether to show Shared Requests in the request sidebar.
+     */
+    showSharedRequests?: boolean
+
+    /**
      *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
      *  If a value is not given, then the value is assumed to be false
      */
