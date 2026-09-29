@@ -59,18 +59,18 @@ export class KernelInterceptorSpotlightSearcherService
             platform.platformFeatureFlags.showProxyInterceptor !== false
         )
         .map((entry) => {
-        const id =
-          entry.id === kernelInterceptorSelection.value?.id
-            ? `kernelInterceptor-${entry.id}-selected`
-            : `kernelInterceptor-${entry.id}`
-        const name = unref(entry.name(this.t))
-        const alternates = ["interceptor", "change", name]
+          const id =
+            entry.id === kernelInterceptorSelection.value?.id
+              ? `kernelInterceptor-${entry.id}-selected`
+              : `kernelInterceptor-${entry.id}`
+          const name = unref(entry.name(this.t))
+          const alternates = ["interceptor", "change", name]
 
-        return {
-          id,
-          name,
-          alternates,
-        }
+          return {
+            id,
+            name,
+            alternates,
+          }
         })
     )
 

@@ -84,13 +84,12 @@ const kernelInterceptorSelection = computed(
   () => kernelInterceptorService.current.value?.id ?? null
 )
 
-const kernelInterceptors = computed(
-  () =>
-    kernelInterceptorService.available.value.filter(
-      (interceptor) =>
-        interceptor.id !== "proxy" ||
-        platform.platformFeatureFlags.showProxyInterceptor !== false
-    )
+const kernelInterceptors = computed(() =>
+  kernelInterceptorService.available.value.filter(
+    (interceptor) =>
+      interceptor.id !== "proxy" ||
+      platform.platformFeatureFlags.showProxyInterceptor !== false
+  )
 )
 
 const setKernelInterceptor = (id: string) => {

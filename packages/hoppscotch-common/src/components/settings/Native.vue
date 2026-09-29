@@ -72,9 +72,19 @@
           :model-value="domainSettings[selectedDomain].proxy.url"
           :placeholder="' '"
           :label="t('settings.proxy_url')"
-          input-styles="floating-input !border-0"
+          input-styles="input floating-input"
           @update:model-value="updateProxyUrl"
         />
+        <HoppSmartInput
+          :model-value="domainSettings[selectedDomain].proxy.no_proxy ?? ''"
+          :placeholder="' '"
+          :label="t('settings.proxy_bypass')"
+          input-styles="input floating-input"
+          @update:model-value="updateNoProxy"
+        />
+        <p class="my-1 text-secondaryLight">
+          {{ t("settings.proxy_bypass_description") }}
+        </p>
         <p class="my-1 text-secondaryLight">
           {{ t("settings.proxy_auth") }}
         </p>
@@ -569,6 +579,13 @@ function updateProxyUrl(value: string) {
   const current = domainSettings[selectedDomain.value]?.proxy
   updateDomainSettings({
     proxy: { ...current, url: value },
+  })
+}
+
+function updateNoProxy(value: string) {
+  const current = domainSettings[selectedDomain.value]?.proxy
+  updateDomainSettings({
+    proxy: { ...current, no_proxy: value },
   })
 }
 
