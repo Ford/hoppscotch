@@ -48,6 +48,11 @@ export type PlatformDef = {
     showSharedRequests?: boolean
 
     /**
+     * Whether Proxy is offered as an interceptor in the UI.
+     */
+    showProxyInterceptor?: boolean
+
+    /**
      *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
      *  If a value is not given, then the value is assumed to be false
      */

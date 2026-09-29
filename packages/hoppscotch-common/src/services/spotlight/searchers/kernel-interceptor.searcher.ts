@@ -12,6 +12,7 @@ import MiniSearch from "minisearch"
 import IconCheckCircle from "~/components/app/spotlight/entry/IconSelected.vue"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 import IconCircle from "~icons/lucide/circle"
+import { platform } from "~/platform"
 
 /**
  * This searcher is responsible for searching through the kernel-interceptor.
@@ -51,7 +52,13 @@ export class KernelInterceptorSpotlightSearcherService
     const kernelInterceptors = this.kernelInterceptorService.available
 
     minisearch.addAll(
-      kernelInterceptors.value.map((entry) => {
+      kernelInterceptors.value
+        .filter(
+          (entry) =>
+            entry.id !== "proxy" ||
+            platform.platformFeatureFlags.showProxyInterceptor !== false
+        )
+        .map((entry) => {
         const id =
           entry.id === kernelInterceptorSelection.value?.id
             ? `kernelInterceptor-${entry.id}-selected`
@@ -64,7 +71,7 @@ export class KernelInterceptorSpotlightSearcherService
           name,
           alternates,
         }
-      })
+        })
     )
 
     const scopeHandle = effectScope()

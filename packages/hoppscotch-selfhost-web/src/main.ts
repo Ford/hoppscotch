@@ -184,6 +184,7 @@ async function initApp() {
       showAuthButtons: platform !== "desktop",
       showShareTabRequest: platform !== "desktop",
       showSharedRequests: platform !== "desktop",
+      showProxyInterceptor: platform !== "desktop",
       cookiesEnabled: config.cookiesEnabled,
       promptAsUsingCookies: false,
       hasCookieBasedAuth: platform === "web",
