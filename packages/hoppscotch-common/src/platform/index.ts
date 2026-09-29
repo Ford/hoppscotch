@@ -38,6 +38,11 @@ export type PlatformDef = {
     showAuthButtons?: boolean
 
     /**
+     * Whether to show Share tab request in request tab context menus.
+     */
+    showShareTabRequest?: boolean
+
+    /**
      *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
      *  If a value is not given, then the value is assumed to be false
      */
