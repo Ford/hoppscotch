@@ -135,7 +135,7 @@ import { load, close } from "@hoppscotch/plugin-appload"
 import { getVersion } from "@tauri-apps/api/app"
 import { useDesktopSettings } from "@hoppscotch/common/composables/desktop-settings"
 
-import { UpdateStatus, CheckResult, UpdateState } from "~/types"
+import { UpdateStatus, UpdateState } from "~/types"
 import { UpdaterService } from "~/utils/updater"
 
 import IconLucideAlertCircle from "~icons/lucide/alert-circle"
@@ -395,15 +395,6 @@ const initialize = async () => {
     await updaterService.initialize()
 
     await setupUpdateStateWatcher()
-
-    statusMessage.value = "Checking for updates..."
-    const checkResult = await updaterService.checkForUpdates()
-
-    if (checkResult === CheckResult.AVAILABLE) {
-      console.log("Updates available, prompting for install")
-      appState.value = AppState.UPDATE_AVAILABLE
-      return
-    }
 
     await loadVendored()
   } catch (err) {

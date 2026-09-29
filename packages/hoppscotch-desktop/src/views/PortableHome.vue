@@ -54,16 +54,6 @@
           <div class="flex gap-4 items-center justify-center mt-6">
             <label class="flex items-center space-x-2 cursor-pointer">
               <input
-                v-model="portableSettings.disableUpdateNotifications"
-                type="checkbox"
-                class="form-checkbox h-4 w-4 text-accent"
-                @change="onUpdateNotificationsChange"
-              />
-              <span class="text-sm">Don't notify about updates</span>
-            </label>
-
-            <label class="flex items-center space-x-2 cursor-pointer">
-              <input
                 v-model="portableSettings.autoSkipWelcome"
                 type="checkbox"
                 class="form-checkbox h-4 w-4 text-accent"
@@ -111,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, watch } from "vue"
+import { ref, onMounted, reactive } from "vue"
 import { close } from "@hoppscotch/plugin-appload"
 import { invoke } from "@tauri-apps/api/core"
 
@@ -120,7 +110,6 @@ import {
   useAppInitialization,
   AppState,
 } from "~/composables/useAppInitialization"
-import { UpdaterClient, type UpdateEvent } from "~/services/updater.client"
 
 import AppHeader from "./shared/AppHeader.vue"
 import LoadingState from "./shared/LoadingState.vue"
@@ -137,39 +126,12 @@ const {
   initialize,
 } = useAppInitialization()
 
-const updaterClient = new UpdaterClient()
-
 const showPortableWelcome = ref(false)
 const currentDirectory = ref(".")
 
-// Fields mirrored locally for the portable welcome screen's UI and the
-// startup update gate. The welcome screen only lets the user toggle
-// `disableUpdateNotifications` and `autoSkipWelcome`, but the update gate
-// also reads `disableUpdateChecks` so a user who set that via the settings
-// page on a prior session sees the gate respected on next startup. The full
-// desktop settings object is loaded and merged in
-// `handlePortableWelcomeContinue` so other fields like timeout or zoom,
-// written elsewhere, survive intact.
 const portableSettings = reactive({
-  disableUpdateNotifications: false,
   autoSkipWelcome: false,
-  disableUpdateChecks: false,
 })
-
-watch(
-  portableSettings,
-  (newValue) => {
-    console.log("portableSettings changed:", newValue)
-  },
-  { deep: true }
-)
-
-const onUpdateNotificationsChange = () => {
-  console.log(
-    "Update notifications checkbox changed:",
-    portableSettings.disableUpdateNotifications
-  )
-}
 
 const onAutoSkipChange = () => {
   console.log("Auto skip checkbox changed:", portableSettings.autoSkipWelcome)
@@ -197,7 +159,6 @@ const handlePortableWelcomeContinue = async () => {
     const current = await persistence.desktopSettings.get()
     const updated = {
       ...current,
-      disableUpdateNotifications: portableSettings.disableUpdateNotifications,
       autoSkipWelcome: portableSettings.autoSkipWelcome,
     }
 
@@ -209,34 +170,6 @@ const handlePortableWelcomeContinue = async () => {
     console.error("Failed to save desktop settings:", error)
     showPortableWelcome.value = false
     await loadRecent()
-  }
-}
-
-const checkForUpdatesPortable = async () => {
-  console.log("Checking portable updates, current settings:", portableSettings)
-
-  // Two disable flags land in this gate for backwards compatibility. The
-  // legacy `disableUpdateNotifications` was originally documented as
-  // controlling only notifications but was wired up to skip the whole check
-  // in portable mode. The new `disableUpdateChecks` is the explicit
-  // opt-out that matches the settings-page toggle. Either flag being true
-  // skips the startup check, so users upgrading from a prior version keep
-  // their original behavior and users who set the new flag see it honored.
-  if (
-    portableSettings.disableUpdateNotifications ||
-    portableSettings.disableUpdateChecks
-  ) {
-    console.log("Automatic update check disabled for portable mode")
-    return
-  }
-
-  statusMessage.value = "Checking for updates..."
-
-  try {
-    await updaterClient.checkForUpdates(true)
-    console.log("Portable update check completed")
-  } catch (err) {
-    console.error("Error checking for portable updates:", err)
   }
 }
 
@@ -255,12 +188,7 @@ const initializePortableMode = async () => {
   const settings = await persistence.desktopSettings.get()
   console.log("Loaded desktop settings:", settings)
 
-  portableSettings.disableUpdateNotifications =
-    settings.disableUpdateNotifications
   portableSettings.autoSkipWelcome = settings.autoSkipWelcome
-  portableSettings.disableUpdateChecks = settings.disableUpdateChecks
-
-  await checkForUpdatesPortable()
 
   if (!settings.autoSkipWelcome) {
     console.log("Showing portable welcome screen")
@@ -272,23 +200,7 @@ const initializePortableMode = async () => {
   await loadRecent()
 }
 
-onMounted(async () => {
-  // Listen to update events (mainly for error handling)
-  // Checkout `updater.rs` for more info.
-  await updaterClient.listenToUpdates((event: UpdateEvent) => {
-    switch (event.type) {
-      case "Error":
-        console.error("Update error:", event.message)
-        // For portable mode, errors are already handled by native dialogs,
-        // see `updater.rs`.
-        break
-    }
-  })
-
-  await initialize(initializePortableMode)
-})
-
-onUnmounted(() => {
-  updaterClient.stopListening()
+onMounted(() => {
+  void initialize(initializePortableMode)
 })
 </script>
