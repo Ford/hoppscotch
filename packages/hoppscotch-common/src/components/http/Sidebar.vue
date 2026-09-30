@@ -51,7 +51,7 @@
       />
     </HoppSmartTab>
     <HoppSmartTab
-      v-if="isRequestBearingTab"
+      v-if="isShareTabVisible"
       :id="'share-request'"
       :icon="IconShare2"
       :label="`${t('tab.shared_requests')}`"
@@ -91,12 +91,8 @@
       <MockServerDashboard v-if="selectedNavigationTab === 'mock-servers'" />
     </HoppSmartTab>
   </HoppSmartTabs>
-  <!-- Share hosts the app's only `share.request` action handler (and its
-       modals). When its sidebar tab is hidden for non-request tabs, keep one
-       hidden instance mounted so sharing a request tab from the collections
-       tree / tab-head context menu still works (main kept it always mounted
-       via render-inactive-tabs). -->
-  <div v-if="!isRequestBearingTab" class="hidden">
+  <!-- Keep the share action handler mounted when its sidebar tab is hidden. -->
+  <div v-if="!isShareTabVisible" class="hidden">
     <Share />
   </div>
 </template>
@@ -119,6 +115,7 @@ import { useMockServerVisibility } from "~/composables/mockServerVisibility"
 import { useGqlWorkspaceVisibility } from "~/composables/gqlWorkspaceVisibility"
 import { GQLTabConnectionService } from "~/services/gql-tab-connection.service"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
+import { platform } from "~/platform"
 
 const t = useI18n()
 
@@ -139,6 +136,11 @@ const isGQLTab = computed(() => activeDocType.value === "gql-request")
 const isRequestBearingTab = computed(
   () =>
     activeDocType.value === "request" || activeDocType.value === "gql-request"
+)
+const isShareTabVisible = computed(
+  () =>
+    isRequestBearingTab.value &&
+    platform.platformFeatureFlags.showSharedRequests !== false
 )
 
 type RequestOptionTabs =
@@ -161,16 +163,20 @@ const requestOnlyTabs: RequestOptionTabs[] = ["share-request", "codegen"]
 
 // When the active document type changes, reset sidebar selection if the
 // current selection is no longer visible (preventing stale/invisible tab state)
-watch([isGQLTab, isRequestBearingTab], ([nowGQL, requestBearing]) => {
-  const selected = selectedNavigationTab.value
-  if (
-    (nowGQL && httpOnlyTabs.includes(selected)) ||
-    (!nowGQL && gqlOnlyTabs.includes(selected)) ||
-    (!requestBearing && requestOnlyTabs.includes(selected))
-  ) {
-    selectedNavigationTab.value = "collections"
+watch(
+  [isGQLTab, isRequestBearingTab, isShareTabVisible],
+  ([nowGQL, requestBearing, shareVisible]) => {
+    const selected = selectedNavigationTab.value
+    if (
+      (nowGQL && httpOnlyTabs.includes(selected)) ||
+      (!nowGQL && gqlOnlyTabs.includes(selected)) ||
+      (!requestBearing && requestOnlyTabs.includes(selected)) ||
+      (!shareVisible && selected === "share-request")
+    ) {
+      selectedNavigationTab.value = "collections"
+    }
   }
-})
+)
 
 // Ensure mock servers are kept in sync with workspace changes globally
 useMockServerWorkspaceSync()

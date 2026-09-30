@@ -17,6 +17,15 @@ const STORE_KEYS = {
   SETTINGS: "settings",
 } as const
 
+const shouldBypassProxy = (hostname: string, noProxy?: string): boolean =>
+  !!noProxy?.split(",").some((entry) => {
+    const domain = entry.trim().toLowerCase().replace(/^\./, "")
+    if (!domain) return false
+
+    const host = hostname.toLowerCase()
+    return host === domain || host.endsWith(`.${domain}`)
+  })
+
 interface StoredData {
   version: string
   domains: Record<string, InputDomainSetting>
@@ -168,11 +177,12 @@ export class KernelInterceptorNativeStore extends Service {
   public async completeRequest(
     request: Omit<RelayRequest, "proxy" | "security" | "meta">
   ): Promise<RelayRequest> {
-    const host = new URL(request.url).host
+    const url = new URL(request.url)
+    const host = url.host
     const settings = this.getMergedSettings(host)
 
     const clientCert = await resolveClientCertificate(
-      new URL(request.url).hostname,
+      url.hostname,
       this.clientCertsRegistry
     )
     if (clientCert) {
@@ -184,7 +194,12 @@ export class KernelInterceptorNativeStore extends Service {
         },
       }
     }
-    const effective = convertDomainSetting(settings)
+    const effective = convertDomainSetting({
+      ...settings,
+      proxy: shouldBypassProxy(url.hostname, settings.proxy?.no_proxy)
+        ? undefined
+        : settings.proxy,
+    })
 
     if (E.isLeft(effective)) {
       throw effective.left

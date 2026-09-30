@@ -73,6 +73,7 @@
             :collections-type="collectionsType.type"
             :is-open="isOpen"
             :team-loading-collections="teamLoadingCollections"
+            :is-in-active-request-path="isActiveCollectionPath(node.id)"
             :export-loading="exportLoading"
             :has-no-team-access="hasNoTeamAccess || isShowingSearchResults"
             :collection-move-loading="collectionMoveLoading"
@@ -197,6 +198,7 @@
             :collections-type="collectionsType.type"
             :is-open="isOpen"
             :export-loading="exportLoading"
+            :is-in-active-request-path="isActiveCollectionPath(node.id)"
             :team-loading-collections="teamLoadingCollections"
             :has-no-team-access="hasNoTeamAccess || isShowingSearchResults"
             :collection-move-loading="collectionMoveLoading"
@@ -323,7 +325,9 @@
             :parent-i-d="node.data.data.parentIndex"
             :collections-type="collectionsType.type"
             :duplicate-request-loading="duplicateRequestLoading"
-            :is-active="isActiveRequest(node.data.data.data.id)"
+            :is-active="
+              isActiveRequest(getPath(node.id), node.data.data.data.id)
+            "
             :has-no-team-access="hasNoTeamAccess || isShowingSearchResults"
             :request-move-loading="requestMoveLoading"
             :is-last-item="node.data.isLastItem"
@@ -541,14 +545,16 @@ import { TeamRequest } from "~/helpers/teams/TeamRequest"
 import { ChildrenResult, SmartTreeAdapter } from "@hoppscotch/ui/helpers"
 import { cloneDeep } from "lodash-es"
 import { HoppGQLRequest, HoppRESTRequest } from "@hoppscotch/data"
-import { pipe } from "fp-ts/function"
-import * as O from "fp-ts/Option"
 import { Picked } from "~/helpers/types/HoppPicked.js"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import { useService } from "dioc/vue"
 import { TeamWorkspace } from "~/services/workspace.service"
 import { useDebounceFn } from "@vueuse/core"
 import { CurrentSortValuesService } from "~/services/current-sort.service"
+import {
+  isActiveSavedRequest,
+  isInActiveRequestPath,
+} from "~/helpers/collection/activeRequestPath"
 
 const t = useI18n()
 const colorMode = useColorMode()
@@ -888,20 +894,24 @@ const active = computed(
     tabs.currentActiveTab.value.document.saveContext
 )
 
-const isActiveRequest = (requestID: string) => {
-  if (!active.value) return false
-  return pipe(
-    active.value,
-    O.fromNullable,
-    O.filter(
-      (active) =>
-        active.originLocation === "team-collection" &&
-        active.requestID === requestID &&
-        active.exampleID === undefined
-    ),
-    O.isSome
-  )
-}
+const activeRequestPath = computed(() => {
+  const context = active.value
+  return !props.saveRequest &&
+    context &&
+    context.originLocation === "team-collection" &&
+    !!context.requestID &&
+    context.exampleID === undefined
+    ? context.collectionID
+    : undefined
+})
+
+const isActiveCollectionPath = (path: string) =>
+  !!activeRequestPath.value &&
+  isInActiveRequestPath(path, activeRequestPath.value)
+
+const isActiveRequest = (folderPath: string, requestID: string) =>
+  !props.saveRequest &&
+  isActiveSavedRequest(active.value, "team-collection", folderPath, requestID)
 
 const selectRequest = (data: {
   request: HoppRESTRequest
@@ -918,7 +928,7 @@ const selectRequest = (data: {
     emit("select-request", {
       request: request,
       requestIndex: requestIndex,
-      isActive: isActiveRequest(requestIndex),
+      isActive: isActiveRequest(data.folderPath ?? "", requestIndex),
       folderPath: data.folderPath ?? "",
     })
   }

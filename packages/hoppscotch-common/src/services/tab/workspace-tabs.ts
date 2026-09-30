@@ -314,11 +314,12 @@ export class WorkspaceTabsService extends TabService<HoppTabDocument> {
         ? tab.document.request._ref_id || tab.document.request.id
         : undefined)
 
-    // A lookup that names its request is authoritative — a tab with a
-    // different or missing identity is not that request, even at matching
-    // coordinates, which may have been reused since the tab was bound.
+    // Match both identity and folder: duplicated collections can contain
+    // requests with the same ID, but request indexes may drift within a folder.
     if (ctx?.requestRefID) {
-      return tabRefID === ctx.requestRefID
+      return (
+        tabCtx.folderPath === ctx.folderPath && tabRefID === ctx.requestRefID
+      )
     }
 
     // Position is all that's left when the lookup carries no identity

@@ -393,6 +393,7 @@
       "cookie_value": "Value",
       "empty_domain": "Domain is empty",
       "empty_domains": "Domain list is empty",
+      "enter_request_url": "Enter a valid HTTP(S) URL to view cookies for this request",
       "invalid_domain": "Domain has invalid characters",
       "enter_cookie_string": "Enter cookie string",
       "host_only": "HostOnly",
@@ -1321,7 +1322,7 @@
     "delete_account_description": "Once you delete your account, all your data will be permanently deleted. This action cannot be undone.",
     "desktop": "Desktop",
     "desktop_connection": "Connection",
-    "desktop_description": "Update behavior, connection timeouts, keyboard handling, and display preferences for the Hoppscotch desktop app.",
+    "desktop_description": "Connection timeouts, keyboard handling, and display preferences for the Hoppscotch desktop app.",
     "desktop_display": "Display",
     "desktop_keyboard": "Keyboard",
     "desktop_keyboard_strategy_label": "Match shortcuts by typed letter or physical position",
@@ -1459,6 +1460,8 @@
     "ca_certificates": "CA Certificates",
     "ca_certificates_support": "Hoppscotch supports .crt, .cer or .pem files containing one or more certificates.",
     "proxy_capabilities": "Hoppscotch Agent and Desktop App supports HTTP/HTTPS/SOCKS proxies with NTLM and Basic Auth support.",
+    "proxy_bypass": "Proxy Bypass",
+    "proxy_bypass_description": "Comma-separated hosts to bypass the proxy, e.g. localhost, .example.com.",
     "proxy_auth": "You can also include username and password in the URL."
   },
   "shared_requests": {

@@ -233,6 +233,7 @@ declare module 'vue' {
     HttpBodyParameters: typeof import('./components/http/BodyParameters.vue')['default']
     HttpCodegen: typeof import('./components/http/Codegen.vue')['default']
     HttpCodegenModal: typeof import('./components/http/CodegenModal.vue')['default']
+    HttpCookies: typeof import('./components/http/Cookies.vue')['default']
     HttpExampleLenseBodyRenderer: typeof import('./components/http/example/LenseBodyRenderer.vue')['default']
     HttpExampleResponse: typeof import('./components/http/example/Response.vue')['default']
     HttpExampleResponseMeta: typeof import('./components/http/example/ResponseMeta.vue')['default']

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TestContainer } from "dioc/testing"
 import { Cookie } from "@hoppscotch/data"
+import { computed, ref } from "vue"
 
 import { CookieJarService } from "../cookie-jar.service"
 
@@ -78,6 +79,29 @@ describe("CookieJarService", () => {
   })
 
   describe("getCookiesForURL", () => {
+    it("updates a request's cookie list after capture, URL changes, and deletion", async () => {
+      const requestURL = ref(new URL("https://example.com/private"))
+      const matching = computed(() =>
+        service.getCookiesForURL(requestURL.value)
+      )
+
+      expect(matching.value).toHaveLength(0)
+      await service.upsertCookies([
+        cookie({ name: "private", value: "1", path: "/private" }),
+        cookie({ name: "public", value: "2", path: "/public" }),
+      ])
+      expect(matching.value.map((entry) => entry.name)).toEqual(["private"])
+
+      requestURL.value = new URL("https://example.com/public")
+      expect(matching.value.map((entry) => entry.name)).toEqual(["public"])
+
+      await service.deleteCookies(matching.value)
+      expect(matching.value).toHaveLength(0)
+      expect(
+        service.getCookiesForURL(new URL("https://example.com/private"))
+      ).toHaveLength(1)
+    })
+
     it("matches the exact host per RFC 6265 5.1.3", async () => {
       await service.upsertCookies([cookie({ name: "a", value: "1" })])
       const cookies = service.getCookiesForURL(new URL("https://example.com/"))

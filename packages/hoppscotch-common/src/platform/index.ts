@@ -33,6 +33,26 @@ export type PlatformDef = {
     hasTelemetry: boolean
 
     /**
+     * Whether to show the unauthenticated Login and save-workspace actions.
+     */
+    showAuthButtons?: boolean
+
+    /**
+     * Whether to show Share tab request in request tab context menus.
+     */
+    showShareTabRequest?: boolean
+
+    /**
+     * Whether to show Shared Requests in the request sidebar.
+     */
+    showSharedRequests?: boolean
+
+    /**
+     * Whether Proxy is offered as an interceptor in the UI.
+     */
+    showProxyInterceptor?: boolean
+
+    /**
      *  Whether the platform supports cookies (affects whether the cookies footer item is shown)
      *  If a value is not given, then the value is assumed to be false
      */

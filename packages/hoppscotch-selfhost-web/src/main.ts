@@ -181,6 +181,10 @@ async function initApp() {
     platformFeatureFlags: {
       exportAsGIST: false,
       hasTelemetry: false,
+      showAuthButtons: platform !== "desktop",
+      showShareTabRequest: platform !== "desktop",
+      showSharedRequests: platform !== "desktop",
+      showProxyInterceptor: platform !== "desktop",
       cookiesEnabled: config.cookiesEnabled,
       promptAsUsingCookies: false,
       hasCookieBasedAuth: platform === "web",

@@ -72,9 +72,19 @@
           :model-value="domainSettings[selectedDomain].proxy.url"
           :placeholder="' '"
           :label="t('settings.proxy_url')"
-          input-styles="floating-input !border-0"
+          input-styles="input floating-input"
           @update:model-value="updateProxyUrl"
         />
+        <HoppSmartInput
+          :model-value="domainSettings[selectedDomain].proxy.no_proxy ?? ''"
+          :placeholder="' '"
+          :label="t('settings.proxy_bypass')"
+          input-styles="input floating-input"
+          @update:model-value="updateNoProxy"
+        />
+        <p class="my-1 text-secondaryLight">
+          {{ t("settings.proxy_bypass_description") }}
+        </p>
         <p class="my-1 text-secondaryLight">
           {{ t("settings.proxy_auth") }}
         </p>
@@ -83,14 +93,14 @@
             :model-value="domainSettings[selectedDomain].proxy.username"
             :placeholder="' '"
             :label="t('authorization.username')"
-            input-styles="floating-input !border-0"
+            input-styles="input floating-input"
             @update:model-value="updateProxyUsername"
           />
           <HoppSmartInput
             :model-value="domainSettings[selectedDomain].proxy.password"
             :placeholder="' '"
             :label="t('authorization.password')"
-            input-styles="floating-input !border-0"
+            input-styles="input floating-input"
             :type="showProxyPassword ? 'text' : 'password'"
             @update:model-value="updateProxyPassword"
           >
@@ -428,6 +438,13 @@ function updateProxyUrl(value: string) {
   const current = domainSettings[selectedDomain.value]?.proxy
   updateDomainSettings({
     proxy: { ...current, url: value },
+  })
+}
+
+function updateNoProxy(value: string) {
+  const current = domainSettings[selectedDomain.value]?.proxy
+  updateDomainSettings({
+    proxy: { ...current, no_proxy: value },
   })
 }
 
