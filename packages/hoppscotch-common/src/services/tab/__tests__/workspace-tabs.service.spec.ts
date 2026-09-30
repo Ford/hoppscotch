@@ -87,6 +87,49 @@ describe("WorkspaceTabsService", () => {
       expect(found?.value.id).toEqual(tab.id)
     })
 
+    it("opens a separate tab for a duplicated collection sharing a request ID", () => {
+      const service = makeService()
+      const original = openRequestTab(service, {
+        originLocation: "user-collection",
+        folderPath: "0",
+        requestIndex: 0,
+        requestRefID: "shared-id",
+      })
+
+      expect(
+        service.getTabRefWithSaveContext({
+          originLocation: "user-collection",
+          folderPath: "1",
+          requestIndex: 0,
+          requestRefID: "shared-id",
+        })
+      ).toBeNull()
+
+      const copy = openRequestTab(service, {
+        originLocation: "user-collection",
+        folderPath: "1",
+        requestIndex: 0,
+        requestRefID: "shared-id",
+      })
+
+      expect(
+        service.getTabRefWithSaveContext({
+          originLocation: "user-collection",
+          folderPath: "0",
+          requestIndex: 0,
+          requestRefID: "shared-id",
+        })?.value.id
+      ).toBe(original.id)
+      expect(
+        service.getTabRefWithSaveContext({
+          originLocation: "user-collection",
+          folderPath: "1",
+          requestIndex: 0,
+          requestRefID: "shared-id",
+        })?.value.id
+      ).toBe(copy.id)
+    })
+
     it("does not match a tab holding a different request at the same position", () => {
       const service = makeService()
 
@@ -322,6 +365,34 @@ describe("WorkspaceTabsService", () => {
       })
 
       expect(found.map((tab) => tab.value.id)).toEqual([first.id, second.id])
+    })
+
+    it("does not include a request from a different collection with the same ID", () => {
+      const service = makeService()
+
+      const original = openRequestTab(service, {
+        originLocation: "user-collection",
+        folderPath: "0",
+        requestIndex: 0,
+        requestRefID: "shared-id",
+      })
+      openRequestTab(service, {
+        originLocation: "user-collection",
+        folderPath: "1",
+        requestIndex: 0,
+        requestRefID: "shared-id",
+      })
+
+      expect(
+        service
+          .getTabsRefWithSaveContext({
+            originLocation: "user-collection",
+            folderPath: "0",
+            requestIndex: 0,
+            requestRefID: "shared-id",
+          })
+          .map((tab) => tab.value.id)
+      ).toEqual([original.id])
     })
 
     it("returns an empty array when nothing matches", () => {

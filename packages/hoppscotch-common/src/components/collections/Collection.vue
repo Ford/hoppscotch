@@ -21,7 +21,12 @@
         }"
       ></div>
       <div
-        class="z-[3] group pointer-events-auto relative flex cursor-pointer items-stretch"
+        class="z-[3] group pointer-events-auto relative flex cursor-pointer items-stretch border-l-2"
+        :class="
+          isInActiveRequestPath
+            ? 'border-accent bg-accent/10'
+            : 'border-transparent'
+        "
         :draggable="!hasNoTeamAccess"
         @dragstart="dragStart"
         @drop="handelDrop($event)"
@@ -393,6 +398,7 @@ const props = withDefaults(
     folderType: FolderType
     isOpen: boolean
     isSelected?: boolean | null
+    isInActiveRequestPath?: boolean
     exportLoading?: boolean
     hasNoTeamAccess?: boolean
     collectionMoveLoading?: string[]
@@ -407,6 +413,7 @@ const props = withDefaults(
     folderType: "collection",
     isOpen: false,
     isSelected: false,
+    isInActiveRequestPath: false,
     exportLoading: false,
     hasNoTeamAccess: false,
     isLastItem: false,

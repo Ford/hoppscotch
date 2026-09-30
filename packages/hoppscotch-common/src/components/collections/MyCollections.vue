@@ -52,6 +52,7 @@
             :collections-type="collectionsType.type"
             :is-open="isOpen"
             :is-last-item="node.data.isLastItem"
+            :is-in-active-request-path="isActiveCollectionPath(node.id)"
             :is-selected="
               isSelected({
                 collectionIndex: parseInt(node.id),
@@ -164,6 +165,7 @@
             :collections-type="collectionsType.type"
             :is-open="isOpen"
             :is-last-item="node.data.isLastItem"
+            :is-in-active-request-path="isActiveCollectionPath(node.id)"
             :is-selected="
               isSelected({
                 folderPath: node.id,
@@ -483,13 +485,15 @@ import { GetMyTeamsQuery } from "~/helpers/backend/graphql"
 import { ChildrenResult, SmartTreeAdapter } from "@hoppscotch/ui/helpers"
 import { useI18n } from "@composables/i18n"
 import { useColorMode } from "@composables/theming"
-import { pipe } from "fp-ts/function"
-import * as O from "fp-ts/Option"
 import { Picked } from "~/helpers/types/HoppPicked.js"
 import { useService } from "dioc/vue"
 import { WorkspaceTabsService } from "~/services/tab/workspace-tabs"
 import { useDebounceFn } from "@vueuse/core"
 import { CurrentSortValuesService } from "~/services/current-sort.service"
+import {
+  isActiveSavedRequest,
+  isInActiveRequestPath,
+} from "~/helpers/collection/activeRequestPath"
 
 export type Collection = {
   type: "collections"
@@ -796,22 +800,29 @@ const active = computed(
     tabs.currentActiveTab.value.document.saveContext
 )
 
-const isActiveRequest = (folderPath: string, requestRefID: string) => {
-  if (active.value === null || !active.value) return false
+const activeRequestPath = computed(() => {
+  const context = active.value
+  return !props.saveRequest &&
+    context &&
+    context.originLocation === "user-collection" &&
+    !!context.requestRefID &&
+    context.exampleID === undefined
+    ? context.folderPath
+    : undefined
+})
 
-  return pipe(
+const isActiveCollectionPath = (path: string) =>
+  !!activeRequestPath.value &&
+  isInActiveRequestPath(path, activeRequestPath.value)
+
+const isActiveRequest = (folderPath: string, requestRefID: string) =>
+  !props.saveRequest &&
+  isActiveSavedRequest(
     active.value,
-    O.fromNullable,
-    O.filter(
-      (active) =>
-        active.originLocation === "user-collection" &&
-        active.folderPath === folderPath &&
-        active.requestRefID === requestRefID &&
-        active.exampleID === undefined
-    ),
-    O.isSome
+    "user-collection",
+    folderPath,
+    requestRefID
   )
-}
 
 const selectRequest = (data: {
   request: HoppRESTRequest | HoppGQLRequest
