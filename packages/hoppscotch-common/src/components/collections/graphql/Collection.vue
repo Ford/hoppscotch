@@ -1,7 +1,13 @@
 <template>
   <div class="flex flex-col" :class="[{ 'bg-primaryLight': dragging }]">
     <div
-      class="group flex items-stretch"
+      class="group flex items-stretch border-l-2"
+      :class="
+        activeRequestFolderPath &&
+        isInActiveRequestPath(folderPath, activeRequestFolderPath)
+          ? 'border-accent bg-accent/10'
+          : 'border-transparent'
+      "
       @dragover.prevent
       @drop.prevent="dropEvent"
       @dragover="dragging = true"
@@ -182,6 +188,7 @@
           :folder-path="`${collectionIndex}/${String(index)}`"
           :collection-index="collectionIndex"
           :is-filtered="isFiltered"
+          :active-request-folder-path="activeRequestFolderPath"
           @add-request="$emit('add-request', $event)"
           @add-folder="$emit('add-folder', $event)"
           @edit-folder="$emit('edit-folder', $event)"
@@ -253,6 +260,7 @@ import { removeGraphqlCollection } from "~/newstore/collections"
 import { flushLocalStoresForCollectionTree } from "~/helpers/clientLocalVariables"
 import { handleTokenValidation } from "~/helpers/handleTokenValidation"
 import { GQLTabService } from "~/services/tab/graphql"
+import { isInActiveRequestPath } from "~/helpers/collection/activeRequestPath"
 import IconCheckCircle from "~icons/lucide/check-circle"
 import IconCopy from "~icons/lucide/copy"
 import IconEdit from "~icons/lucide/edit"
@@ -272,6 +280,7 @@ const props = defineProps<{
   collection: HoppCollection
   isFiltered: boolean
   folderPath: string
+  activeRequestFolderPath?: string
 }>()
 
 const colorMode = useColorMode()

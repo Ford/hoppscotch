@@ -51,6 +51,7 @@
         :collection="collection"
         :is-filtered="filterText.length > 0"
         :save-request="saveRequest"
+        :active-request-folder-path="activeRequestFolderPath"
         @edit-collection="editCollection(collection, index)"
         @add-request="addRequest($event)"
         @add-folder="addFolder($event)"
@@ -203,7 +204,7 @@ import { handleTokenValidation } from "~/helpers/handleTokenValidation"
 const t = useI18n()
 const toast = useToast()
 
-defineProps<{
+const props = defineProps<{
   // Whether to activate the ability to pick items (activates 'select' events)
   saveRequest: boolean
   picked: Picked | null
@@ -212,6 +213,13 @@ defineProps<{
 const collections = useReadonlyStream(graphqlCollections$, [], "deep")
 const colorMode = useColorMode()
 const tabs = useService(GQLTabService)
+const activeRequestFolderPath = computed(() => {
+  const document = tabs.currentActiveTab.value.document
+  const context = document.saveContext
+  return !props.saveRequest && context?.originLocation === "user-collection"
+    ? context.folderPath
+    : undefined
+})
 
 const showModalAdd = ref(false)
 const showModalEdit = ref(false)
