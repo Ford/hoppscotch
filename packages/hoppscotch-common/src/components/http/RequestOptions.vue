@@ -57,6 +57,13 @@
       />
     </HoppSmartTab>
     <HoppSmartTab
+      v-if="showCookieTab && platform.platformFeatureFlags.cookiesEnabled"
+      :id="'cookies'"
+      :label="t('tab.cookies')"
+    >
+      <HttpCookies :url="cookieUrl ?? request.endpoint" />
+    </HoppSmartTab>
+    <HoppSmartTab
       v-if="showPreRequestScriptTab"
       :id="'preRequestScript'"
       :label="`${t('tab.pre_request_script')}`"
@@ -114,12 +121,14 @@ import { defineActionHandler } from "~/helpers/actions"
 import { hasActualScript } from "@hoppscotch/js-sandbox/scripting"
 import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
 import { AggregateEnvironment } from "~/newstore/environments"
+import { platform } from "~/platform"
 
 const _VALID_OPTION_TABS = [
   "params",
   "bodyParams",
   "headers",
   "authorization",
+  "cookies",
   "preRequestScript",
   "tests",
   "requestVariables",
@@ -139,10 +148,14 @@ const props = withDefaults(
     envs?: AggregateEnvironment[]
     // Embed-only codemirror scope — `envs` alone must keep workspace editors live
     scopedEnvs?: AggregateEnvironment[]
+    showCookieTab?: boolean
+    cookieUrl?: string
   }>(),
   {
     optionTab: "params",
     scopedEnvs: undefined,
+    showCookieTab: false,
+    cookieUrl: undefined,
   }
 )
 
