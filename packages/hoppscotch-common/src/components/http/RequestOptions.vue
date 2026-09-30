@@ -57,13 +57,6 @@
       />
     </HoppSmartTab>
     <HoppSmartTab
-      v-if="showCookieTab && platform.platformFeatureFlags.cookiesEnabled"
-      :id="'cookies'"
-      :label="t('tab.cookies')"
-    >
-      <HttpCookies :url="cookieUrl ?? request.endpoint" />
-    </HoppSmartTab>
-    <HoppSmartTab
       v-if="showPreRequestScriptTab"
       :id="'preRequestScript'"
       :label="`${t('tab.pre_request_script')}`"
@@ -104,6 +97,13 @@
       :align-last="true"
     >
       <HttpRequestVariables v-model="request.requestVariables" />
+    </HoppSmartTab>
+    <HoppSmartTab
+      v-if="showCookieTab && platform.platformFeatureFlags.cookiesEnabled"
+      :id="'cookies'"
+      :label="t('app.cookies')"
+    >
+      <HttpCookies :url="cookieUrl ?? request.endpoint" />
     </HoppSmartTab>
   </HoppSmartTabs>
 </template>

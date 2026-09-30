@@ -4,7 +4,7 @@
       class="flex items-center justify-between border-b border-dividerLight px-4"
     >
       <span class="truncate font-semibold text-secondaryLight">
-        {{ t("tab.cookies") }}
+        {{ t("app.cookies") }}
       </span>
       <HoppButtonSecondary
         v-if="cookies.length > 0"
