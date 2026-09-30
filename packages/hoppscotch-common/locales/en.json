@@ -393,6 +393,7 @@
       "cookie_value": "Value",
       "empty_domain": "Domain is empty",
       "empty_domains": "Domain list is empty",
+      "enter_request_url": "Enter a valid HTTP(S) URL to view cookies for this request",
       "invalid_domain": "Domain has invalid characters",
       "enter_cookie_string": "Enter cookie string",
       "host_only": "HostOnly",

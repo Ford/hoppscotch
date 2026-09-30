@@ -7,6 +7,8 @@
         v-model:option-tab="tab.document.optionTabPreference!"
         v-model:inherited-properties="tab.document.inheritedProperties"
         :envs="resolvedEnvs"
+        :cookie-url="resolvedCookieURL"
+        show-cookie-tab
       />
     </template>
     <template #secondary>
@@ -23,7 +25,7 @@
 import { watch, computed } from "vue"
 import { useVModel } from "@vueuse/core"
 import { cloneDeep } from "lodash-es"
-import { isEqualHoppRESTRequest } from "@hoppscotch/data"
+import { isEqualHoppRESTRequest, parseTemplateString } from "@hoppscotch/data"
 import { HoppTab } from "~/services/tab"
 import { HoppRequestDocument } from "~/helpers/tab/document"
 import { useReadonlyStream } from "@composables/stream"
@@ -59,6 +61,20 @@ const resolvedEnvs = computed(() => {
     false
   )
 })
+
+const resolvedCookieURL = computed(() =>
+  parseTemplateString(
+    tab.value.document.request.endpoint,
+    getEffectiveVariablesForRequest(
+      tab.value.document.request.requestVariables,
+      tab.value.document.inheritedProperties?.variables,
+      envs.value
+    ),
+    false,
+    false,
+    true
+  )
+)
 
 // TODO: Come up with a better dirty check
 let oldRequest = cloneDeep(tab.value.document.request)
