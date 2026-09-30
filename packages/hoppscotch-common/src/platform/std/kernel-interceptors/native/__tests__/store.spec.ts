@@ -31,13 +31,15 @@ describe("native interceptor proxy bypass", () => {
         version: "HTTP/1.1",
       })
 
-    expect(request("http://localhost:3000").proxy).toBeUndefined()
-    expect(request("https://EXAMPLE.com").proxy).toBeUndefined()
-    expect(request("https://api.example.com:8443").proxy).toBeUndefined()
-    expect(request("https://notexample.com").proxy?.url).toBe(
+    expect((await request("http://localhost:3000")).proxy).toBeUndefined()
+    expect((await request("https://EXAMPLE.com")).proxy).toBeUndefined()
+    expect(
+      (await request("https://api.example.com:8443")).proxy
+    ).toBeUndefined()
+    expect((await request("https://notexample.com")).proxy?.url).toBe(
       "http://proxy.example:8080"
     )
-    expect(request("https://example.com.evil.test").proxy?.url).toBe(
+    expect((await request("https://example.com.evil.test")).proxy?.url).toBe(
       "http://proxy.example:8080"
     )
     expect(store.getDomainSettings("*").proxy?.url).toBe(
@@ -46,7 +48,7 @@ describe("native interceptor proxy bypass", () => {
     expect(store.getDomainSettings("*").proxy?.no_proxy).toBe(
       " localhost, .example.com, "
     )
-    expect(request("https://other.test").proxy?.url).toBe(
+    expect((await request("https://other.test")).proxy?.url).toBe(
       "http://proxy.example:8080"
     )
     expect(Store.set).toHaveBeenCalledWith(
@@ -76,12 +78,14 @@ describe("native interceptor proxy bypass", () => {
     })
 
     expect(
-      store.completeRequest({
-        id: 1,
-        url: "https://api.example.com",
-        method: "GET",
-        version: "HTTP/1.1",
-      }).proxy?.url
+      (
+        await store.completeRequest({
+          id: 1,
+          url: "https://api.example.com",
+          method: "GET",
+          version: "HTTP/1.1",
+        })
+      ).proxy?.url
     ).toBe("http://proxy.example:8080")
   })
 
@@ -100,10 +104,10 @@ describe("native interceptor proxy bypass", () => {
         version: "HTTP/1.1",
       })
 
-    expect(request().proxy?.url).toBe("http://proxy.example:8080")
+    expect((await request()).proxy?.url).toBe("http://proxy.example:8080")
     await store.saveDomainSettings("*", {
       proxy: { url: "http://proxy.example:8080", no_proxy: " , . , " },
     })
-    expect(request().proxy?.url).toBe("http://proxy.example:8080")
+    expect((await request()).proxy?.url).toBe("http://proxy.example:8080")
   })
 })
