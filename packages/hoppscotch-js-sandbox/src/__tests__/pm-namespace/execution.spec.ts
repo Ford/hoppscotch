@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest"
-import { runTest, runPreRequest } from "~/utils/test-helpers"
+import {
+  runPreRequest,
+  runPreRequestAndGetNextRequest,
+  runTest,
+  runTestAndGetNextRequest,
+} from "~/utils/test-helpers"
 
 describe("pm.execution namespace", () => {
   test("pm.execution.location returns Hoppscotch array in test script", () => {
@@ -68,6 +73,65 @@ describe("pm.execution namespace", () => {
         global: [],
         selected: [],
       })
+    )
+  })
+
+  test("pm.execution.setNextRequest stores next request in pre-request script", () => {
+    return expect(
+      runPreRequestAndGetNextRequest(
+        `pm.execution.setNextRequest("next-request")`,
+        {
+          global: [],
+          selected: [],
+        }
+      )()
+    ).resolves.toEqualRight(
+      "next-request"
+    )
+  })
+
+  test("pm.setNextRequest alias stores next request in test script", () => {
+    return expect(
+      runTestAndGetNextRequest(
+        `pm.setNextRequest("next-request")`,
+        {
+          global: [],
+          selected: [],
+        }
+      )()
+    ).resolves.toEqualRight(
+      "next-request"
+    )
+  })
+
+  test("pm.execution.setNextRequest accepts null to stop after current request", () => {
+    return expect(
+      runTestAndGetNextRequest(
+        `pm.execution.setNextRequest(null)`,
+        {
+          global: [],
+          selected: [],
+        }
+      )()
+    ).resolves.toEqualRight(
+      null
+    )
+  })
+
+  test("last setNextRequest call wins within a script", () => {
+    return expect(
+      runTestAndGetNextRequest(
+        `
+          pm.execution.setNextRequest("first-request")
+          pm.setNextRequest("second-request")
+        `,
+        {
+          global: [],
+          selected: [],
+        }
+      )()
+    ).resolves.toEqualRight(
+      "second-request"
     )
   })
 })
