@@ -933,6 +933,11 @@ export async function runTestRunnerRequest(
       response: HoppRESTResponse
       testResult: HoppTestResult
       updatedRequest: HoppRESTRequest
+      /**
+       * Target set by `pm.execution.setNextRequest()` in a script.
+       * `undefined` when unset, `null` when the script asked to end the run.
+       */
+      nextRequest?: string | null
     }>
   | undefined
 > {
@@ -1087,10 +1092,19 @@ export async function runTestRunnerRequest(
               )
             }
 
+            // A test script's call wins over the pre-request script's, since
+            // it runs last; fall back to the pre-request script's target when
+            // the test script never called `setNextRequest()`.
+            const nextRequest =
+              postRequestScriptResult.right.nextRequest !== undefined
+                ? postRequestScriptResult.right.nextRequest
+                : preRequestScriptResult.right.nextRequest
+
             return E.right({
               response: res,
               testResult: sandboxTestResult,
               updatedRequest: finalRequest,
+              nextRequest,
             })
           }
 
@@ -1123,6 +1137,7 @@ export async function runTestRunnerRequest(
             response: res,
             testResult: sandboxTestResult,
             updatedRequest: finalRequest,
+            nextRequest: preRequestScriptResult.right.nextRequest,
           })
         }
       })

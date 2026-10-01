@@ -106,6 +106,14 @@ function delay(timeMS: number) {
 export class TestRunnerService extends Service {
   public static readonly ID = "TEST_RUNNER_SERVICE"
 
+  /**
+   * Upper bound on `pm.execution.setNextRequest()` redirections per iteration.
+   * Jumping backwards is legitimate (retry loops), so the run is capped rather
+   * than forbidden — without this a script that ping-pongs between two
+   * requests would spin forever.
+   */
+  private static readonly MAX_NEXT_REQUEST_JUMPS = 1000
+
   private createEmptyMeta(): TestRunnerMeta {
     return {
       totalRequests: 0,
@@ -493,8 +501,34 @@ export class TestRunnerService extends Service {
   }
 
   /**
+   * Resolves the target of a `pm.execution.setNextRequest()` call to an index
+   * in the plan. Postman matches on request name, so that is tried first;
+   * selection ID and request ID are accepted too, which lets scripts target a
+   * specific occurrence when several requests share a name.
+   *
+   * Returns -1 when nothing matches.
+   */
+  private resolveNextRequestIndex(
+    plan: PlannedRequest[],
+    target: string
+  ): number {
+    const byIdentifier = plan.findIndex(
+      (entry) =>
+        entry.id === target || (entry.request as { id?: string }).id === target
+    )
+
+    if (byIdentifier !== -1) return byIdentifier
+
+    return plan.findIndex((entry) => entry.request.name === target)
+  }
+
+  /**
    * Runs a plan in the given order, which is the user's run sequence when they
    * set one and plain collection order otherwise.
+   *
+   * `pm.execution.setNextRequest()` can redirect the run: a name/ID jumps to
+   * that entry, and `null` ends the iteration early. Jumps are capped so a
+   * script that loops between two requests can't hang the runner.
    */
   private async runPlan(
     tab: Ref<HoppTab<HoppTestRunnerDocument>>,
@@ -505,13 +539,18 @@ export class TestRunnerService extends Service {
     iterationEnvState?: InitialEnvironmentState
   ) {
     try {
-      for (const [index, entry] of plan.entries()) {
+      let index = 0
+      let jumps = 0
+
+      while (index < plan.length) {
         if (options.stopRef?.value) {
           tab.value.document.status = "stopped"
           throw new Error("Test execution stopped")
         }
 
-        await this.runTestRequest(
+        const entry = plan[index]
+
+        const nextRequest = await this.runTestRequest(
           tab,
           entry.request,
           entry.collection,
@@ -537,6 +576,36 @@ export class TestRunnerService extends Service {
             }
           }
         }
+
+        // `setNextRequest(null)` ends this iteration without failing the run.
+        if (nextRequest === null) {
+          return
+        }
+
+        if (typeof nextRequest === "string") {
+          const nextIndex = this.resolveNextRequestIndex(plan, nextRequest)
+
+          if (nextIndex === -1) {
+            // Postman ignores unknown targets and carries on in order.
+            console.warn(
+              `[Test Runner] setNextRequest("${nextRequest}") did not match any request in this run; continuing in order.`
+            )
+          } else {
+            jumps++
+
+            if (jumps > TestRunnerService.MAX_NEXT_REQUEST_JUMPS) {
+              tab.value.document.status = "error"
+              throw new Error(
+                `Test execution stopped: setNextRequest() exceeded ${TestRunnerService.MAX_NEXT_REQUEST_JUMPS} jumps, which usually means the scripts form an infinite loop.`
+              )
+            }
+
+            index = nextIndex
+            continue
+          }
+        }
+
+        index++
       }
     } catch (error) {
       if (isStopSignal(error)) {
@@ -599,7 +668,7 @@ export class TestRunnerService extends Service {
     inheritedTestScripts: string[] = [],
     iterationEnvState?: InitialEnvironmentState,
     inheritedHeaders: HoppRESTHeaders = []
-  ) {
+  ): Promise<string | null | undefined> {
     if (options.stopRef?.value) {
       throw new Error("Test execution stopped")
     }
@@ -608,7 +677,7 @@ export class TestRunnerService extends Service {
     // shaped as HoppRESTResponse so the shared result UI renders it) with
     // the same script stages as REST.
     if (isGQLRequest(request)) {
-      return this.runTestGQLRequest(
+      await this.runTestGQLRequest(
         tab,
         request as HoppGQLRequest,
         options,
@@ -621,6 +690,10 @@ export class TestRunnerService extends Service {
         inheritedTestScripts,
         iterationEnvState
       )
+
+      // GQL runs don't take part in `setNextRequest()` jumps; the run
+      // continues in plan order.
+      return undefined
     }
 
     try {
@@ -656,7 +729,8 @@ export class TestRunnerService extends Service {
       }
 
       if (results && E.isRight(results)) {
-        const { response, testResult, updatedRequest } = results.right
+        const { response, testResult, updatedRequest, nextRequest } =
+          results.right
         const { passed, failed } = this.getTestResultInfo(testResult)
 
         tab.value.document.testRunnerMeta.totalTests += passed + failed
@@ -691,24 +765,25 @@ export class TestRunnerService extends Service {
           tab.value.document.status = "stopped"
           throw new Error("Test execution stopped due to error")
         }
-      } else {
-        const errorMsg = "Request execution failed"
 
-        // Update request with error in the result collection
-        this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
-          error: errorMsg,
-          isLoading: false,
-          response: {
-            type: "network_fail",
-            error: "Unknown",
-            req: request,
-          },
-        })
+        return nextRequest
+      }
+      const errorMsg = "Request execution failed"
 
-        if (options.stopOnError) {
-          tab.value.document.status = "stopped"
-          throw new Error("Test execution stopped due to error")
-        }
+      // Update request with error in the result collection
+      this.updateRequestAtPath(tab.value.document.resultCollection!, path, {
+        error: errorMsg,
+        isLoading: false,
+        response: {
+          type: "network_fail",
+          error: "Unknown",
+          req: request,
+        },
+      })
+
+      if (options.stopOnError) {
+        tab.value.document.status = "stopped"
+        throw new Error("Test execution stopped due to error")
       }
     } catch (error) {
       if (isStopSignal(error)) {
