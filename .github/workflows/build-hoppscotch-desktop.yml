@@ -46,10 +46,12 @@ jobs:
         run: |
           echo "PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           echo "OPENSSL_SRC_PERL=$((where.exe perl)[0])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 22.12.0
+      - uses: pnpm/action-setup@v4
+      - name: Verify pnpm installation
+        run: pnpm --version
       - uses: dtolnay/rust-toolchain@nightly
       - name: Download trusted-signing-cli
         if: ${{ inputs.disable_signing != true }}
@@ -174,10 +176,12 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ inputs.repository == github.repository && github.token || secrets.CHECKOUT_GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 22.12.0
+      - uses: pnpm/action-setup@v4
+      - name: Verify pnpm installation
+        run: pnpm --version
       - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add x86_64-apple-darwin
@@ -266,10 +270,12 @@ jobs:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.tag != '' && inputs.tag || inputs.branch }}
           token: ${{ inputs.repository == github.repository && github.token || secrets.CHECKOUT_GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 22.12.0
+      - uses: pnpm/action-setup@v4
+      - name: Verify pnpm installation
+        run: pnpm --version
       - uses: dtolnay/rust-toolchain@nightly
       - name: Install Rust target
         run: rustup target add aarch64-apple-darwin
