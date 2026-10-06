@@ -34,7 +34,7 @@ env:
   BUNDLER_PATH: ${{ github.workspace }}/packages/hoppscotch-desktop/crates/webapp-bundler
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
         with:
@@ -89,18 +89,29 @@ jobs:
             Copy-Item ${{ env.WORKSPACE_PATH }}\.env.example ${{ env.WORKSPACE_PATH }}\.env
             Write-Host "No .env found, copied from .env.example template"
           }
-          pnpm install -f --shamefully-hoist --ignore-scripts
-          pnpm --filter hoppscotch-backend exec prisma generate
-          pnpm install -f --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
+      - name: Install workspace dependencies without scripts
+        shell: pwsh
+        run: pnpm install -f --shamefully-hoist --ignore-scripts
+      - name: Generate Prisma client
+        shell: pwsh
+        env:
+          # Client generation requires a URL but does not connect to a database.
+          DATABASE_URL: postgresql://localhost:5432/placeholder
+        run: pnpm --filter hoppscotch-backend exec prisma generate
+      - name: Install desktop dependencies
+        shell: pwsh
+        run: pnpm install -f --shamefully-hoist --dir ${{ env.DESKTOP_PATH }}
       - name: Build web app
         shell: pwsh
         run: |
           pnpm install --dir ${{ env.WEB_PATH }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm --dir ${{ env.WEB_PATH }} generate
       - name: Build and run webapp-bundler
         shell: pwsh
         run: |
           cargo build --release --manifest-path ${{ env.BUNDLER_PATH }}\Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ${{ env.BUNDLER_PATH }}\target\release\webapp-bundler.exe `
             --input ${{ env.WEB_PATH }}\dist `
             --output ${{ env.DESKTOP_PATH }}\bundle.zip `
