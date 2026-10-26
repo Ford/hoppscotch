@@ -67,6 +67,24 @@
         class="px-4"
       />
       <div
+        v-else-if="element.type === 'readonly'"
+        class="flex flex-1 items-center"
+      >
+        <label class="flex items-center ml-4 text-secondaryLight min-w-[6rem]">
+          {{ element.label }}
+        </label>
+        <span class="flex-1 truncate px-4 py-2 text-secondaryLight select-all">
+          {{ element.ref.value }}
+        </span>
+        <HoppButtonSecondary
+          v-tippy="{ theme: 'tooltip' }"
+          :title="t('action.copy')"
+          :icon="IconCopy"
+          class="mr-2"
+          @click="copyReadonlyValue(element.ref.value)"
+        />
+      </div>
+      <div
         v-else-if="element.type === 'checkbox'"
         class="px-4 py-2 flex items-center"
       >
@@ -537,13 +555,22 @@
         @click="refreshOauthToken()"
       />
     </div>
+
+    <HttpAuthorizationOAuth2PasteRedirect
+      :show="pasteRedirect.show"
+      :callback-url="pasteRedirect.redirectURI"
+      :loading="pasteRedirect.loading"
+      @submit="onPastedRedirectURL"
+      @open-again="openExternalLoginPage"
+      @cancel="cancelExternalLogin"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { HoppGQLAuthOAuth2, HoppRESTAuthOAuth2 } from "@hoppscotch/data"
 import { useService } from "dioc/vue"
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, reactive, ref } from "vue"
 import { useI18n } from "~/composables/i18n"
 import { useOAuth2AdvancedParams } from "~/composables/oauth2/useOAuth2AdvancedParams"
 import { useOAuth2GrantTypes } from "~/composables/oauth2/useOAuth2GrantTypes"
@@ -560,6 +587,16 @@ import {
   grantTypesInvolvingRedirect,
   PersistedOAuthConfig,
 } from "~/services/oauth/oauth.service"
+import {
+  canCaptureInDesktopWindow,
+  captureRedirectInDesktopWindow,
+  clearExternalAuthCodeFlow,
+  completeExternalAuthCodeFlow,
+  isTerminalDesktopCaptureError,
+} from "~/services/oauth/external-callback"
+import { translateOAuthRedirectError } from "~/services/oauth/errors"
+import type { AuthCodeInitResult } from "~/services/oauth/flows/authCode"
+import { platform } from "~/platform"
 import * as E from "fp-ts/Either"
 import { PersistenceService } from "~/services/persistence"
 import { GQLTabService } from "~/services/tab/graphql"
@@ -568,10 +605,17 @@ import IconChevronDown from "~icons/lucide/chevron-down"
 import IconChevronUp from "~icons/lucide/chevron-up"
 import IconCircle from "~icons/lucide/circle"
 import IconCircleDot from "~icons/lucide/circle-dot"
+import IconCopy from "~icons/lucide/copy"
 import IconPlus from "~icons/lucide/plus"
+import { copyToClipboard } from "~/helpers/utils/clipboard"
 
 const t = useI18n()
 const toast = useToast()
+
+const copyReadonlyValue = (value: string) => {
+  copyToClipboard(value)
+  toast.success(t("state.copied_to_clipboard"))
+}
 
 const addToTargets = [
   {
@@ -591,6 +635,7 @@ const getPlaceholderForField = (fieldId: string): string => {
     clientId: "your_client_id_here",
     clientSecret: "your_client_secret_here",
     scopes: "read write",
+    redirectURI: "https://example.com/callback",
     username: "your_username",
     password: "your_password",
   }
@@ -819,8 +864,106 @@ const generateOAuthToken = async () => {
 
       return
     }
+
+    if (res && isExternalAuthCodeResult(res.right)) {
+      await startExternalLogin(res.right)
+    }
   } finally {
     isGeneratingToken.value = false
   }
+}
+
+type ExternalAuthCodeResult = Extract<AuthCodeInitResult, { mode: "external" }>
+
+const isExternalAuthCodeResult = (
+  value: unknown
+): value is ExternalAuthCodeResult =>
+  !!value &&
+  typeof value === "object" &&
+  "mode" in value &&
+  value.mode === "external"
+
+// Option A (paste redirect URL) state
+const pasteRedirect = reactive({
+  show: false,
+  loading: false,
+  authUrl: "",
+  redirectURI: "",
+})
+
+const openExternalLoginPage = () => {
+  if (pasteRedirect.authUrl) {
+    platform.kernelIO.openExternalLink({ url: pasteRedirect.authUrl })
+  }
+}
+
+const finishExternalLogin = async (callbackURL: string) => {
+  const res = await completeExternalAuthCodeFlow(callbackURL)
+
+  await clearExternalAuthCodeFlow()
+
+  if (E.isLeft(res)) {
+    toast.error(translateOAuthRedirectError(t, res.left))
+    return false
+  }
+
+  setAccessTokenInActiveContext(res.right.access_token, res.right.refresh_token)
+  toast.success(t("authorization.oauth.token_fetched_successfully"))
+  return true
+}
+
+/**
+ * Custom callback URL flow: Option B (desktop login window capturing the
+ * redirect) when available, otherwise Option A (paste the redirected URL).
+ */
+const startExternalLogin = async ({
+  authUrl,
+  redirectURI,
+}: ExternalAuthCodeResult) => {
+  if (canCaptureInDesktopWindow()) {
+    toast.info(t("authorization.oauth.external_login_window_hint"))
+
+    const captured = await captureRedirectInDesktopWindow(authUrl, redirectURI)
+
+    if (E.isRight(captured)) {
+      await finishExternalLogin(captured.right)
+      return
+    }
+
+    if (isTerminalDesktopCaptureError(captured.left)) {
+      await clearExternalAuthCodeFlow()
+      toast.error(
+        captured.left === "TIMEOUT"
+          ? t("authorization.oauth.external_login_timeout")
+          : t("authorization.oauth.external_login_cancelled")
+      )
+      return
+    }
+
+    // e.g. an older desktop shell without the capture command
+  }
+
+  pasteRedirect.authUrl = authUrl
+  pasteRedirect.redirectURI = redirectURI
+  pasteRedirect.loading = false
+  pasteRedirect.show = true
+
+  openExternalLoginPage()
+}
+
+const onPastedRedirectURL = async (callbackURL: string) => {
+  pasteRedirect.loading = true
+
+  try {
+    await finishExternalLogin(callbackURL)
+  } finally {
+    pasteRedirect.loading = false
+    pasteRedirect.show = false
+  }
+}
+
+const cancelExternalLogin = async () => {
+  pasteRedirect.show = false
+  await clearExternalAuthCodeFlow()
 }
 </script>

@@ -33,11 +33,22 @@ export const OAuth2AdvancedParam = z.object({
 // omit sendIn from OAuth2AuthRequestParam
 export const OAuth2AuthRequestParam = OAuth2AdvancedParam.omit({ sendIn: true })
 
+export const OAuth2ClientAuthentication = z.enum([
+  "AS_BASIC_AUTH_HEADERS",
+  "IN_BODY",
+])
+
 export const AuthCodeGrantTypeParams = AuthCodeGrantTypeParamsOld.extend({
   authRequestParams: z.array(OAuth2AuthRequestParam).optional().default([]),
   tokenRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
   refreshRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
   tokenType: z.enum(["access_token", "id_token"]).optional().catch("access_token"),
+  // Optional (no schema version bump) so older clients sharing the same
+  // workspace keep parsing the data. `undefined` means the pre-existing
+  // behaviour: Hoppscotch's own `/oauth` callback and credentials in the body.
+  useBrowserCallback: z.boolean().optional().catch(true),
+  redirectURI: z.string().optional().catch(""),
+  clientAuthentication: OAuth2ClientAuthentication.optional().catch("IN_BODY"),
 })
 
 export const ClientCredentialsGrantTypeParams =

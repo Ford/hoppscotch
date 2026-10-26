@@ -274,6 +274,64 @@ type PMRequestAuthDef<
 const getVariableValue = (defs: VariableDefinition[], key: string) =>
   defs.find((param) => param.key === key)?.value as string | undefined
 
+// Postman keeps the original JSON type (arrays, booleans) for oauth2 fields
+const getRawVariableValue = (defs: VariableDefinition[], key: string) =>
+  defs.find((param) => param.key === key)?.value as unknown
+
+const isTruthyPMFlag = (value: unknown) => value === true || value === "true"
+
+type PMOAuth2Param = {
+  key?: unknown
+  value?: unknown
+  enabled?: unknown
+  send_as?: unknown
+}
+
+const PM_OAUTH2_SEND_AS_MAP: Record<string, "headers" | "url" | "body"> = {
+  request_header: "headers",
+  request_url: "url",
+  request_body: "body",
+}
+
+const getPMOAuth2Params = (defs: VariableDefinition[], key: string) => {
+  const raw = getRawVariableValue(defs, key)
+
+  if (!Array.isArray(raw)) return []
+
+  return (raw as PMOAuth2Param[])
+    .filter((p) => p && typeof p.key === "string" && p.key.length > 0)
+    .map((p, index) => ({
+      id: index + 1,
+      key: replacePMVarTemplating(p.key),
+      value: replacePMVarTemplating(p.value ?? ""),
+      active: p.enabled !== false,
+      sendIn:
+        (typeof p.send_as === "string" && PM_OAUTH2_SEND_AS_MAP[p.send_as]) ||
+        ("body" as const),
+    }))
+}
+
+const getPMOAuth2GrantType = (value: unknown) => {
+  switch (value) {
+    case "client_credentials":
+      return "CLIENT_CREDENTIALS" as const
+    case "password_credentials":
+      return "PASSWORD" as const
+    case "implicit":
+      return "IMPLICIT" as const
+    default:
+      // `authorization_code`, `authorization_code_with_pkce` and missing values
+      return "AUTHORIZATION_CODE" as const
+  }
+}
+
+const getPMOAuth2ClientAuthentication = (value: unknown) =>
+  value === "header"
+    ? ("AS_BASIC_AUTH_HEADERS" as const)
+    : value === "body"
+      ? ("IN_BODY" as const)
+      : undefined
+
 const getHoppReqAuth = (
   hoppAuth: Item["request"]["auth"] | null
 ): HoppRESTAuth => {
@@ -338,8 +396,13 @@ const getHoppReqAuth = (
     )
 
     // Check for PKCE settings
-    const usePkce = getVariableValue(auth.oauth2, "usePkce")
-    const isPKCE = usePkce === "true"
+    const grantType = getPMOAuth2GrantType(
+      getRawVariableValue(auth.oauth2, "grant_type")
+    )
+    const isPKCE =
+      isTruthyPMFlag(getRawVariableValue(auth.oauth2, "usePkce")) ||
+      getRawVariableValue(auth.oauth2, "grant_type") ===
+        "authorization_code_with_pkce"
 
     // Get challenge algorithm, default to S256 if PKCE is enabled but no algorithm specified
     const challengeAlgorithm = getVariableValue(
@@ -359,11 +422,107 @@ const getHoppReqAuth = (
       }
     }
 
+    const addTo =
+      getRawVariableValue(auth.oauth2, "addTokenTo") === "queryParams"
+        ? ("QUERY_PARAMS" as const)
+        : ("HEADERS" as const)
+
+    const clientAuthentication = getPMOAuth2ClientAuthentication(
+      getRawVariableValue(auth.oauth2, "client_authentication")
+    )
+
+    const tokenRequestParams = getPMOAuth2Params(
+      auth.oauth2,
+      "tokenRequestParams"
+    )
+    const refreshRequestParams = getPMOAuth2Params(
+      auth.oauth2,
+      "refreshRequestParams"
+    )
+    // Auth request params are always sent in the authorization URL
+    const authRequestParams = getPMOAuth2Params(
+      auth.oauth2,
+      "authRequestParams"
+    ).map(({ sendIn: _sendIn, ...param }) => param)
+
+    if (grantType === "CLIENT_CREDENTIALS") {
+      return {
+        authType: "oauth-2",
+        authActive: true,
+        grantTypeInfo: {
+          grantType,
+          authEndpoint: accessTokenURL,
+          clientID: clientId,
+          clientSecret,
+          scopes: scope,
+          token,
+          clientAuthentication: clientAuthentication ?? "IN_BODY",
+          tokenRequestParams,
+          refreshRequestParams,
+        },
+        addTo,
+      }
+    }
+
+    if (grantType === "PASSWORD") {
+      return {
+        authType: "oauth-2",
+        authActive: true,
+        grantTypeInfo: {
+          grantType,
+          authEndpoint: accessTokenURL,
+          clientID: clientId,
+          clientSecret,
+          scopes: scope,
+          token,
+          username: replacePMVarTemplating(
+            getVariableValue(auth.oauth2, "username") ?? ""
+          ),
+          password: replacePMVarTemplating(
+            getVariableValue(auth.oauth2, "password") ?? ""
+          ),
+          tokenRequestParams,
+          refreshRequestParams,
+        },
+        addTo,
+      }
+    }
+
+    if (grantType === "IMPLICIT") {
+      return {
+        authType: "oauth-2",
+        authActive: true,
+        grantTypeInfo: {
+          grantType,
+          authEndpoint: authURL,
+          clientID: clientId,
+          scopes: scope,
+          token,
+          authRequestParams,
+          refreshRequestParams,
+        },
+        addTo,
+      }
+    }
+
+    // `useBrowser: true` maps to the Hoppscotch callback; a custom
+    // `redirect_uri` is used otherwise. Absent values keep the defaults.
+    const redirectURI = replacePMVarTemplating(
+      getVariableValue(auth.oauth2, "redirect_uri") ?? ""
+    )
+    const useBrowser = getRawVariableValue(auth.oauth2, "useBrowser")
+    const useBrowserCallback =
+      useBrowser === undefined
+        ? redirectURI
+          ? false
+          : undefined
+        : isTruthyPMFlag(useBrowser) || !redirectURI
+
     return {
       authType: "oauth-2",
       authActive: true,
       grantTypeInfo: {
-        grantType: "AUTHORIZATION_CODE",
+        grantType,
         authEndpoint: authURL,
         clientID: clientId,
         scopes: scope,
@@ -372,11 +531,14 @@ const getHoppReqAuth = (
         clientSecret: clientSecret,
         isPKCE: isPKCE,
         ...(codeVerifierMethod ? { codeVerifierMethod } : {}),
-        authRequestParams: [],
-        tokenRequestParams: [],
-        refreshRequestParams: [],
+        authRequestParams,
+        tokenRequestParams,
+        refreshRequestParams,
+        ...(useBrowserCallback !== undefined ? { useBrowserCallback } : {}),
+        ...(redirectURI ? { redirectURI } : {}),
+        ...(clientAuthentication ? { clientAuthentication } : {}),
       },
-      addTo: "HEADERS",
+      addTo,
     }
   }
 

@@ -65,6 +65,7 @@ export {
   ClientCredentialsGrantTypeParams,
   OAuth2AdvancedParam,
   OAuth2AuthRequestParam,
+  OAuth2ClientAuthentication,
 } from "./v/15/auth"
 
 export {

@@ -11,7 +11,11 @@ import { useToast } from "~/composables/toast"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 import { RelayRequest, content } from "@hoppscotch/kernel"
 import { parseBytesToJSON } from "~/helpers/functional/json"
-import { refreshToken, OAuth2ParamSchema } from "../utils"
+import {
+  refreshToken,
+  OAuth2ParamSchema,
+  encodeBasicAuthComponent,
+} from "../utils"
 import { ClientCredentialsGrantTypeParams } from "@hoppscotch/data"
 
 const interceptorService = getService(KernelInterceptorService)
@@ -306,10 +310,4 @@ const getPayloadForViaBody = ({
     headers,
     content: content.urlencoded(bodyParams),
   }
-}
-
-const encodeBasicAuthComponent = (component: string): string => {
-  // application/x-www-form-urlencoded expects spaces to be encoded as '+', but
-  // encodeURIComponent encodes them as '%20'.
-  return encodeURIComponent(component).replace(/%20/g, "+")
 }
