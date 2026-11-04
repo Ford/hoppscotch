@@ -28,7 +28,9 @@ import {
   DESKTOP_CAPTURE_TIMEOUT_SECS,
   captureRedirectInDesktopWindow,
   clearExternalAuthCodeFlow,
+  closeDesktopCaptureWindow,
   completeExternalAuthCodeFlow,
+  createDesktopCaptureWindowLabel,
   isTerminalDesktopCaptureError,
   isValidCallbackURL,
 } from "../external-callback"
@@ -102,6 +104,29 @@ describe("external OAuth callback handling", () => {
 
       expect(res).toEqual(E.left("UNAVAILABLE"))
       expect(isTerminalDesktopCaptureError("UNAVAILABLE")).toBe(false)
+    })
+
+    test("keeps the window open via a label and closes it on request", async () => {
+      mockInvoke.mockResolvedValue(`${REDIRECT}?code=1`)
+      const label = createDesktopCaptureWindowLabel()
+      expect(label).toMatch(/^oauth-capture-[A-Za-z0-9-]{1,64}$/)
+
+      await captureRedirectInDesktopWindow("https://auth", REDIRECT, label)
+      expect(mockInvoke).toHaveBeenCalledWith("oauth_capture_redirect", {
+        authUrl: "https://auth",
+        redirectUri: REDIRECT,
+        timeoutSecs: DESKTOP_CAPTURE_TIMEOUT_SECS,
+        windowLabel: label,
+      })
+
+      mockInvoke.mockRejectedValueOnce("INVALID_WINDOW_LABEL")
+      await expect(closeDesktopCaptureWindow(label)).resolves.toBeUndefined()
+      expect(mockInvoke).toHaveBeenLastCalledWith(
+        "oauth_close_capture_window",
+        {
+          windowLabel: label,
+        }
+      )
     })
   })
 

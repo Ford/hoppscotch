@@ -75,9 +75,7 @@ impl HoppApploadConfig {
                 bundle_path: self.bundle_path.clone(),
                 manifest_path: self.manifest_path.clone(),
             })
-            .log_dir(
-                path::logs_dir().unwrap_or_else(|_| std::env::temp_dir()),
-            )
+            .log_dir(path::logs_dir().unwrap_or_else(|_| std::env::temp_dir()))
             .build()
     }
 }
@@ -176,10 +174,7 @@ static DESKTOP_CONFIG: Mutex<Option<DesktopConfig>> = Mutex::new(None);
 /// `DesktopConfig` is a small POD struct.
 #[allow(dead_code)] // no Rust consumers yet, see module doc above.
 pub fn current_desktop_config() -> Option<DesktopConfig> {
-    DESKTOP_CONFIG
-        .lock()
-        .ok()
-        .and_then(|guard| guard.clone())
+    DESKTOP_CONFIG.lock().ok().and_then(|guard| guard.clone())
 }
 
 /// Tauri command invoked by the webview on init and whenever settings

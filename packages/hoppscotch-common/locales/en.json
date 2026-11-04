@@ -238,6 +238,8 @@
       "label_code_challenge": "Code Challenge",
       "label_code_challenge_method": "Code Challenge Method",
       "label_code_verifier": "Code Verifier",
+      "code_verifier_placeholder": "Automatically generated if left blank",
+      "code_verifier_info": "A random, 43-128 character string used to connect the authorization request to the token request. Uses the following characters: [A-Z] / [a-z] / [0-9] / \"-\" / \".\" / \"_\" / \"~\".",
       "label_scopes": "Scopes",
       "label_token_endpoint": "Token Endpoint",
       "label_use_pkce": "Use PKCE",

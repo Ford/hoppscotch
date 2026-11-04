@@ -198,6 +198,23 @@ describe("hoppPostmanImporter - OAuth 2.0", () => {
     expect(auth.grantTypeInfo.useBrowserCallback).toBe(true)
   })
 
+  it("maps a PKCE code verifier", async () => {
+    const auth = await importAuth({
+      type: "oauth2",
+      oauth2: {
+        grant_type: "authorization_code_with_pkce",
+        challengeAlgorithm: "S256",
+        code_verifier: "{{verifier}}",
+      },
+    })
+
+    expect(auth.grantTypeInfo).toMatchObject({
+      isPKCE: true,
+      codeVerifierMethod: "S256",
+      codeVerifier: "<<verifier>>",
+    })
+  })
+
   it("maps client credentials", async () => {
     const auth = await importAuth({
       type: "oauth2",

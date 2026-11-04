@@ -186,6 +186,79 @@ describe("Authorization Code flow", () => {
       const res = await authCode.init(baseParams({ authEndpoint: "not a url" }))
       expect(res).toEqual(E.left("INVALID_AUTH_ENDPOINT"))
     })
+
+    const CUSTOM_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+
+    test("uses a user-supplied code verifier for the S256 challenge", async () => {
+      await authCode.init(
+        baseParams({
+          isPKCE: true,
+          codeVerifierMethod: "S256",
+          codeVerifier: ` ${CUSTOM_VERIFIER} `,
+        })
+      )
+
+      const url = new URL(assignSpy.mock.calls[0][0])
+      expect(url.searchParams.get("code_challenge")).toBe(
+        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+      )
+      expect(url.searchParams.get("code_challenge_method")).toBe("S256")
+      expect(JSON.parse(getPersistedConfig()).fields.codeVerifier).toBe(
+        CUSTOM_VERIFIER
+      )
+    })
+
+    test("auto-generates the code verifier when left blank", async () => {
+      await authCode.init(
+        baseParams({
+          isPKCE: true,
+          codeVerifierMethod: "plain",
+          codeVerifier: "",
+        })
+      )
+
+      const verifier = JSON.parse(getPersistedConfig()).fields.codeVerifier
+      expect(verifier).toMatch(/^[A-Za-z0-9\-._~]{43,128}$/)
+      const url = new URL(assignSpy.mock.calls[0][0])
+      expect(url.searchParams.get("code_challenge")).toBe(verifier)
+    })
+
+    test("rejects an invalid user-supplied code verifier", () => {
+      const invalid = ["too-short", `${"a".repeat(43)}!`, "a".repeat(129)]
+
+      for (const codeVerifier of invalid) {
+        const res = authCode.params.safeParse(
+          baseParams({ isPKCE: true, codeVerifierMethod: "S256", codeVerifier })
+        )
+        expect(res.success).toBe(false)
+      }
+
+      expect(
+        authCode.params.safeParse(
+          baseParams({
+            isPKCE: true,
+            codeVerifierMethod: "S256",
+            codeVerifier: CUSTOM_VERIFIER,
+          })
+        ).success
+      ).toBe(true)
+    })
+
+    test("ignores the code verifier when PKCE is disabled", async () => {
+      expect(
+        authCode.params.safeParse(
+          baseParams({ isPKCE: false, codeVerifier: "too-short" })
+        ).success
+      ).toBe(true)
+
+      const res = await authCode.init(
+        baseParams({ isPKCE: false, codeVerifier: "too-short" })
+      )
+
+      expect(res).toEqual(E.right({ mode: "redirect" }))
+      const url = new URL(assignSpy.mock.calls[0][0])
+      expect(url.searchParams.has("code_challenge")).toBe(false)
+    })
   })
 
   describe("exchangeCodeForToken", () => {

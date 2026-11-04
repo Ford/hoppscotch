@@ -192,6 +192,40 @@ describe("useOAuth2GrantTypes - Authorization Code", () => {
     expect(res).toEqual(E.right(undefined))
   })
 
+  test("Code Verifier is shown only when PKCE uses SHA-256", async () => {
+    expect(setup().ids()).not.toContain("codeVerifier")
+    expect(
+      setup({ isPKCE: true, codeVerifierMethod: "plain" }).ids()
+    ).not.toContain("codeVerifier")
+
+    const { ids, find } = setup({ isPKCE: true, codeVerifierMethod: "plain" })
+    find("codeChallenge").ref.value = { id: "S256", label: "SHA-256" }
+    await nextTick()
+    expect(ids()).toContain("codeVerifier")
+  })
+
+  test("runAction sends the custom Code Verifier only for SHA-256", async () => {
+    const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+
+    await setup({
+      isPKCE: true,
+      codeVerifierMethod: "S256",
+      codeVerifier: VERIFIER,
+    }).runAction.value!()
+    expect(authCodeMock.init).toHaveBeenLastCalledWith(
+      expect.objectContaining({ codeVerifier: VERIFIER })
+    )
+
+    await setup({
+      isPKCE: true,
+      codeVerifierMethod: "plain",
+      codeVerifier: VERIFIER,
+    }).runAction.value!()
+    expect(authCodeMock.init).toHaveBeenLastCalledWith(
+      expect.objectContaining({ codeVerifier: "" })
+    )
+  })
+
   test("runAction fails validation when the custom callback URL is empty", async () => {
     const { runAction } = setup({ useBrowserCallback: false, redirectURI: "" })
 

@@ -518,6 +518,12 @@ const getHoppReqAuth = (
           : undefined
         : isTruthyPMFlag(useBrowser) || !redirectURI
 
+    const codeVerifier = isPKCE
+      ? replacePMVarTemplating(
+          getVariableValue(auth.oauth2, "code_verifier") ?? ""
+        )
+      : ""
+
     return {
       authType: "oauth-2",
       authActive: true,
@@ -531,6 +537,7 @@ const getHoppReqAuth = (
         clientSecret: clientSecret,
         isPKCE: isPKCE,
         ...(codeVerifierMethod ? { codeVerifierMethod } : {}),
+        ...(codeVerifier ? { codeVerifier } : {}),
         authRequestParams,
         tokenRequestParams,
         refreshRequestParams,

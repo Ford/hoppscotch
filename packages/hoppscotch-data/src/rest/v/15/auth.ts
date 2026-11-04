@@ -42,32 +42,46 @@ export const AuthCodeGrantTypeParams = AuthCodeGrantTypeParamsOld.extend({
   authRequestParams: z.array(OAuth2AuthRequestParam).optional().default([]),
   tokenRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
   refreshRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
-  tokenType: z.enum(["access_token", "id_token"]).optional().catch("access_token"),
+  tokenType: z
+    .enum(["access_token", "id_token"])
+    .optional()
+    .catch("access_token"),
   // Optional (no schema version bump) so older clients sharing the same
   // workspace keep parsing the data. `undefined` means the pre-existing
   // behaviour: Hoppscotch's own `/oauth` callback and credentials in the body.
   useBrowserCallback: z.boolean().optional().catch(true),
   redirectURI: z.string().optional().catch(""),
   clientAuthentication: OAuth2ClientAuthentication.optional().catch("IN_BODY"),
+  // Optional user-supplied PKCE code verifier; blank means auto-generate.
+  codeVerifier: z.string().optional().catch(""),
 })
 
 export const ClientCredentialsGrantTypeParams =
   ClientCredentialsGrantTypeParamsOld.extend({
     tokenRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
     refreshRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
-    tokenType: z.enum(["access_token", "id_token"]).optional().catch("access_token"),
+    tokenType: z
+      .enum(["access_token", "id_token"])
+      .optional()
+      .catch("access_token"),
   })
 
 export const PasswordGrantTypeParams = PasswordGrantTypeParamsOld.extend({
   tokenRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
   refreshRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
-  tokenType: z.enum(["access_token", "id_token"]).optional().catch("access_token"),
+  tokenType: z
+    .enum(["access_token", "id_token"])
+    .optional()
+    .catch("access_token"),
 })
 
 export const ImplicitOauthFlowParams = ImplicitOauthFlowParamsOld.extend({
   authRequestParams: z.array(OAuth2AuthRequestParam).optional().default([]),
   refreshRequestParams: z.array(OAuth2AdvancedParam).optional().default([]),
-  tokenType: z.enum(["access_token", "id_token"]).optional().catch("access_token"),
+  tokenType: z
+    .enum(["access_token", "id_token"])
+    .optional()
+    .catch("access_token"),
 })
 
 // Extend OAuth2 with advanced parameters

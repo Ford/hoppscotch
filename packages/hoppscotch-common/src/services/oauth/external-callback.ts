@@ -29,24 +29,41 @@ export const isTerminalDesktopCaptureError = (
 
 export const canCaptureInDesktopWindow = () => getKernelMode() === "desktop"
 
+export const createDesktopCaptureWindowLabel = () =>
+  `oauth-capture-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
 /**
  * Option B: opens the login page in a dedicated desktop window and resolves
  * with the URL the auth server redirected to.
+ *
+ * With a `windowLabel`, the window stays open (showing "Completing sign-in")
+ * after capture until `closeDesktopCaptureWindow` is called, so it only
+ * disappears once the token has been fetched and set.
  */
 export const captureRedirectInDesktopWindow = async (
   authUrl: string,
-  redirectURI: string
+  redirectURI: string,
+  windowLabel?: string
 ): Promise<E.Either<string, string>> => {
   try {
     const callbackURL = await invoke<string>("oauth_capture_redirect", {
       authUrl,
       redirectUri: redirectURI,
       timeoutSecs: DESKTOP_CAPTURE_TIMEOUT_SECS,
+      ...(windowLabel ? { windowLabel } : {}),
     })
 
     return E.right(callbackURL)
   } catch (e) {
     return E.left(typeof e === "string" && e ? e : "UNAVAILABLE")
+  }
+}
+
+export const closeDesktopCaptureWindow = async (windowLabel: string) => {
+  try {
+    await invoke("oauth_close_capture_window", { windowLabel })
+  } catch (_e) {
+    // The desktop side also auto-closes it as a safety net
   }
 }
 

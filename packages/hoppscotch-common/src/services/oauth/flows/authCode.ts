@@ -23,9 +23,16 @@ import {
   AuthCodeGrantTypeParams,
   OAuth2AuthRequestParam,
 } from "@hoppscotch/data"
+import { sha256 } from "~/helpers/functional/sha256"
 
 const persistenceService = getService(PersistenceService)
 const interceptorService = getService(KernelInterceptorService)
+
+// RFC 7636 §4.1: 43-128 characters from the unreserved set
+const CODE_VERIFIER_REGEX = /^[A-Za-z0-9\-._~]{43,128}$/
+
+export const isValidCodeVerifier = (value: string) =>
+  CODE_VERIFIER_REGEX.test(value)
 
 // Use the existing schema from hoppscotch-data but ensure required arrays
 const AuthCodeOauthFlowParamsSchema = AuthCodeGrantTypeParams.omit({
@@ -43,6 +50,7 @@ const AuthCodeOauthFlowParamsSchema = AuthCodeGrantTypeParams.omit({
     clientAuthentication: z
       .enum(["IN_BODY", "AS_BASIC_AUTH_HEADERS"])
       .optional(),
+    codeVerifier: z.string().optional(),
   })
   .refine(
     (params) => {
@@ -61,6 +69,17 @@ const AuthCodeOauthFlowParamsSchema = AuthCodeGrantTypeParams.omit({
     message: "codeVerifierMethod is required when using PKCE",
     path: ["codeVerifierMethod"],
   })
+  .refine(
+    (params) =>
+      !params.isPKCE ||
+      !params.codeVerifier?.trim() ||
+      isValidCodeVerifier(params.codeVerifier.trim()),
+    {
+      message:
+        "codeVerifier must be 43-128 characters of [A-Z] / [a-z] / [0-9] / - . _ ~",
+      path: ["codeVerifier"],
+    }
+  )
 
 export type AuthCodeOauthFlowParams = z.infer<
   typeof AuthCodeOauthFlowParamsSchema
@@ -127,6 +146,7 @@ const initAuthCodeOauthFlow = async ({
   authEndpoint,
   isPKCE,
   codeVerifierMethod,
+  codeVerifier: userCodeVerifier,
   authRequestParams,
   refreshRequestParams,
   tokenRequestParams,
@@ -156,7 +176,7 @@ const initAuthCodeOauthFlow = async ({
     isPKCE && !codeVerifierMethod ? ("plain" as const) : codeVerifierMethod
 
   if (isPKCE) {
-    codeVerifier = generateCodeVerifier()
+    codeVerifier = userCodeVerifier?.trim() || generateCodeVerifier()
     // codeVerifierMethodNormalized might be undefined only if isPKCE is false,
     // but here we guard with isPKCE so it's safe to pass a value.
     codeChallenge = await generateCodeChallenge(
@@ -511,7 +531,7 @@ const generateCodeChallenge = async (
   const encoder = new TextEncoder()
   const data = encoder.encode(codeVerifier)
 
-  const buffer = await crypto.subtle.digest("SHA-256", data)
+  const buffer = await sha256(data)
 
   return encodeArrayBufferAsUrlEncodedBase64(buffer)
 }

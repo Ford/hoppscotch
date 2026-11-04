@@ -273,6 +273,7 @@ pub fn run() {
             path::read_log,
             path::get_appload_registry,
             oauth::oauth_capture_redirect,
+            oauth::oauth_close_capture_window,
         ])
         .run(tauri::generate_context!());
 

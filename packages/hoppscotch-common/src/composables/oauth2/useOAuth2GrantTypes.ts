@@ -223,6 +223,24 @@ export const useOAuth2GrantTypes = (
           }
         )
 
+        const codeVerifier = refWithCallbackOnChange(
+          grantType.codeVerifier ?? "",
+          (value) => {
+            if (auth.value.grantTypeInfo.grantType !== "AUTHORIZATION_CODE") {
+              return
+            }
+
+            auth.value.grantTypeInfo = {
+              ...auth.value.grantTypeInfo,
+              codeVerifier: value,
+            }
+          }
+        )
+
+        const isSHA256Challenge = computed(
+          () => isPKCE.value && codeChallenge.value?.id === "S256"
+        )
+
         const tokenType = refWithCallbackOnChange(
           tokenTypeOptionFor(auth.value.grantTypeInfo.tokenType),
           (value) => {
@@ -350,6 +368,8 @@ export const useOAuth2GrantTypes = (
             codeVerifierMethod:
               codeChallenge.value?.id ??
               (isPKCE.value ? ("plain" as const) : undefined),
+            // Custom verifier is only offered (and used) for SHA-256
+            codeVerifier: isSHA256Challenge.value ? codeVerifier.value : "",
             authRequestParams: preparedAuthRequestParams.value,
             tokenRequestParams: preparedTokenRequestParams.value,
             refreshRequestParams: preparedRefreshRequestParams.value,
@@ -399,29 +419,38 @@ export const useOAuth2GrantTypes = (
             },
           }
 
-          return isPKCE.value
-            ? [
-                checkbox,
-                {
-                  id: "codeChallenge",
-                  label: t("authorization.oauth.label_code_challenge"),
-                  type: "dropdown" as const,
-                  ref: codeChallenge,
-                  tippyRefName: "pkceTippyActions",
-                  tippyRef: pkceTippyActions,
-                  options: [
-                    {
-                      id: "plain" as const,
-                      label: "Plain",
-                    },
-                    {
-                      id: "S256" as const,
-                      label: "SHA-256",
-                    },
-                  ],
-                },
-              ]
-            : [checkbox]
+          const codeChallengeDropdown = {
+            id: "codeChallenge",
+            label: t("authorization.oauth.label_code_challenge"),
+            type: "dropdown" as const,
+            ref: codeChallenge,
+            tippyRefName: "pkceTippyActions",
+            tippyRef: pkceTippyActions,
+            options: [
+              {
+                id: "plain" as const,
+                label: "Plain",
+              },
+              {
+                id: "S256" as const,
+                label: "SHA-256",
+              },
+            ],
+          }
+
+          const codeVerifierInput = {
+            id: "codeVerifier",
+            label: t("authorization.oauth.label_code_verifier"),
+            type: "text" as const,
+            ref: codeVerifier,
+            info: t("authorization.oauth.code_verifier_info"),
+          }
+
+          if (!isPKCE.value) return [checkbox]
+
+          return isSHA256Challenge.value
+            ? [checkbox, codeChallengeDropdown, codeVerifierInput]
+            : [checkbox, codeChallengeDropdown]
         })
 
         const elements = computed(() => {

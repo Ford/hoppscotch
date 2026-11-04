@@ -5,6 +5,7 @@ import { getService } from "~/modules/dioc"
 import { PersistenceService } from "~/services/persistence"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 import { content } from "@hoppscotch/kernel"
+import { sha256 } from "~/helpers/functional/sha256"
 
 const kernelInterceptor = getService(KernelInterceptorService)
 const persistenceService = getService(PersistenceService)
@@ -58,7 +59,7 @@ const base64urlencode = (str: ArrayBuffer) => {
 const pkceChallengeFromVerifier = async (v: string) => {
   const encoder = new TextEncoder()
   const data = encoder.encode(v)
-  const hashed = await window.crypto.subtle.digest("SHA-256", data)
+  const hashed = await sha256(data)
   return base64urlencode(hashed)
 }
 

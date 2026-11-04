@@ -57,6 +57,12 @@
         class="flex items-center ml-4 text-secondaryLight min-w-[6rem]"
       >
         {{ element.label }}
+        <icon-lucide-info
+          v-if="'info' in element && element.info"
+          v-tippy="{ theme: 'tooltip multiline', maxWidth: 320 }"
+          :title="element.info"
+          class="svg-icons ml-1 shrink-0 cursor-help"
+        />
       </label>
       <SmartEnvInput
         v-if="element.type === 'text'"
@@ -591,7 +597,9 @@ import {
   canCaptureInDesktopWindow,
   captureRedirectInDesktopWindow,
   clearExternalAuthCodeFlow,
+  closeDesktopCaptureWindow,
   completeExternalAuthCodeFlow,
+  createDesktopCaptureWindowLabel,
   isTerminalDesktopCaptureError,
 } from "~/services/oauth/external-callback"
 import { translateOAuthRedirectError } from "~/services/oauth/errors"
@@ -636,6 +644,7 @@ const getPlaceholderForField = (fieldId: string): string => {
     clientSecret: "your_client_secret_here",
     scopes: "read write",
     redirectURI: "https://example.com/callback",
+    codeVerifier: t("authorization.oauth.code_verifier_placeholder"),
     username: "your_username",
     password: "your_password",
   }
@@ -923,10 +932,20 @@ const startExternalLogin = async ({
   if (canCaptureInDesktopWindow()) {
     toast.info(t("authorization.oauth.external_login_window_hint"))
 
-    const captured = await captureRedirectInDesktopWindow(authUrl, redirectURI)
+    const windowLabel = createDesktopCaptureWindowLabel()
+    const captured = await captureRedirectInDesktopWindow(
+      authUrl,
+      redirectURI,
+      windowLabel
+    )
 
     if (E.isRight(captured)) {
-      await finishExternalLogin(captured.right)
+      // Keep the login window open until the token is fetched and set
+      try {
+        await finishExternalLogin(captured.right)
+      } finally {
+        await closeDesktopCaptureWindow(windowLabel)
+      }
       return
     }
 
