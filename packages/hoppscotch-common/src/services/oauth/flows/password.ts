@@ -13,6 +13,7 @@ import { content } from "@hoppscotch/kernel"
 import { parseBytesToJSON } from "~/helpers/functional/json"
 import { refreshToken, OAuth2ParamSchema } from "../utils"
 import { PasswordGrantTypeParams } from "@hoppscotch/data"
+import { showOAuthTokenDetails } from "../token-details"
 
 const interceptorService = getService(KernelInterceptorService)
 
@@ -154,6 +155,18 @@ const initPasswordOauthFlow = async ({
             parsedTokenResponse.data.id_token
 
       if (token) {
+        showOAuthTokenDetails(
+          responsePayload.value as Record<string, unknown>,
+          {
+            access_token_url: authEndpoint,
+            client_id: clientID,
+            client_secret: clientSecret || "",
+            grant_type: "password",
+            username,
+            password,
+          }
+        )
+
         return E.right({ access_token: token })
       }
     }

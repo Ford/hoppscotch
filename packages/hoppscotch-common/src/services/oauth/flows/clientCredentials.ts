@@ -17,6 +17,10 @@ import {
   encodeBasicAuthComponent,
 } from "../utils"
 import { ClientCredentialsGrantTypeParams } from "@hoppscotch/data"
+import {
+  getClientAuthenticationLabel,
+  showOAuthTokenDetails,
+} from "../token-details"
 
 const interceptorService = getService(KernelInterceptorService)
 
@@ -112,6 +116,16 @@ const initClientCredentialsOAuthFlow = async (
           parsedTokenResponse.data.id_token
 
     if (token) {
+      showOAuthTokenDetails(jsonResponse.right, {
+        access_token_url: payload.authEndpoint,
+        client_id: payload.clientID,
+        client_secret: payload.clientSecret || "",
+        grant_type: "client_credentials",
+        client_authentication: getClientAuthenticationLabel(
+          payload.clientAuthentication
+        ),
+      })
+
       return E.right({ access_token: token })
     }
   }

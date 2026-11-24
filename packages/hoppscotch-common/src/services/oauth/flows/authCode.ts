@@ -24,6 +24,10 @@ import {
   OAuth2AuthRequestParam,
 } from "@hoppscotch/data"
 import { sha256 } from "~/helpers/functional/sha256"
+import {
+  getClientAuthenticationLabel,
+  showOAuthTokenDetails,
+} from "../token-details"
 
 const persistenceService = getService(PersistenceService)
 const interceptorService = getService(KernelInterceptorService)
@@ -486,6 +490,18 @@ export const exchangeCodeForToken = async (
   if (!parsedTokenResponse.success) {
     return E.left("AUTH_TOKEN_REQUEST_INVALID_RESPONSE" as const)
   }
+
+  showOAuthTokenDetails(responsePayload.right, {
+    access_token_url: config.tokenEndpoint,
+    client_id: config.clientID,
+    client_secret: config.clientSecret,
+    grant_type: config.codeVerifier
+      ? "authorization_code_with_pkce"
+      : "authorization_code",
+    client_authentication: getClientAuthenticationLabel(
+      config.clientAuthentication
+    ),
+  })
 
   // Get the token type preference from the persisted config
   const tokenTypePreference = config.tokenType || "access_token"

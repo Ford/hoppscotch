@@ -57,6 +57,7 @@
       @hide-modal="showSupport = false"
     />
     <AppOptions v-else :show="showSupport" @hide-modal="showSupport = false" />
+    <HttpAuthorizationOAuth2TokenDetails />
 
     <!-- Let additional stuff be registered -->
     <template
