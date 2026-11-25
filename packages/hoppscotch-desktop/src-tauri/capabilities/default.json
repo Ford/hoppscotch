@@ -58,6 +58,8 @@
     "allow-get-logs-dir",
     "allow-append-log",
     "allow-read-log",
-    "allow-get-appload-registry"
+    "allow-get-appload-registry",
+    "allow-oauth-capture-redirect",
+    "allow-oauth-close-capture-window"
   ]
 }

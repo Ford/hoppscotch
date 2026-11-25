@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-oauth-close-capture-window"
+description = "Enables the oauth_close_capture_window command without any pre-configured scope."
+commands.allow = ["oauth_close_capture_window"]
+
+[[permission]]
+identifier = "deny-oauth-close-capture-window"
+description = "Denies the oauth_close_capture_window command without any pre-configured scope."
+commands.deny = ["oauth_close_capture_window"]

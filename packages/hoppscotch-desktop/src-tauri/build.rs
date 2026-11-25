@@ -24,6 +24,8 @@ const APP_COMMANDS: &[&str] = &[
     "append_log",
     "read_log",
     "get_appload_registry",
+    "oauth_capture_redirect",
+    "oauth_close_capture_window",
 ];
 
 fn main() {
