@@ -27,6 +27,7 @@ import passwordFlow, {
   getDefaultPasswordFlowParams,
 } from "~/services/oauth/flows/password"
 import { AuthRequestParam, TokenRequestParam } from "./useOAuth2AdvancedParams"
+import { OauthAuthService } from "~/services/oauth/oauth.service"
 
 export type GrantTypes = z.infer<
   typeof HoppRESTAuthOAuth2
@@ -222,6 +223,24 @@ export const useOAuth2GrantTypes = (
           }
         )
 
+        const codeVerifier = refWithCallbackOnChange(
+          grantType.codeVerifier ?? "",
+          (value) => {
+            if (auth.value.grantTypeInfo.grantType !== "AUTHORIZATION_CODE") {
+              return
+            }
+
+            auth.value.grantTypeInfo = {
+              ...auth.value.grantTypeInfo,
+              codeVerifier: value,
+            }
+          }
+        )
+
+        const isSHA256Challenge = computed(
+          () => isPKCE.value && codeChallenge.value?.id === "S256"
+        )
+
         const tokenType = refWithCallbackOnChange(
           tokenTypeOptionFor(auth.value.grantTypeInfo.tokenType),
           (value) => {
@@ -232,6 +251,62 @@ export const useOAuth2GrantTypes = (
             auth.value.grantTypeInfo = {
               ...auth.value.grantTypeInfo,
               tokenType: value.id,
+            }
+          }
+        )
+
+        // Absent on legacy configs, which keep using the Hoppscotch callback
+        const useBrowserCallback = refWithCallbackOnChange(
+          grantType.useBrowserCallback ?? true,
+          (value) => {
+            if (auth.value.grantTypeInfo.grantType !== "AUTHORIZATION_CODE") {
+              return
+            }
+
+            auth.value.grantTypeInfo = {
+              ...auth.value.grantTypeInfo,
+              useBrowserCallback: value,
+            }
+          }
+        )
+
+        const redirectURI = refWithCallbackOnChange(
+          grantType.redirectURI ?? "",
+          (value) => {
+            if (auth.value.grantTypeInfo.grantType !== "AUTHORIZATION_CODE") {
+              return
+            }
+
+            auth.value.grantTypeInfo = {
+              ...auth.value.grantTypeInfo,
+              redirectURI: value,
+            }
+          }
+        )
+
+        const clientAuthenticationOptions = [
+          {
+            id: "IN_BODY" as const,
+            label: t("authorization.oauth.label_send_in_body"),
+          },
+          {
+            id: "AS_BASIC_AUTH_HEADERS" as const,
+            label: t("authorization.oauth.label_send_as_basic_auth"),
+          },
+        ]
+
+        const clientAuthentication = refWithCallbackOnChange(
+          clientAuthenticationOptions.find(
+            (o) => o.id === grantType.clientAuthentication
+          ) ?? clientAuthenticationOptions[0],
+          (value) => {
+            if (auth.value.grantTypeInfo.grantType !== "AUTHORIZATION_CODE") {
+              return
+            }
+
+            auth.value.grantTypeInfo = {
+              ...auth.value.grantTypeInfo,
+              clientAuthentication: value.id,
             }
           }
         )
@@ -254,6 +329,7 @@ export const useOAuth2GrantTypes = (
             clientSecret: clientSecret.value,
             tokenEndpoint: tokenEndpoint.value,
             refreshToken,
+            clientAuthentication: clientAuthentication.value.id,
           }
 
           const unwrappedParams = replaceTemplateStringsInObjectValues(params)
@@ -292,13 +368,26 @@ export const useOAuth2GrantTypes = (
             codeVerifierMethod:
               codeChallenge.value?.id ??
               (isPKCE.value ? ("plain" as const) : undefined),
+            // Custom verifier is only offered (and used) for SHA-256
+            codeVerifier: isSHA256Challenge.value ? codeVerifier.value : "",
             authRequestParams: preparedAuthRequestParams.value,
             tokenRequestParams: preparedTokenRequestParams.value,
             refreshRequestParams: preparedRefreshRequestParams.value,
             tokenType: tokenType.value.id,
+            useBrowserCallback: useBrowserCallback.value,
+            redirectURI: redirectURI.value,
+            clientAuthentication: clientAuthentication.value.id,
           }
 
           const unwrappedParams = replaceTemplateStringsInObjectValues(params)
+
+          // A custom callback URL is required when not using the Hoppscotch one
+          if (
+            !unwrappedParams.useBrowserCallback &&
+            !unwrappedParams.redirectURI?.trim()
+          ) {
+            return E.left("VALIDATION_FAILED" as const)
+          }
 
           const parsedArgs = authCode.params.safeParse(unwrappedParams)
 
@@ -312,7 +401,10 @@ export const useOAuth2GrantTypes = (
             return res
           }
 
-          return E.right(undefined)
+          // `external` results are handled by the caller (custom callback URL)
+          return res.right?.mode === "external"
+            ? E.right(res.right)
+            : E.right(undefined)
         }
 
         const pkceElements = computed(() => {
@@ -327,29 +419,38 @@ export const useOAuth2GrantTypes = (
             },
           }
 
-          return isPKCE.value
-            ? [
-                checkbox,
-                {
-                  id: "codeChallenge",
-                  label: t("authorization.oauth.label_code_challenge"),
-                  type: "dropdown" as const,
-                  ref: codeChallenge,
-                  tippyRefName: "pkceTippyActions",
-                  tippyRef: pkceTippyActions,
-                  options: [
-                    {
-                      id: "plain" as const,
-                      label: "Plain",
-                    },
-                    {
-                      id: "S256" as const,
-                      label: "SHA-256",
-                    },
-                  ],
-                },
-              ]
-            : [checkbox]
+          const codeChallengeDropdown = {
+            id: "codeChallenge",
+            label: t("authorization.oauth.label_code_challenge"),
+            type: "dropdown" as const,
+            ref: codeChallenge,
+            tippyRefName: "pkceTippyActions",
+            tippyRef: pkceTippyActions,
+            options: [
+              {
+                id: "plain" as const,
+                label: "Plain",
+              },
+              {
+                id: "S256" as const,
+                label: "SHA-256",
+              },
+            ],
+          }
+
+          const codeVerifierInput = {
+            id: "codeVerifier",
+            label: t("authorization.oauth.label_code_verifier"),
+            type: "text" as const,
+            ref: codeVerifier,
+            info: t("authorization.oauth.code_verifier_info"),
+          }
+
+          if (!isPKCE.value) return [checkbox]
+
+          return isSHA256Challenge.value
+            ? [checkbox, codeChallengeDropdown, codeVerifierInput]
+            : [checkbox, codeChallengeDropdown]
         })
 
         const elements = computed(() => {
@@ -384,6 +485,34 @@ export const useOAuth2GrantTypes = (
               label: t("authorization.oauth.label_scopes"),
               type: "text" as const,
               ref: scopes,
+            },
+            {
+              id: "useBrowserCallback",
+              label: t("authorization.oauth.label_use_browser"),
+              type: "checkbox" as const,
+              ref: useBrowserCallback,
+            },
+            useBrowserCallback.value
+              ? {
+                  id: "browserCallbackURL",
+                  label: t("authorization.oauth.label_callback_url"),
+                  type: "readonly" as const,
+                  ref: { value: OauthAuthService.redirectURI },
+                }
+              : {
+                  id: "redirectURI",
+                  label: t("authorization.oauth.label_callback_url"),
+                  type: "text" as const,
+                  ref: redirectURI,
+                },
+            {
+              id: "clientAuthentication",
+              label: t("authorization.oauth.label_send_as"),
+              type: "dropdown" as const,
+              ref: clientAuthentication,
+              tippyRefName: "clientAuthenticationTippyActions",
+              tippyRef: clientAuthenticationTippyActions,
+              options: clientAuthenticationOptions,
             },
             {
               id: "tokenType",

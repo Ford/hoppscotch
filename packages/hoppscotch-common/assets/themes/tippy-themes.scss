@@ -64,6 +64,16 @@
     }
   }
 
+  // Opt-in wrapping for long descriptive tooltips (theme: "tooltip multiline")
+  .tippy-box[data-theme~="multiline"] {
+    .tippy-content {
+      @apply block;
+      @apply whitespace-normal;
+      @apply break-words;
+      @apply py-2;
+    }
+  }
+
   // Override truncation for multiline member-list tooltips
   .tippy-box[data-theme~="member-list"] {
     .tippy-content {

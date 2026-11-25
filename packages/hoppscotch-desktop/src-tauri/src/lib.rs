@@ -3,6 +3,7 @@ pub mod config;
 pub mod dialog;
 pub mod error;
 pub mod logger;
+pub mod oauth;
 pub mod path;
 pub mod server;
 pub mod updater;
@@ -271,6 +272,8 @@ pub fn run() {
             logger::append_log,
             path::read_log,
             path::get_appload_registry,
+            oauth::oauth_capture_redirect,
+            oauth::oauth_close_capture_window,
         ])
         .run(tauri::generate_context!());
 

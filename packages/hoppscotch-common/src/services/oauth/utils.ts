@@ -4,7 +4,10 @@ import { getService } from "~/modules/dioc"
 import { KernelInterceptorService } from "~/services/kernel-interceptor.service"
 import { content } from "@hoppscotch/kernel"
 import { decodeResponseAsJSON } from "./oauth.service"
-import { OAuth2AdvancedParam } from "@hoppscotch/data"
+import {
+  OAuth2AdvancedParam,
+  OAuth2ClientAuthentication,
+} from "@hoppscotch/data"
 
 const interceptorService = getService(KernelInterceptorService)
 
@@ -24,6 +27,83 @@ export type RefreshTokenParams = {
   refreshToken: string
   clientSecret?: string
   refreshRequestParams?: Array<RefreshRequestParam>
+  clientAuthentication?: OAuth2ClientAuthenticationType
+}
+
+export type OAuth2ClientAuthenticationType = z.infer<
+  typeof OAuth2ClientAuthentication
+>
+
+type AdvancedParam = {
+  key: string
+  value: string
+  active: boolean
+  sendIn?: "headers" | "url" | "body"
+}
+
+/**
+ * Encodes a client credential component for HTTP Basic auth as described by
+ * RFC 6749 Section 2.3.1 (application/x-www-form-urlencoded).
+ */
+export const encodeBasicAuthComponent = (component: string): string => {
+  // application/x-www-form-urlencoded expects spaces to be encoded as '+', but
+  // encodeURIComponent encodes them as '%20'.
+  return encodeURIComponent(component).replace(/%20/g, "+")
+}
+
+export const getBasicAuthHeaderValue = (
+  clientID: string,
+  clientSecret?: string
+) =>
+  `Basic ${btoa(
+    `${encodeBasicAuthComponent(clientID)}:${encodeBasicAuthComponent(
+      clientSecret || ""
+    )}`
+  )}`
+
+/**
+ * Distributes the active advanced params into headers, URL query params or
+ * body params based on their `sendIn` value (defaults to body).
+ */
+export const applyOAuth2AdvancedParams = (
+  params: AdvancedParam[] | undefined,
+  target: {
+    headers: Record<string, string>
+    urlParams: Record<string, string>
+    bodyParams: Record<string, string>
+  }
+) => {
+  if (!params) return
+
+  params
+    .filter((param) => param.active && param.key && param.value)
+    .forEach((param) => {
+      if (param.sendIn === "headers") {
+        target.headers[param.key] = param.value
+      } else if (param.sendIn === "url") {
+        target.urlParams[param.key] = param.value
+      } else {
+        target.bodyParams[param.key] = param.value
+      }
+    })
+}
+
+/**
+ * Appends the given query params to the URL. Returns the URL untouched when
+ * there is nothing to append so existing endpoints are not normalised.
+ */
+export const appendQueryParamsToURL = (
+  endpoint: string,
+  urlParams: Record<string, string>
+) => {
+  if (Object.keys(urlParams).length === 0) return endpoint
+
+  const url = new URL(endpoint)
+  Object.entries(urlParams).forEach(([key, value]) => {
+    url.searchParams.set(key, value)
+  })
+
+  return url.toString()
 }
 
 /**
@@ -37,38 +117,37 @@ export const refreshToken = async ({
   refreshToken,
   clientSecret,
   refreshRequestParams,
+  clientAuthentication,
 }: RefreshTokenParams) => {
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
     Accept: "application/json",
   }
 
+  const sendAsBasicAuth = clientAuthentication === "AS_BASIC_AUTH_HEADERS"
+
+  if (sendAsBasicAuth) {
+    headers.Authorization = getBasicAuthHeaderValue(clientID, clientSecret)
+  }
+
   const bodyParams: Record<string, string> = {
     grant_type: "refresh_token",
     refresh_token: refreshToken,
-    client_id: clientID,
-    ...(clientSecret && {
-      client_secret: clientSecret,
+    ...(!sendAsBasicAuth && {
+      client_id: clientID,
+      ...(clientSecret && {
+        client_secret: clientSecret,
+      }),
     }),
   }
 
   const urlParams: Record<string, string> = {}
 
-  // Process additional refresh request parameters (if provided)
-  if (refreshRequestParams) {
-    refreshRequestParams
-      .filter((param) => param.active && param.key && param.value)
-      .forEach((param) => {
-        if (param.sendIn === "headers") {
-          headers[param.key] = param.value
-        } else if (param.sendIn === "url") {
-          urlParams[param.key] = param.value
-        } else {
-          // Default to body
-          bodyParams[param.key] = param.value
-        }
-      })
-  }
+  applyOAuth2AdvancedParams(refreshRequestParams, {
+    headers,
+    urlParams,
+    bodyParams,
+  })
 
   const url = new URL(tokenEndpoint)
   Object.entries(urlParams).forEach(([key, value]) => {
