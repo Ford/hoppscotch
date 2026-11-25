@@ -1,5 +1,9 @@
 import { onBeforeUnmount, onMounted } from "vue"
-import { HoppActionWithOptionalArgs, invokeAction } from "./actions"
+import {
+  HoppActionWithOptionalArgs,
+  invokeAction,
+  isActionBound,
+} from "./actions"
 import {
   getKeyboardLayoutStrategy,
   type KeyboardLayoutStrategy,
@@ -21,6 +25,17 @@ import { listen } from "@tauri-apps/api/event"
  * false -> Key presses are ignored (Keybindings are not checked)
  */
 let keybindingsEnabled = true
+
+/**
+ * Set while a workspace overlay covers the app, so shortcuts can't act on the
+ * workspace behind it. Kept apart from `keybindingsEnabled`, which modals
+ * toggle on open and close.
+ */
+let keybindingsSuspended = false
+
+export const setKeybindingsSuspended = (suspended: boolean) => {
+  keybindingsSuspended = suspended
+}
 
 /**
  * Unlisten function for Tauri event
@@ -78,6 +93,7 @@ const baseBindings: {
   "shift-/": "modals.support.toggle",
   "ctrl-shift-/": "flyouts.keybinds.toggle",
   "ctrl-m": "modals.share.toggle",
+  "alt-t": "tab.switch-protocol",
   "alt-r": "navigation.jump.rest",
   "alt-q": "navigation.jump.graphql",
   "alt-w": "navigation.jump.realtime",
@@ -137,6 +153,11 @@ function getActiveBindings(): typeof baseBindings {
 
 export const bindings = getActiveBindings()
 
+// Actions whose key passes through while no mounted view handles them
+const handlerGatedActions = new Set<HoppActionWithOptionalArgs>([
+  "tab.switch-protocol",
+])
+
 /**
  * A composable that hooks to the caller component's
  * lifecycle and hooks to the keyboard events to fire
@@ -175,7 +196,7 @@ export function hookKeybindingsListener() {
 
 function handleKeyDown(ev: KeyboardEvent) {
   // Do not check keybinds if the mode is disabled
-  if (!keybindingsEnabled) return
+  if (!keybindingsEnabled || keybindingsSuspended) return
 
   // Skip during IME composition (CJK input). Modern browsers report
   // `isComposing`. Older ones use the sentinel `keyCode === 229`.
@@ -263,6 +284,9 @@ function handleKeyDown(ev: KeyboardEvent) {
   // If no action is bound, do nothing
   if (!boundAction) return
 
+  if (handlerGatedActions.has(boundAction) && !isActionBound(boundAction).value)
+    return
+
   ev.preventDefault()
   invokeAction(boundAction, undefined, "keypress")
 }
@@ -271,7 +295,7 @@ function handleTauriShortcut(shortcut: string) {
   console.info("Tauri shortcut:", shortcut)
 
   // Do not check keybinds if the mode is disabled
-  if (!keybindingsEnabled) return
+  if (!keybindingsEnabled || keybindingsSuspended) return
 
   const activeBindings = getActiveBindings()
   const boundAction = activeBindings[shortcut as ShortcutKey]
