@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-oauth-capture-redirect"
+description = "Enables the oauth_capture_redirect command without any pre-configured scope."
+commands.allow = ["oauth_capture_redirect"]
+
+[[permission]]
+identifier = "deny-oauth-capture-redirect"
+description = "Denies the oauth_capture_redirect command without any pre-configured scope."
+commands.deny = ["oauth_capture_redirect"]
